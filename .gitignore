@@ -1,0 +1,8 @@
+.idea
+cmake-build-debug
+build
+models
+*.o
+*.so
+install
+local
