@@ -87,7 +87,7 @@ make install > $BUILD_LOG_DIR/protobuf-install.log 2>&1
 fi
 
 # tink-cc and tink-tcl
-if true; then
+if false; then
   git -C $BUILD_DIR clone https://github.com/jerily/tink-tcl.git
   cd $BUILD_DIR/tink-tcl
   export TINK_TCL_DIR=`pwd`
@@ -121,4 +121,39 @@ if true; then
     -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/tink-tcl-configure.log 2>&1
   make install > $BUILD_LOG_DIR/tink-tcl-install.log 2>&1
 
+fi
+
+# aws-sdk-cpp
+if false; then
+  git -C $BUILD_DIR clone --depth 1 --branch 1.11.157 --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp
+  cd $BUILD_DIR/aws-sdk-cpp
+  mkdir build
+  cd build
+  cmake .. \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_ONLY="s3;dynamodb;lambda;sqs;iam;transfer;sts;ssm" \
+    -DENABLE_TESTING=OFF \
+    -DAUTORUN_UNIT_TESTS=OFF \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/aws-sdk-cpp-configure.log 2>&1
+  cmake --build . --config=Release > $BUILD_LOG_DIR/aws-sdk-cpp-build.log 2>&1
+  cmake --install . --config=Release > $BUILD_LOG_DIR/aws-sdk-cpp-install.log 2>&1
+fi
+
+# aws-sdk-tcl
+if false; then
+  #curl -L -o aws-sdk-tcl-1.0.2.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/aws-sdk-tcl/archive/refs/tags/v1.0.2.tar.gz
+  #tar -xzf $BUILD_DIR/aws-sdk-tcl-1.0.2.tar.gz -C $BUILD_DIR
+  git -C $BUILD_DIR clone https://github.com/jerily/aws-sdk-tcl.git
+  cd $BUILD_DIR/aws-sdk-tcl
+  mkdir build
+  cd build
+  cmake .. \
+    -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
+    -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
+    -DAWS_SDK_CPP_DIR=$INSTALL_DIR \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/aws-sdk-tcl-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/aws-sdk-tcl-install.log 2>&1
 fi
