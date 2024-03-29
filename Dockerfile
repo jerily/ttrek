@@ -13,6 +13,7 @@ RUN apk add --no-cache \
     cmake \
     make \
     patch \
+    pkgconfig \
     cvs \
     git \
     curl \
