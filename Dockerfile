@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     perl \
     gcc \
     g++ \
+    binutils-gold \
     cmake \
     make \
     patch \
