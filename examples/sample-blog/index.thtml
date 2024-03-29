@@ -1,0 +1,8 @@
+<import name="Master" src="master.thtml" />
+
+<Master pagetitle="thtml - HTML Templating Engine for twebserver">
+    <div>
+        <h1>$title</h1>
+        <p>$content</p>
+    </div>
+</Master>

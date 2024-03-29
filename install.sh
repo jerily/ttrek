@@ -157,3 +157,33 @@ if false; then
     -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/aws-sdk-tcl-configure.log 2>&1
   make install > $BUILD_LOG_DIR/aws-sdk-tcl-install.log 2>&1
 fi
+
+# tdom
+if false; then
+  curl -L -o tdom-0.9.3-src.tar.gz --output-dir $BUILD_DIR http://tdom.org/downloads/tdom-0.9.3-src.tar.gz
+  tar -xzf $BUILD_DIR/tdom-0.9.3-src.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/tdom-0.9.3-src/unix
+  ../configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/tdom-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/tdom-install.log 2>&1
+fi
+
+# thtml
+if false; then
+  git -C $BUILD_DIR clone https://github.com/jerily/thtml.git
+  cd $BUILD_DIR/thtml
+  mkdir build
+  cd build
+  cmake .. \
+    -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
+    -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/thtml-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/thtml-install.log 2>&1
+fi
+
+# tsession
+if true; then
+  git -C $BUILD_DIR clone https://github.com/jerily/tsession.git
+  cd $BUILD_DIR/tsession
+  make install PREFIX=$INSTALL_DIR > $BUILD_LOG_DIR/tsession-install.log 2>&1
+fi
