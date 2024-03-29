@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     g++ \
     cmake \
     make \
+    patch \
     cvs \
     git \
     curl \
