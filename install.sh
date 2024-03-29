@@ -1,10 +1,12 @@
 #!/bin/bash
 
-CURRENT_DIR=`pwd`
-INSTALL_DIR=$CURRENT_DIR/local
+set -eo pipefail # exit on error
+
+export SCRIPT_DIR=$(dirname $(readlink -f $0))
+INSTALL_DIR=$SCRIPT_DIR/local
 echo "Installing to $INSTALL_DIR"
 
-BUILD_DIR=$CURRENT_DIR/build
+BUILD_DIR=$SCRIPT_DIR/build
 mkdir -p $BUILD_DIR
 
 BUILD_LOG_DIR=$BUILD_DIR/logs
@@ -18,7 +20,7 @@ sudo apt-get install cmake ;# perl gcc zip unzip tar curl c++ make
 fi
 
 # openssl
-if false; then
+if true; then
 curl -L -O --output-dir $BUILD_DIR/ https://www.openssl.org/source/openssl-3.2.1.tar.gz
 tar -xvf $BUILD_DIR/openssl-3.2.1.tar.gz -C $BUILD_DIR
 cd $BUILD_DIR/openssl-3.2.1
@@ -27,7 +29,7 @@ make install > $BUILD_LOG_DIR/openssl-install.log 2>&1
 fi
 
 # tcl
-if false; then
+if true; then
 curl -L -O --output-dir $BUILD_DIR http://prdownloads.sourceforge.net/tcl/tcl9.0b1-src.tar.gz
 tar -xvf $BUILD_DIR/tcl9.0b1-src.tar.gz -C $BUILD_DIR
 cd $BUILD_DIR/tcl9.0b1/unix
@@ -36,7 +38,7 @@ make install > $BUILD_LOG_DIR/tcl-install.log 2>&1
 fi
 
 # twebserver
-if false; then
+if true; then
 curl -L -o twebserver-1.47.14.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/twebserver/archive/refs/tags/v.1.47.14.tar.gz
 tar -xvf $BUILD_DIR/twebserver-1.47.14.tar.gz -C $BUILD_DIR
 mv $BUILD_DIR/twebserver-v.1.47.14 $BUILD_DIR/twebserver-1.47.14
@@ -53,7 +55,7 @@ make install > $BUILD_LOG_DIR/twebserver-install.log 2>&1
 fi
 
 # abseil-cpp
-if false; then
+if true; then
 curl -L -o abseil-cpp-20230125.0.tar.gz --output-dir $BUILD_DIR https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.0.tar.gz
 tar -xzf $BUILD_DIR/abseil-cpp-20230125.0.tar.gz -C $BUILD_DIR
 cd $BUILD_DIR/abseil-cpp-20230125.0
@@ -69,7 +71,7 @@ make install > $BUILD_LOG_DIR/abseil-cpp-install.log 2>&1
 fi
 
 # protobuf
-if false; then
+if true; then
 curl -L -o protobuf-v21.9.zip --output-dir $BUILD_DIR https://github.com/protocolbuffers/protobuf/archive/v21.9.zip
 unzip $BUILD_DIR/protobuf-v21.9.zip -d $BUILD_DIR
 cd $BUILD_DIR/protobuf-21.9
@@ -87,7 +89,7 @@ make install > $BUILD_LOG_DIR/protobuf-install.log 2>&1
 fi
 
 # tink-cc and tink-tcl
-if false; then
+if true; then
   git -C $BUILD_DIR clone https://github.com/jerily/tink-tcl.git
   cd $BUILD_DIR/tink-tcl
   export TINK_TCL_DIR=`pwd`
@@ -124,7 +126,7 @@ if false; then
 fi
 
 # aws-sdk-cpp
-if false; then
+if true; then
   git -C $BUILD_DIR clone --depth 1 --branch 1.11.157 --recurse-submodules --shallow-submodules https://github.com/aws/aws-sdk-cpp
   cd $BUILD_DIR/aws-sdk-cpp
   mkdir build
@@ -142,7 +144,7 @@ if false; then
 fi
 
 # aws-sdk-tcl
-if false; then
+if true; then
   #curl -L -o aws-sdk-tcl-1.0.2.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/aws-sdk-tcl/archive/refs/tags/v1.0.2.tar.gz
   #tar -xzf $BUILD_DIR/aws-sdk-tcl-1.0.2.tar.gz -C $BUILD_DIR
   git -C $BUILD_DIR clone https://github.com/jerily/aws-sdk-tcl.git
@@ -159,7 +161,7 @@ if false; then
 fi
 
 # tdom
-if false; then
+if true; then
   curl -L -o tdom-0.9.3-src.tar.gz --output-dir $BUILD_DIR http://tdom.org/downloads/tdom-0.9.3-src.tar.gz
   tar -xzf $BUILD_DIR/tdom-0.9.3-src.tar.gz -C $BUILD_DIR
   cd $BUILD_DIR/tdom-0.9.3-src/unix
@@ -168,7 +170,7 @@ if false; then
 fi
 
 # thtml
-if false; then
+if true; then
   git -C $BUILD_DIR clone https://github.com/jerily/thtml.git
   cd $BUILD_DIR/thtml
   mkdir build
@@ -182,14 +184,14 @@ if false; then
 fi
 
 # tsession
-if false; then
+if true; then
   git -C $BUILD_DIR clone https://github.com/jerily/tsession.git
   cd $BUILD_DIR/tsession
   make install PREFIX=$INSTALL_DIR > $BUILD_LOG_DIR/tsession-install.log 2>&1
 fi
 
 # ksuid-tcl
-if false; then
+if true; then
   curl -L -o ksuid-tcl-1.0.3.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/ksuid-tcl/archive/refs/tags/v1.0.3.tar.gz
   tar -xzf $BUILD_DIR/ksuid-tcl-1.0.3.tar.gz -C $BUILD_DIR
   cd $BUILD_DIR/ksuid-tcl-1.0.3
