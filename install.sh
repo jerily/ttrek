@@ -19,73 +19,111 @@ if false; then
 sudo apt-get install cmake ;# perl gcc zip unzip tar curl c++ make
 fi
 
+# zlib
+if true; then
+  curl -L -o zlib-1.3.1.tar.gz --output-dir $BUILD_DIR https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+  tar -xvf $BUILD_DIR/zlib-1.3.1.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/zlib-1.3.1
+  ./configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/zlib-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/zlib-install.log 2>&1
+fi
+
 # openssl
 if true; then
-curl -L -O --output-dir $BUILD_DIR/ https://www.openssl.org/source/openssl-3.2.1.tar.gz
-tar -xvf $BUILD_DIR/openssl-3.2.1.tar.gz -C $BUILD_DIR
-cd $BUILD_DIR/openssl-3.2.1
-./Configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/openssl-configure.log 2>&1
-make install > $BUILD_LOG_DIR/openssl-install.log 2>&1
+  curl -L -O --output-dir $BUILD_DIR/ https://www.openssl.org/source/openssl-3.2.1.tar.gz
+  tar -xvf $BUILD_DIR/openssl-3.2.1.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/openssl-3.2.1
+  ./Configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/openssl-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/openssl-install.log 2>&1
+fi
+
+#curl
+if true; then
+  curl -L -O --output-dir $BUILD_DIR https://curl.se/download/curl-8.7.1.tar.gz
+  tar -xvf $BUILD_DIR/curl-8.7.1.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/curl-8.7.1
+  ./configure --prefix=$INSTALL_DIR --with-openssl=$INSTALL_DIR --with-zlib=$INSTALL_DIR > $BUILD_LOG_DIR/curl-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/curl-install.log 2>&1
 fi
 
 # tcl
 if true; then
-curl -L -O --output-dir $BUILD_DIR http://prdownloads.sourceforge.net/tcl/tcl9.0b1-src.tar.gz
-tar -xvf $BUILD_DIR/tcl9.0b1-src.tar.gz -C $BUILD_DIR
-cd $BUILD_DIR/tcl9.0b1/unix
-./configure  --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/tcl-configure.log 2>&1
-make install > $BUILD_LOG_DIR/tcl-install.log 2>&1
+  curl -L -O --output-dir $BUILD_DIR http://prdownloads.sourceforge.net/tcl/tcl9.0b1-src.tar.gz
+  tar -xvf $BUILD_DIR/tcl9.0b1-src.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/tcl9.0b1/unix
+  ./configure  --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/tcl-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/tcl-install.log 2>&1
 fi
 
 # twebserver
 if true; then
-curl -L -o twebserver-1.47.14.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/twebserver/archive/refs/tags/v.1.47.14.tar.gz
-tar -xvf $BUILD_DIR/twebserver-1.47.14.tar.gz -C $BUILD_DIR
-mv $BUILD_DIR/twebserver-v.1.47.14 $BUILD_DIR/twebserver-1.47.14
-cd $BUILD_DIR/twebserver-1.47.14
-mkdir build
-cd build
-# change "TCL_LIBRARY_DIR" and "TCL_INCLUDE_DIR" to the correct paths
-cmake .. \
-  -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
-  -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-  -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/twebserver-configure.log 2>&1
-make install > $BUILD_LOG_DIR/twebserver-install.log 2>&1
+  git -C $BUILD_DIR clone https://github.com/jerily/twebserver.git
+  cd $BUILD_DIR/twebserver
+  mkdir build
+  cd build
+  cmake .. \
+    -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
+    -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/twebserver-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/twebserver-install.log 2>&1
+fi
+
+# tdom
+if true; then
+  curl -L -o tdom-0.9.3-src.tar.gz --output-dir $BUILD_DIR http://tdom.org/downloads/tdom-0.9.3-src.tar.gz
+  tar -xzf $BUILD_DIR/tdom-0.9.3-src.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/tdom-0.9.3-src/unix
+  ../configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/tdom-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/tdom-install.log 2>&1
+fi
+
+# thtml
+if true; then
+  git -C $BUILD_DIR clone https://github.com/jerily/thtml.git
+  cd $BUILD_DIR/thtml
+  mkdir build
+  cd build
+  cmake .. \
+    -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
+    -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/thtml-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/thtml-install.log 2>&1
 fi
 
 # abseil-cpp
 if true; then
-curl -L -o abseil-cpp-20230125.0.tar.gz --output-dir $BUILD_DIR https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.0.tar.gz
-tar -xzf $BUILD_DIR/abseil-cpp-20230125.0.tar.gz -C $BUILD_DIR
-cd $BUILD_DIR/abseil-cpp-20230125.0
-mkdir build
-cd build
-cmake .. \
-  -DBUILD_SHARED_LIBS=ON \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_STANDARD=14 \
-  -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-  -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/abseil-cpp-configure.log 2>&1
-make install > $BUILD_LOG_DIR/abseil-cpp-install.log 2>&1
+  curl -L -o abseil-cpp-20230125.0.tar.gz --output-dir $BUILD_DIR https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.0.tar.gz
+  tar -xzf $BUILD_DIR/abseil-cpp-20230125.0.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/abseil-cpp-20230125.0
+  mkdir build
+  cd build
+  cmake .. \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_STANDARD=14 \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/abseil-cpp-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/abseil-cpp-install.log 2>&1
 fi
 
 # protobuf
 if true; then
-curl -L -o protobuf-v21.9.zip --output-dir $BUILD_DIR https://github.com/protocolbuffers/protobuf/archive/v21.9.zip
-unzip $BUILD_DIR/protobuf-v21.9.zip -d $BUILD_DIR
-cd $BUILD_DIR/protobuf-21.9
-mkdir build
-cd build
-cmake .. \
--DBUILD_SHARED_LIBS=ON \
--DCMAKE_BUILD_TYPE=Release \
--Dprotobuf_BUILD_TESTS=OFF \
--DCMAKE_POSITION_INDEPENDENT_CODE=ON \
--Dprotobuf_BUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" \
--DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
--DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/protobuf-configure.log 2>&1
-make install > $BUILD_LOG_DIR/protobuf-install.log 2>&1
+  curl -L -o protobuf-v21.9.zip --output-dir $BUILD_DIR https://github.com/protocolbuffers/protobuf/archive/v21.9.zip
+  unzip $BUILD_DIR/protobuf-v21.9.zip -d $BUILD_DIR
+  cd $BUILD_DIR/protobuf-21.9
+  mkdir build
+  cd build
+  cmake .. \
+  -DBUILD_SHARED_LIBS=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -Dprotobuf_BUILD_TESTS=OFF \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+  -Dprotobuf_BUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" \
+  -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+  -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/protobuf-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/protobuf-install.log 2>&1
 fi
 
 # tink-cc and tink-tcl
@@ -160,28 +198,6 @@ if true; then
   make install > $BUILD_LOG_DIR/aws-sdk-tcl-install.log 2>&1
 fi
 
-# tdom
-if true; then
-  curl -L -o tdom-0.9.3-src.tar.gz --output-dir $BUILD_DIR http://tdom.org/downloads/tdom-0.9.3-src.tar.gz
-  tar -xzf $BUILD_DIR/tdom-0.9.3-src.tar.gz -C $BUILD_DIR
-  cd $BUILD_DIR/tdom-0.9.3-src/unix
-  ../configure --prefix=$INSTALL_DIR > $BUILD_LOG_DIR/tdom-configure.log 2>&1
-  make install > $BUILD_LOG_DIR/tdom-install.log 2>&1
-fi
-
-# thtml
-if true; then
-  git -C $BUILD_DIR clone https://github.com/jerily/thtml.git
-  cd $BUILD_DIR/thtml
-  mkdir build
-  cd build
-  cmake .. \
-    -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
-    -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
-    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/thtml-configure.log 2>&1
-  make install > $BUILD_LOG_DIR/thtml-install.log 2>&1
-fi
 
 # tsession
 if true; then
