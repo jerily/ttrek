@@ -25,7 +25,7 @@
 #   endif
 #endif
 
-int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
+int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *current_working_directory, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const cJSON *root);
 

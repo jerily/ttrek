@@ -7,3 +7,5 @@ models
 install
 local
 certs
+ttrek.json
+ttrek-lock.json

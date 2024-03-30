@@ -9,13 +9,7 @@
 #include "common.h"
 #include "cjson/cJSON.h"
 
-int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
-    Tcl_Obj *current_working_directory = Tcl_FSGetCwd(interp);
-    if (!current_working_directory) {
-        fprintf(stderr, "error: getting current working directory failed\n");
-        return TCL_ERROR;
-    }
-
+int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *current_working_directory, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
     Tcl_Obj *objv[1] = {filename_ptr};
     *path_ptr = Tcl_FSJoinToPath(current_working_directory, 1, objv);
 

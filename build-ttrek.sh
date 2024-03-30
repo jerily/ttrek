@@ -23,7 +23,7 @@ cd tcl8.6.13/unix
 ./configure --prefix=$BUILD_DIR/static-tcl8.6.13 --disable-shared
 make
 make install
-cd ../../
+cd $BUILD_DIR
 cmake .. \
   -DTCL_LIBRARY=$BUILD_DIR/static-tcl8.6.13/lib/libtcl8.6.a \
   -DTCL_INCLUDE_DIR=$BUILD_DIR/static-tcl8.6.13/include \

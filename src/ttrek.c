@@ -16,10 +16,19 @@ static int ttrek_InitSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
     // write to file
     Tcl_Obj *filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
     Tcl_IncrRefCount(filename_ptr);
-    Tcl_Obj *path_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, filename_ptr, &path_ptr)) {
+    Tcl_Obj *cwd = Tcl_FSGetCwd(interp);
+    if (!cwd) {
+        fprintf(stderr, "error: getting current working directory failed\n");
         return TCL_ERROR;
     }
+    Tcl_IncrRefCount(cwd);
+    Tcl_Obj *path_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_ptr)) {
+        Tcl_DecrRefCount(cwd);
+        return TCL_ERROR;
+    }
+    Tcl_DecrRefCount(cwd);
+
     Tcl_IncrRefCount(path_ptr);
     if (TCL_OK == ttrek_CheckFileExists(path_ptr)) {
         fprintf(stderr, "error: %s already exists\n", PACKAGES_JSON_FILE);
@@ -73,10 +82,15 @@ static int ttrek_InitSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
     return TCL_OK;
 }
 
-static int ttrek_InstallDependency(Tcl_Interp *interp, const char *name, const char *version) {
+static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, const char *name, const char *version) {
 
-    int argc = 1;
-    const char *argv[2] = {"~/tclpm-registry/twebserver.sh", NULL };
+    int argc = 2;
+    char spec_filename[256];
+    snprintf(spec_filename, sizeof(spec_filename), "registry/%s-%s.sh", name, version);
+    Tcl_Obj *path_to_spec_file;
+    ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(spec_filename, -1), &path_to_spec_file);
+    const char *argv[3] = {Tcl_GetString(path_to_spec_file), Tcl_GetString(path_to_rootdir), NULL };
+    fprintf(stderr, "path_to_spec_file: %s\n", Tcl_GetString(path_to_spec_file));
     Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
     Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
     if (Tcl_GetChannelHandle(chan, TCL_READABLE, NULL) == TCL_OK) {
@@ -95,13 +109,24 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, const char *name, const c
 static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
     Tcl_Obj *filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
     Tcl_IncrRefCount(filename_ptr);
+
+    Tcl_Obj *cwd = Tcl_FSGetCwd(interp);
+    if (!cwd) {
+        fprintf(stderr, "error: getting current working directory failed\n");
+        return TCL_ERROR;
+    }
+    Tcl_IncrRefCount(cwd);
+
     Tcl_Obj *path_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, filename_ptr, &path_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_ptr)) {
+        Tcl_DecrRefCount(cwd);
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(path_ptr);
+
     if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
         fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
+        Tcl_DecrRefCount(cwd);
         return TCL_ERROR;
     }
 
@@ -117,8 +142,14 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
     int package_name_length;
-    const char *package_name = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
-    const char *package_version = "1.0.0";
+    const char *package = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
+    // "package" is of the form "name@version"
+    // we need to split it into "name" and "version"
+    const char *package_name = strtok(package, "@");
+    const char *package_version = strtok(NULL, "@");
+
+    fprintf(stderr, "package_name: %s\n", package_name);
+    fprintf(stderr, "package_version: %s\n", package_version);
 
     fprintf(stderr, "option_save_dev: %d\n", option_save_dev);
     fprintf(stderr, "objc: %d remObjv: %s\n", objc, Tcl_GetString(remObjv[0]));
@@ -126,11 +157,13 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
     fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
 
-    if (TCL_OK != ttrek_InstallDependency(interp, package_name, package_version)) {
+    if (TCL_OK != ttrek_InstallDependency(interp, cwd, package_name, package_version)) {
         fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
+        Tcl_DecrRefCount(cwd);
         ckfree(remObjv);
         return TCL_ERROR;
     }
+    Tcl_DecrRefCount(cwd);
 
     // read from file
     Tcl_Channel packages_chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "r", 0666);
@@ -140,8 +173,8 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
 
     cJSON *root = cJSON_Parse(Tcl_GetString(contents_ptr));
     cJSON *dependencies = cJSON_GetObjectItem(root, "dependencies");
-    cJSON *package = cJSON_GetObjectItem(dependencies, package_name);
-    if (package) {
+    cJSON *pkg = cJSON_GetObjectItem(dependencies, package_name);
+    if (pkg) {
         // modify the value
         cJSON_ReplaceItemInObject(dependencies, package_name, cJSON_CreateString(package_version));
     } else {

@@ -36,8 +36,9 @@ add_executable(${TARGET}
         src/common.c)
 
 
-include_directories(${TCL_INCLUDE_PATH} ${ZLIB_INCLUDE_DIRS} ${CJSON_INCLUDE_PATH})
-target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARIES} ${CJSON_LIBRARY} m)
+include_directories(${TCL_INCLUDE_PATH} ${ZLIB_INCLUDE_DIRS} ${CJSON_INCLUDE_DIR})
+target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARIES} ${CJSON_LIBRARY} m -static-libgcc)
+#target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
