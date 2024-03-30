@@ -31,7 +31,7 @@ RUN /var/www/sample-project/install.sh
 COPY examples /var/www/sample-project/examples
 
 EXPOSE 8080
-EXPOSE 4443
+EXPOSE 4433
 STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["/var/www/sample-project/start.sh"]
