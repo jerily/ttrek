@@ -36,5 +36,6 @@ cmake .. \
   -DTCL_LIBRARY=$BUILD_DIR/static-tcl8.6.13/lib/libtcl8.6.a \
   -DTCL_INCLUDE_DIR=$BUILD_DIR/static-tcl8.6.13/include \
   -DCJSON_LIBRARY=$BUILD_DIR/static-cjson-1.7.17/lib/libcjson.a \
-  -DCJSON_INCLUDE_DIR=$BUILD_DIR/static-cjson-1.7.17/include
+  -DCJSON_INCLUDE_DIR=$BUILD_DIR/static-cjson-1.7.17/include \
+  -DZLIB_LIBRARY=$BUILD_DIR/static-zlib-1.3.1/lib/libz.a
 make
