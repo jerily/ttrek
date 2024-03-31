@@ -7,6 +7,14 @@ BUILD_DIR=$SCRIPT_DIR/build
 
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
+curl -L -o zlib-1.3.1.tar.gz --output-dir $BUILD_DIR https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+tar -xvf $BUILD_DIR/zlib-1.3.1.tar.gz -C $BUILD_DIR
+cd $BUILD_DIR/zlib-1.3.1
+./configure --prefix=$BUILD_DIR/static-zlib-1.3.1
+make install
+
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
 curl -L -o cjson-1.7.17.tar.gz --output-dir $BUILD_DIR https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.17.tar.gz
 tar -xzvf cjson-1.7.17.tar.gz
 cd cJSON-1.7.17
