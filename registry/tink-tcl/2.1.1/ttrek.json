@@ -1,0 +1,19 @@
+{
+	"name":	"tink-tcl",
+	"version":	"2.1.1",
+	"scripts":	{
+	},
+	"dependencies":	{
+		"tink-cc":	"2.1.1"
+	},
+	"devDependencies":	{
+	},
+	"lifecycle": {
+		"install": [
+			{ "cmd": "git", "url": "https://github.com/jerily/tink-tcl.git" },
+			{ "cmd": "cd" },
+			{ "cmd": "cmake" },
+			{ "cmd": "make install" }
+		]
+	}
+}

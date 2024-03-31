@@ -1,0 +1,26 @@
+{
+	"name": "abseil-cpp",
+	"version": "20230125.0",
+	"scripts": {
+	},
+	"dependencies":	{
+	},
+	"devDependencies": {
+	},
+	"lifecycle": {
+		"install": [
+			{ "cmd": "curl", "url": "https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.0.tar.gz" },
+			{ "cmd": "unpack" },
+			{ "cmd": "cd" },
+			{
+				"cmd": "cmake",
+				"options": [
+					{ "name": "BUILD_SHARED_LIBS", "value": "ON" },
+					{ "name": "CMAKE_BUILD_TYPE", "value": "Release" },
+					{ "name": "CMAKE_CXX_STANDARD", "value": "14" }
+				]
+			},
+			{ "cmd": "make install" }
+		]
+	}
+}
