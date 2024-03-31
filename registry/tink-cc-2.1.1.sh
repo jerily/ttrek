@@ -19,7 +19,7 @@ if true; then
   curl -L -o tink-cc-2.1.1.tar.gz --output-dir $BUILD_DIR https://github.com/tink-crypto/tink-cc/archive/refs/tags/v2.1.1.tar.gz
   tar -xzf $BUILD_DIR/tink-cc-2.1.1.tar.gz -C $BUILD_DIR
   cd $BUILD_DIR/tink-cc-2.1.1
-  patch -p1 < tink-cc-2.1.1.diff > $BUILD_LOG_DIR/tink-cc-patch.log 2>&1
+  patch -p1 < $SCRIPT_DIR/registry/tink-cc-2.1.1.diff > $BUILD_LOG_DIR/tink-cc-patch.log 2>&1
   mkdir build
   cd build
   cmake .. \
