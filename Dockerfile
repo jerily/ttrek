@@ -21,6 +21,7 @@ RUN apk add \
     gdb
 
 RUN mkdir -p /var/www/sample-project
+COPY registry /var/www/sample-project/registry
 COPY install.sh /var/www/sample-project/install.sh
 COPY start.sh /var/www/sample-project/start.sh
 
