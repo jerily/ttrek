@@ -82,15 +82,62 @@ static int ttrek_InitSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
     return TCL_OK;
 }
 
-static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, const char *name, const char *version) {
+static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
+    cJSON *root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_ptr, &root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *dependencies = cJSON_GetObjectItem(root, "dependencies");
+    cJSON *pkg = cJSON_GetObjectItem(dependencies, name);
+    if (pkg) {
+        // modify the value
+        cJSON_ReplaceItemInObject(dependencies, name, cJSON_CreateString(version));
+    } else {
+        cJSON_AddItemToObject(dependencies, name, cJSON_CreateString(version));
+    }
+    cJSON *devDependencies = cJSON_GetObjectItem(root, "devDependencies");
+    cJSON_free(root);
+
+    ttrek_WriteJsonFile(interp, path_ptr, root);
+    return TCL_OK;
+}
+
+static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, const char *name, const char *version) {
+    char spec_filename[256];
+    snprintf(spec_filename, sizeof(spec_filename), "registry/%s/%s/ttrek.json", name, version);
+    Tcl_Obj *path_to_spec_file_ptr;
+    ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(spec_filename, -1), &path_to_spec_file_ptr);
+
+    cJSON *root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_to_spec_file_ptr, &root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_spec_file_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *dependencies = cJSON_GetObjectItem(root, "dependencies");
+    for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
+        cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
+        const char *dep_name = dep_item->string;
+        const char *dep_version = dep_item->valuestring;
+        fprintf(stderr, "dep_name: %s\n", dep_name);
+        fprintf(stderr, "dep_version: %s\n", dep_version);
+        if (TCL_OK != ttrek_InstallDependency(interp, path_to_rootdir, NULL, dep_name, dep_version)) {
+            fprintf(stderr, "error: could not install dependency: %s@%s\n", dep_name, dep_version);
+            return TCL_ERROR;
+        }
+    }
+    cJSON_free(root);
+
+    char install_filename[256];
+    snprintf(install_filename, sizeof(spec_filename), "registry/%s/%s/install.sh", name, version);
+    Tcl_Obj *path_to_install_file_ptr;
+    ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
 
     int argc = 2;
-    char spec_filename[256];
-    snprintf(spec_filename, sizeof(spec_filename), "registry/%s-%s.sh", name, version);
-    Tcl_Obj *path_to_spec_file;
-    ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(spec_filename, -1), &path_to_spec_file);
-    const char *argv[3] = {Tcl_GetString(path_to_spec_file), Tcl_GetString(path_to_rootdir), NULL };
-    fprintf(stderr, "path_to_spec_file: %s\n", Tcl_GetString(path_to_spec_file));
+    const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(path_to_rootdir), NULL };
+    fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
     Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
     Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
     if (Tcl_GetChannelHandle(chan, TCL_READABLE, NULL) == TCL_OK) {
@@ -102,6 +149,10 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     }
     Tcl_Close(interp, chan);
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+
+    if (path_to_packages_file_ptr) {
+        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, name, version);
+    }
 
     return TCL_OK;
 }
@@ -117,16 +168,17 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     }
     Tcl_IncrRefCount(cwd);
 
-    Tcl_Obj *path_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_ptr)) {
+    Tcl_Obj *path_to_packages_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_to_packages_file_ptr)) {
         Tcl_DecrRefCount(cwd);
         return TCL_ERROR;
     }
-    Tcl_IncrRefCount(path_ptr);
+    Tcl_IncrRefCount(path_to_packages_file_ptr);
 
-    if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
+    if (TCL_OK != ttrek_CheckFileExists(path_to_packages_file_ptr)) {
         fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
         Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(path_to_packages_file_ptr);
         return TCL_ERROR;
     }
 
@@ -157,34 +209,15 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
     fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
 
-    if (TCL_OK != ttrek_InstallDependency(interp, cwd, package_name, package_version)) {
+    if (TCL_OK != ttrek_InstallDependency(interp, cwd, path_to_packages_file_ptr, package_name, package_version)) {
         fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
         Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(path_to_packages_file_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
     }
     Tcl_DecrRefCount(cwd);
-
-    // read from file
-    Tcl_Channel packages_chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "r", 0666);
-    Tcl_Obj *contents_ptr = Tcl_NewStringObj("", -1);
-    Tcl_ReadChars(packages_chan, contents_ptr, -1, 0);
-//    Tcl_Close(interp, packages_chan);
-
-    cJSON *root = cJSON_Parse(Tcl_GetString(contents_ptr));
-    cJSON *dependencies = cJSON_GetObjectItem(root, "dependencies");
-    cJSON *pkg = cJSON_GetObjectItem(dependencies, package_name);
-    if (pkg) {
-        // modify the value
-        cJSON_ReplaceItemInObject(dependencies, package_name, cJSON_CreateString(package_version));
-    } else {
-        cJSON_AddItemToObject(dependencies, package_name, cJSON_CreateString(package_version));
-    }
-    cJSON *devDependencies = cJSON_GetObjectItem(root, "devDependencies");
-    cJSON_free(root);
-
-    ttrek_WriteJsonFile(interp, path_ptr, root);
-
+    Tcl_DecrRefCount(path_to_packages_file_ptr);
     ckfree(remObjv);
     return TCL_OK;
 }
