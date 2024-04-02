@@ -13,14 +13,14 @@
 			{ "cmd": "unpack" },
 			{ "cmd": "cd" },
 			{
-				"cmd": "cmake",
+				"cmd": "cmake_config",
 				"options": [
 					{ "name": "BUILD_SHARED_LIBS", "value": "ON" },
 					{ "name": "CMAKE_BUILD_TYPE", "value": "Release" },
 					{ "name": "CMAKE_CXX_STANDARD", "value": "14" }
 				]
 			},
-			{ "cmd": "make install" }
+			{ "cmd": "make_install" }
 		]
 	}
 }

@@ -13,7 +13,7 @@
 			{ "cmd": "unpack" },
 			{ "cmd": "cd" },
 			{
-				"cmd": "cmake",
+				"cmd": "cmake_config",
 				"options": [
 					{ "name": "BUILD_SHARED_LIBS", "value": "ON" },
 					{ "name": "CMAKE_BUILD_TYPE", "value": "Release" },
@@ -23,7 +23,7 @@
 					{ "name": "protobuf_BUILD_SHARED_LIBS", "value": "ON" }
 				]
 			},
-			{ "cmd": "make install" }
+			{ "cmd": "make_install" }
 		]
 	}
 }

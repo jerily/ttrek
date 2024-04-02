@@ -17,7 +17,7 @@
 			{ "cmd": "cd" },
 			{ "cmd": "patch", "p_num": "1", "filename": "tink-cc-2.1.1.diff" },
 			{
-				"cmd": "cmake",
+				"cmd": "cmake_config",
 				"options": [
 					{ "name": "TINK_BUILD_SHARED_LIB", "value": "ON" },
 					{ "name": "TINK_USE_INSTALLED_ABSEIL", "value": "ON" },
@@ -29,7 +29,7 @@
 					{ "name": "CMAKE_BUILD_TYPE", "value": "Release" }
 				]
 			},
-			{ "cmd": "make install" }
+			{ "cmd": "make_install" }
 		]
 	}
 }

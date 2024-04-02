@@ -11,15 +11,14 @@ mkdir -p $BUILD_DIR
 
 BUILD_LOG_DIR=$BUILD_DIR/logs
 mkdir -p $BUILD_LOG_DIR
-
+export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64
 export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
 # aws-sdk-tcl
 if true; then
-  #curl -L -o aws-sdk-tcl-1.0.2.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/aws-sdk-tcl/archive/refs/tags/v1.0.2.tar.gz
-  #tar -xzf $BUILD_DIR/aws-sdk-tcl-1.0.2.tar.gz -C $BUILD_DIR
-  git -C $BUILD_DIR clone https://github.com/jerily/aws-sdk-tcl.git
-  cd $BUILD_DIR/aws-sdk-tcl
+  curl -L -o aws-sdk-tcl-1.0.3.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/aws-sdk-tcl/archive/refs/tags/v1.0.3.tar.gz
+  tar -xzf $BUILD_DIR/aws-sdk-tcl-1.0.3.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/aws-sdk-tcl-1.0.3
   mkdir build
   cd build
   cmake .. \

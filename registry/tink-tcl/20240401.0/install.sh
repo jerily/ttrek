@@ -11,20 +11,20 @@ mkdir -p $BUILD_DIR
 
 BUILD_LOG_DIR=$BUILD_DIR/logs
 mkdir -p $BUILD_LOG_DIR
-
+export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64
 export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
-# ksuid-tcl
+# tink-tcl
 if true; then
-  curl -L -o ksuid-tcl-1.0.3.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/ksuid-tcl/archive/refs/tags/v1.0.3.tar.gz
-  tar -xzf $BUILD_DIR/ksuid-tcl-1.0.3.tar.gz -C $BUILD_DIR
-  cd $BUILD_DIR/ksuid-tcl-1.0.3
+  curl -L -o tink-tcl-20240401.0.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/tink-tcl/archive/refs/tags/v20240401.0.tar.gz
+  tar xzvf tink-tcl-20240401.0.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/tink-tcl-20240401.0
   mkdir build
   cd build
   cmake .. \
     -DTCL_LIBRARY_DIR=$INSTALL_DIR/lib \
     -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
     -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/ksuid-tcl-configure.log 2>&1
-  make install > $BUILD_LOG_DIR/ksuid-tcl-install.log 2>&1
+    -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/tink-tcl-configure.log 2>&1
+  make install > $BUILD_LOG_DIR/tink-tcl-install.log 2>&1
 fi

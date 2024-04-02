@@ -12,8 +12,8 @@
 			{ "cmd": "curl", "url": "https://www.openssl.org/source/openssl-3.2.1.tar.gz" },
 			{ "cmd": "unpack" },
 			{ "cmd": "cd" },
-			{ "cmd": "configure", "filename": "Configure" },
-			{ "cmd": "make install" }
+			{ "cmd": "configure", "path": "./Configure" },
+			{ "cmd": "make_install" }
 		]
 	}
 }

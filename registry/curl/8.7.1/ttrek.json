@@ -1,0 +1,28 @@
+{
+	"name":	"curl",
+	"version":	"8.7.1",
+	"scripts":	{
+	},
+	"dependencies":	{
+		"openssl":	"3.2.1",
+		"zlib":	"1.3.1"
+	},
+	"devDependencies":	{
+	},
+	"lifecycle": {
+		"install": [
+			{ "cmd": "curl", "url": "https://curl.se/download/curl-8.7.1.tar.gz" },
+			{ "cmd": "unpack" },
+			{ "cmd": "cd" },
+			{
+				"cmd": "configure",
+				"options": [
+					{ "name": "with-openssl", "value": "$INSTALL_DIR" },
+					{ "name": "with-zlib", "value": "$INSTALL_DIR" }
+				]
+			},
+			{ "cmd": "make" },
+			{ "cmd": "make_install" }
+		]
+	}
+}

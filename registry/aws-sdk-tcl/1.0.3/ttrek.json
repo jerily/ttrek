@@ -1,0 +1,20 @@
+{
+	"name":	"aws-sdk-tcl",
+	"version":	"1.0.3",
+	"scripts":	{
+	},
+	"dependencies":	{
+		"tcl": "9.0b1"
+	},
+	"devDependencies":	{
+	},
+	"lifecycle": {
+		"install": [
+			{ "cmd": "curl", "url": "https://github.com/jerily/aws-sdk-tcl/archive/refs/tags/v1.0.3.tar.gz" },
+			{ "cmd": "unpack" },
+			{ "cmd": "cd" },
+			{ "cmd": "cmake_config" },
+			{ "cmd": "make_install" }
+		]
+	}
+}

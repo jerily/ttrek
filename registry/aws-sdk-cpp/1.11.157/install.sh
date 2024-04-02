@@ -11,7 +11,7 @@ mkdir -p $BUILD_DIR
 
 BUILD_LOG_DIR=$BUILD_DIR/logs
 mkdir -p $BUILD_LOG_DIR
-
+export LD_LIBRARY_PATH=$INSTALL_DIR/lib:$INSTALL_DIR/lib64
 export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
 # aws-sdk-cpp
