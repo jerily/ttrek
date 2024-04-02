@@ -16,8 +16,9 @@ export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
 # thtml
 if true; then
-  git -C $BUILD_DIR clone https://github.com/jerily/thtml.git
-  cd $BUILD_DIR/thtml
+  curl -L -o thtml-1.0.0.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/thtml/archive/refs/tags/v1.0.0.tar.gz
+  tar -xzvf $BUILD_DIR/thtml-1.0.0.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/thtml-1.0.0
   mkdir build
   cd build
   cmake .. \

@@ -16,7 +16,8 @@ export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
 # tsession
 if true; then
-  git -C $BUILD_DIR clone https://github.com/jerily/tsession.git
-  cd $BUILD_DIR/tsession
+  curl -L -o tsession-1.0.2.tar.gz --output-dir $BUILD_DIR https://github.com/jerily/tsession/archive/refs/tags/v1.0.2.tar.gz
+  tar -xzvf $BUILD_DIR/tsession-1.0.2.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/tsession-1.0.2
   make install PREFIX=$INSTALL_DIR > $BUILD_LOG_DIR/tsession-install.log 2>&1
 fi
