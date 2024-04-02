@@ -27,7 +27,7 @@ COPY start.sh /var/www/sample-project/start.sh
 
 ENV LD_LIBRARY_PATH="/var/www/sample-project/local/lib:/var/www/sample-project/local/lib64"
 
-#RUN /var/www/sample-project/install.sh
+RUN /var/www/sample-project/install.sh
 
 COPY examples /var/www/sample-project/examples
 
