@@ -10,6 +10,7 @@ set(ZLIB_USE_STATIC_LIBS "ON")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(TCL EXACT 8.6.13 REQUIRED)  # TCL_INCLUDE_PATH TCL_LIBRARY
 find_package(ZLIB REQUIRED) # ZLIB_INCLUDE_DIRS ZLIB_LIBRARIES
+find_library(MATH_LIB NAMES libm.a)
 
 message(STATUS "TCL_INCLUDE_PATH: ${TCL_INCLUDE_PATH}")
 message(STATUS "TCL_LIBRARY: ${TCL_LIBRARY}")
@@ -35,7 +36,8 @@ add_executable(${TARGET}
 
 
 include_directories(${TCL_INCLUDE_PATH} ${ZLIB_INCLUDE_DIRS} ${CJSON_INCLUDE_DIR})
-target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARIES} ${CJSON_LIBRARY} m)
+target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARIES} ${CJSON_LIBRARY} ${MATH_LIB})
+target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}

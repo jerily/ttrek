@@ -9,6 +9,18 @@
 #include "cjson/cJSON.h"
 #include "common.h"
 
+
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+#ifdef DEBUG
+# define DBG(x) x
+#else
+# define DBG(x)
+#endif
+
+static const char *project_version = XSTR(PROJECT_VERSION);
+
 static const char *PACKAGES_JSON_FILE = "ttrek.json";
 
 static int ttrek_InitSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
