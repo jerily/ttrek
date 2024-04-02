@@ -16,15 +16,18 @@ export PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig
 
 # abseil-cpp
 if true; then
-  curl -L -o abseil-cpp-20230125.0.tar.gz --output-dir $BUILD_DIR https://github.com/abseil/abseil-cpp/archive/refs/tags/20230125.0.tar.gz
-  tar -xzf $BUILD_DIR/abseil-cpp-20230125.0.tar.gz -C $BUILD_DIR
-  cd $BUILD_DIR/abseil-cpp-20230125.0
+  #VERSION=20230125.0
+  VERSION=20230802.1
+  curl -L -o abseil-cpp-$VERSION.tar.gz --output-dir $BUILD_DIR https://github.com/abseil/abseil-cpp/archive/refs/tags/$VERSION.tar.gz
+  tar -xzf $BUILD_DIR/abseil-cpp-$VERSION.tar.gz -C $BUILD_DIR
+  cd $BUILD_DIR/abseil-cpp-$VERSION
   mkdir build
   cd build
   cmake .. \
     -DBUILD_SHARED_LIBS=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_STANDARD=14 \
+    -DABSL_PROPAGATE_CXX_STD=ON \
     -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
     -DCMAKE_PREFIX_PATH=$INSTALL_DIR/ > $BUILD_LOG_DIR/abseil-cpp-configure.log 2>&1
   make install > $BUILD_LOG_DIR/abseil-cpp-install.log 2>&1

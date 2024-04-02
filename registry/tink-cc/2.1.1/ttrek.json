@@ -5,7 +5,7 @@
 	},
 	"dependencies":	{
 		"openssl": "3.2.1",
-		"abseil-cpp": "20230125.0",
+		"abseil-cpp": "20230802.1",
 		"protobuf":	"21.9"
 	},
 	"devDependencies": {
