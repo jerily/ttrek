@@ -267,6 +267,8 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         fprintf(stderr, "%lu bytes retrieved\n", (unsigned long)chunk.size);
     } else {
         fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(ret));
+        SetResult("failed to fetch spec file");
+        return TCL_ERROR;
     }
     curl_easy_cleanup(curl_handle);
 
