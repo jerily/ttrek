@@ -6,9 +6,9 @@
 
 #include <tcl.h>
 #include <string.h>
-#include "cjson/cJSON.h"
+#include <cjson/cJSON.h>
 #include "common.h"
-
+#include <curl/curl.h>
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
@@ -21,6 +21,7 @@
 
 static const char *VERSION = XSTR(PROJECT_VERSION);
 
+static const char *REGISTRY_URL = "http://localhost:8080/registry";
 static const char *PACKAGES_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 
@@ -178,6 +179,31 @@ static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path
     return TCL_OK;
 }
 
+struct MemoryStruct {
+    char *memory;
+    Tcl_Size size;
+};
+
+static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    size_t realsize = size * nmemb;
+    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+
+    char *ptr = Tcl_Realloc(mem->memory, mem->size + realsize + 1);
+    if(!ptr) {
+        /* out of memory! */
+        printf("not enough memory (realloc returned NULL)\n");
+        return 0;
+    }
+
+    mem->memory = ptr;
+    memcpy(&(mem->memory[mem->size]), contents, realsize);
+    mem->size += realsize;
+    mem->memory[mem->size] = 0;
+
+    return realsize;
+}
+
 static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, Tcl_Obj *path_to_lock_file_ptr, const char *name, const char *version) {
     Tcl_Obj *installed_version = NULL;
     if (TCL_OK != ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, name, &installed_version)) {
@@ -218,8 +244,40 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     }
     cJSON_free(root);
 
+
     char install_filename[256];
-    snprintf(install_filename, sizeof(spec_filename), "registry/%s/%s/install.sh", name, version);
+    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", name, version);
+    char install_script_url[256];
+    snprintf(install_script_url, sizeof(spec_filename), "%s/%s/%s/install.sh", REGISTRY_URL, name, version);
+
+    struct MemoryStruct chunk;
+
+    chunk.memory = Tcl_Alloc(1);  /* grown as needed by the realloc above */
+    chunk.size = 0;    /* no data at this point */
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL *curl_handle = curl_easy_init();
+    curl_easy_setopt(curl_handle, CURLOPT_URL, install_script_url);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &chunk);
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "ttrek/1.0");
+
+    CURLcode ret = curl_easy_perform(curl_handle);
+    if (ret == CURLE_OK) {
+        fprintf(stderr, "%lu bytes retrieved\n", (unsigned long)chunk.size);
+    } else {
+        fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(ret));
+    }
+    curl_easy_cleanup(curl_handle);
+
+    // write "chunk.memory" to file "install_filename"
+    Tcl_Obj *install_file_path_ptr;
+    ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &install_file_path_ptr);
+    ttrek_WriteChars(interp, install_file_path_ptr, Tcl_NewStringObj(chunk.memory, chunk.size), 0777);
+
+    Tcl_Free(chunk.memory);
+    curl_global_cleanup();
+
     Tcl_Obj *path_to_install_file_ptr;
     ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
 

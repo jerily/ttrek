@@ -6,6 +6,7 @@ models
 *.so
 install
 local
+local-static
 certs
 /ttrek.json
 /ttrek-lock.json

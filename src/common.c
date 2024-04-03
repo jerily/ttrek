@@ -27,8 +27,8 @@ int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
     return TCL_OK;
 }
 
-int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr) {
-    Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", 0666);
+int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions) {
+    Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", permissions);
     if (!chan) {
         fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
@@ -41,7 +41,7 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
     char buffer[65536];
     cJSON_PrintPreallocated(root, buffer, sizeof(buffer), 1);
-    return ttrek_WriteChars(interp, path_ptr, Tcl_NewStringObj(buffer, -1));
+    return ttrek_WriteChars(interp, path_ptr, Tcl_NewStringObj(buffer, -1), 0666);
 }
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {
