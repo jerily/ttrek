@@ -4,6 +4,7 @@
 	"scripts":	{
 	},
 	"dependencies":	{
+		"tink-tcl": "20240401.0",
 		"twebserver": "1.47.15",
 		"tcl": "9.0b1"
 	},

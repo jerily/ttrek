@@ -19,11 +19,12 @@
 # define DBG(x)
 #endif
 
-static const char *project_version = XSTR(PROJECT_VERSION);
+static const char *VERSION = XSTR(PROJECT_VERSION);
 
 static const char *PACKAGES_JSON_FILE = "ttrek.json";
+static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 
-static int ttrek_InitSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+static int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     // write to file
     Tcl_Obj *filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
@@ -116,7 +117,82 @@ static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
     return TCL_OK;
 }
 
-static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, const char *name, const char *version) {
+static int ttrek_EnsureLockFileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
+    if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
+        cJSON *root = cJSON_CreateObject();
+        cJSON *packages = cJSON_CreateObject();
+        cJSON_AddItemToObject(root, "packages", packages);
+        return ttrek_WriteJsonFile(interp, path_ptr, root);
+    }
+    return TCL_OK;
+}
+
+static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
+
+    if (TCL_OK != ttrek_EnsureLockFileExists(interp, path_ptr)) {
+        fprintf(stderr, "error: could not create %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_ptr, &root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *packages = cJSON_GetObjectItem(root, "packages");
+    cJSON *pkg = cJSON_GetObjectItem(packages, name);
+    if (pkg) {
+        // modify the value
+        cJSON_ReplaceItemInObject(packages, name, cJSON_CreateString(version));
+    } else {
+        cJSON_AddItemToObject(packages, name, cJSON_CreateString(version));
+    }
+    cJSON_free(root);
+
+    ttrek_WriteJsonFile(interp, path_ptr, root);
+    return TCL_OK;
+}
+
+static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, Tcl_Obj **installed_version) {
+    if (TCL_OK != ttrek_EnsureLockFileExists(interp, path_ptr)) {
+        fprintf(stderr, "error: could not create %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_ptr, &root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+
+    cJSON *packages = cJSON_GetObjectItem(root, "packages");
+    cJSON *pkg = cJSON_GetObjectItem(packages, name);
+    if (pkg) {
+        *installed_version = Tcl_NewStringObj(pkg->valuestring, -1);
+        Tcl_IncrRefCount(*installed_version);
+    } else {
+        *installed_version = NULL;
+    }
+    cJSON_free(root);
+    return TCL_OK;
+}
+
+static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, Tcl_Obj *path_to_lock_file_ptr, const char *name, const char *version) {
+    Tcl_Obj *installed_version = NULL;
+    if (TCL_OK != ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, name, &installed_version)) {
+        fprintf(stderr, "error: could not get version for %s\n", name);
+        return TCL_ERROR;
+    }
+    if (installed_version) {
+        if (strcmp(Tcl_GetString(installed_version), version) == 0) {
+            Tcl_DecrRefCount(installed_version);
+            fprintf(stderr, "info: %s@%s is already installed\n", name, version);
+            return TCL_OK;
+        }
+        Tcl_DecrRefCount(installed_version);
+    }
+
     char spec_filename[256];
     snprintf(spec_filename, sizeof(spec_filename), "registry/%s/%s/ttrek.json", name, version);
     Tcl_Obj *path_to_spec_file_ptr;
@@ -135,7 +211,7 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         const char *dep_version = dep_item->valuestring;
         fprintf(stderr, "dep_name: %s\n", dep_name);
         fprintf(stderr, "dep_version: %s\n", dep_version);
-        if (TCL_OK != ttrek_InstallDependency(interp, path_to_rootdir, NULL, dep_name, dep_version)) {
+        if (TCL_OK != ttrek_InstallDependency(interp, path_to_rootdir, NULL, path_to_lock_file_ptr, dep_name, dep_version)) {
             fprintf(stderr, "error: could not install dependency: %s@%s\n", dep_name, dep_version);
             return TCL_ERROR;
         }
@@ -165,14 +241,12 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     if (path_to_packages_file_ptr) {
         ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, name, version);
     }
+    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, name, version);
 
     return TCL_OK;
 }
 
-static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
-    Tcl_Obj *filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
-    Tcl_IncrRefCount(filename_ptr);
-
+static int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_Obj *cwd = Tcl_FSGetCwd(interp);
     if (!cwd) {
         fprintf(stderr, "error: getting current working directory failed\n");
@@ -180,12 +254,27 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     }
     Tcl_IncrRefCount(cwd);
 
+    Tcl_Obj *packages_filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
+    Tcl_IncrRefCount(packages_filename_ptr);
     Tcl_Obj *path_to_packages_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_to_packages_file_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, packages_filename_ptr, &path_to_packages_file_ptr)) {
+        Tcl_DecrRefCount(packages_filename_ptr);
         Tcl_DecrRefCount(cwd);
         return TCL_ERROR;
     }
+    Tcl_DecrRefCount(packages_filename_ptr);
     Tcl_IncrRefCount(path_to_packages_file_ptr);
+
+    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
+    Tcl_IncrRefCount(lock_filename_ptr);
+    Tcl_Obj *path_to_lock_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, lock_filename_ptr, &path_to_lock_file_ptr)) {
+        Tcl_DecrRefCount(lock_filename_ptr);
+        Tcl_DecrRefCount(cwd);
+        return TCL_ERROR;
+    }
+    Tcl_DecrRefCount(lock_filename_ptr);
+    Tcl_IncrRefCount(path_to_lock_file_ptr);
 
     if (TCL_OK != ttrek_CheckFileExists(path_to_packages_file_ptr)) {
         fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
@@ -205,7 +294,7 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     Tcl_Obj **remObjv;
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
-    int package_name_length;
+    Tcl_Size package_name_length;
     const char *package = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
     // "package" is of the form "name@version"
     // we need to split it into "name" and "version"
@@ -221,7 +310,7 @@ static int ttrek_InstallSubCmd(Tcl_Interp *interp, int objc, Tcl_Obj *const objv
     Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
     fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
 
-    if (TCL_OK != ttrek_InstallDependency(interp, cwd, path_to_packages_file_ptr, package_name, package_version)) {
+    if (TCL_OK != ttrek_InstallDependency(interp, cwd, path_to_packages_file_ptr, path_to_lock_file_ptr, package_name, package_version)) {
         fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
         Tcl_DecrRefCount(cwd);
         Tcl_DecrRefCount(path_to_packages_file_ptr);
@@ -255,7 +344,7 @@ int main(int argc, char *argv[]) {
     }
 
     Tcl_Interp *interp = Tcl_CreateInterp();
-    int objc = argc;
+    Tcl_Size objc = argc;
     Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);
     for (int i = 0; i < argc; i++) {
         objv[i] = Tcl_NewStringObj(argv[i], -1);
