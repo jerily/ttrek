@@ -36,6 +36,9 @@ add_executable(${TARGET}
         src/base64/cdecode.c
         src/base64/cencode.c
         src/base64.c
+        src/initSubCmd.c
+        src/installSubCmd.c
+        src/runSubCmd.c
         src/ttrek.c
         src/common.c)
 

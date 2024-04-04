@@ -7,6 +7,7 @@
 #ifndef TTREK_COMMON_H
 #define TTREK_COMMON_H
 
+#include <tcl.h>
 #include "cjson/cJSON.h"
 
 #ifndef TCL_SIZE_MAX
@@ -17,8 +18,19 @@ typedef int Tcl_Size;
 # define TCL_SIZE_MODIFIER ""
 #endif
 
+#define XSTR(s) STR(s)
+#define STR(s) #s
+
+#ifdef DEBUG
+# define DBG(x) x
+#else
+# define DBG(x)
+#endif
+
 #define SetResult(str) Tcl_ResetResult(interp); \
                      Tcl_SetStringObj(Tcl_GetObjResult(interp), (str), -1)
+
+#define SubCmdProc(x) int (x)(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
 
 /*
  * Macros used to cast between pointers and integers (e.g. when storing an int
@@ -35,6 +47,12 @@ typedef int Tcl_Size;
 #	define PTR2INT(p) ((int)(p))
 #   endif
 #endif
+
+static const char *VERSION = XSTR(PROJECT_VERSION);
+
+static const char *REGISTRY_URL = "http://localhost:8080/registry";
+static const char *PACKAGES_JSON_FILE = "ttrek.json";
+static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *current_working_directory, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
