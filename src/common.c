@@ -6,6 +6,7 @@
 
 #include <tcl.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include "common.h"
 #include "cjson/cJSON.h"
 
@@ -65,5 +66,40 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root) {
     }
     *root = cJSON_Parse(Tcl_GetString(contents_ptr));
     Tcl_DecrRefCount(contents_ptr);
+    return TCL_OK;
+}
+
+int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) {
+    void *handle;
+    Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
+    Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
+    if (Tcl_GetChannelHandle(chan, TCL_READABLE, &handle) != TCL_OK) {
+        SetResult("could not get channel handle");
+        return TCL_ERROR;
+    }
+    // make "chan" non-blocking
+    Tcl_SetChannelOption(interp, chan, "-blocking", "0");
+
+    while (!Tcl_Eof(chan)) {
+        if (Tcl_ReadChars(chan, resultPtr, -1, 0) < 0) {
+            fprintf(stderr, "error reading from channel: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+            return TCL_ERROR;
+        }
+        if (Tcl_GetCharLength(resultPtr) > 0) {
+            fprintf(stderr, "%s", Tcl_GetString(resultPtr));
+        }
+    }
+
+    int status = 0;
+    waitpid(-1, &status, 0); // Replace -1 with the child process ID if known
+    if (WIFEXITED(status)) {
+        fprintf(stderr, "Exit status: %d\n", WEXITSTATUS(status));
+        if (WEXITSTATUS(status)) {
+            fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+            return TCL_ERROR;
+        }
+    }
+
+    Tcl_Close(interp, chan);
     return TCL_OK;
 }

@@ -238,19 +238,13 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     Tcl_Obj *path_to_install_file_ptr;
     ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
 
-    int argc = 2;
+    Tcl_Size argc = 2;
     const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(path_to_rootdir), NULL };
     fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
-    Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
-    Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
-    if (Tcl_GetChannelHandle(chan, TCL_READABLE, NULL) == TCL_OK) {
-        if (Tcl_ReadChars(chan, resultPtr, -1, 0) < 0) {
-            fprintf(stderr, "error reading from channel: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
-            return TCL_ERROR;
-        }
-        fprintf(stderr, "result: %s\n", Tcl_GetString(resultPtr));
+    if (TCL_OK != ttrek_ExecuteCommand(interp, argc, argv)) {
+        fprintf(stderr, "error: could not execute install script to completion: %s\n", Tcl_GetString(path_to_install_file_ptr));
+        return TCL_ERROR;
     }
-    Tcl_Close(interp, chan);
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
 
     if (path_to_packages_file_ptr) {
