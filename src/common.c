@@ -72,6 +72,10 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root) {
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) {
     void *handle;
     Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
+    if (!chan) {
+        SetResult("could not open command channel");
+        return TCL_ERROR;
+    }
     Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
     if (Tcl_GetChannelHandle(chan, TCL_READABLE, &handle) != TCL_OK) {
         SetResult("could not get channel handle");
@@ -83,6 +87,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) 
     while (!Tcl_Eof(chan)) {
         if (Tcl_ReadChars(chan, resultPtr, -1, 0) < 0) {
             fprintf(stderr, "error reading from channel: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+            SetResult("error reading from channel");
             return TCL_ERROR;
         }
         if (Tcl_GetCharLength(resultPtr) > 0) {
@@ -96,6 +101,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) 
         fprintf(stderr, "Exit status: %d\n", WEXITSTATUS(status));
         if (WEXITSTATUS(status)) {
             fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+            SetResult("command failed");
             return TCL_ERROR;
         }
     }

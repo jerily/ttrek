@@ -28,7 +28,6 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         argv[i] = Tcl_GetString(objv[i]);
     }
     if (TCL_OK != ttrek_ExecuteCommand(interp, argc, argv)) {
-        fprintf(stderr, "error: could not execute run command to completion: %s\n", Tcl_GetString(path_to_file_ptr));
         return TCL_ERROR;
     }
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));

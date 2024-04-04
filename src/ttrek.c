@@ -48,14 +48,19 @@ int main(int argc, char *argv[]) {
                 break;
             case SUBCMD_INSTALL:
                 fprintf(stderr, "install\n");
-                ttrek_InstallSubCmd(interp, objc-1, &objv[1]);
+                if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
+                    fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                    return 1;
+                }
                 break;
             case SUBCMD_UNINSTALL:
                 fprintf(stderr, "uninstall\n");
                 break;
             case SUBCMD_RUN:
-                ttrek_RunSubCmd(interp, objc-2, &objv[2]);
-                fprintf(stderr, "run\n");
+                if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
+                    fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                    return 1;
+                }
                 break;
         }
     }
