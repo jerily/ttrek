@@ -7,7 +7,6 @@
 #include <tcl.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
 #include "common.h"
 #include "cjson/cJSON.h"
 
@@ -19,6 +18,7 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj
         fprintf(stderr, "error: could not resolve path for %s\n", Tcl_GetString(filename_ptr));
         return TCL_ERROR;
     }
+
     return TCL_OK;
 }
 
