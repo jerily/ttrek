@@ -310,7 +310,9 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     // we need to split it into "name" and "version"
     const char *package_name = strtok(package, "@");
     const char *package_version = strtok(NULL, "@");
-
+    if (!package_version) {
+        package_version = "latest";
+    }
     fprintf(stderr, "package_name: %s\n", package_name);
     fprintf(stderr, "package_version: %s\n", package_version);
 

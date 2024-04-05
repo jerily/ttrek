@@ -142,7 +142,6 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
 
         if (ttrek_CheckFileExists(path_project_file_ptr) == TCL_OK) {
             Tcl_DecrRefCount(project_filename_ptr);
-            Tcl_DecrRefCount(project_homedir_ptr);
             Tcl_DecrRefCount(path_project_file_ptr);
             return project_homedir_ptr;
         }
