@@ -7,12 +7,13 @@
 #include <tcl.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include "common.h"
 #include "cjson/cJSON.h"
 
-int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *current_working_directory, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
+int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
     Tcl_Obj *objv[1] = {filename_ptr};
-    *path_ptr = Tcl_FSJoinToPath(current_working_directory, 1, objv);
+    *path_ptr = Tcl_FSJoinToPath(project_home_dir_ptr, 1, objv);
 
     if (!*path_ptr) {
         fprintf(stderr, "error: could not resolve path for %s\n", Tcl_GetString(filename_ptr));
@@ -108,4 +109,59 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) 
 
     Tcl_Close(interp, chan);
     return TCL_OK;
+}
+
+Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
+    Tcl_Obj *project_homedir_ptr = Tcl_FSGetCwd(interp);
+    if (!project_homedir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return NULL;
+    }
+    Tcl_IncrRefCount(project_homedir_ptr);
+    Tcl_Obj *project_filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
+    Tcl_IncrRefCount(project_filename_ptr);
+    Tcl_Obj *path_project_file_ptr;
+    while (Tcl_GetCharLength(project_homedir_ptr) > 0) {
+
+        if (TCL_OK != ttrek_ResolvePath(interp, project_homedir_ptr, project_filename_ptr, &path_project_file_ptr)) {
+            fprintf(stderr, "here0\n");
+            Tcl_DecrRefCount(project_filename_ptr);
+            Tcl_DecrRefCount(project_homedir_ptr);
+            return NULL;
+        }
+
+        DBG(fprintf(stderr, "(candidate) path_project_file: %s\n", Tcl_GetString(path_project_file_ptr)));
+
+        if (!path_project_file_ptr) {
+            fprintf(stderr, "here1\n");
+            Tcl_DecrRefCount(project_filename_ptr);
+            Tcl_DecrRefCount(project_homedir_ptr);
+            return NULL;
+        }
+        Tcl_IncrRefCount(path_project_file_ptr);
+
+        if (ttrek_CheckFileExists(path_project_file_ptr) == TCL_OK) {
+            Tcl_DecrRefCount(project_filename_ptr);
+            Tcl_DecrRefCount(project_homedir_ptr);
+            Tcl_DecrRefCount(path_project_file_ptr);
+            return project_homedir_ptr;
+        }
+        Tcl_DecrRefCount(path_project_file_ptr);
+
+        Tcl_Size list_length;
+        Tcl_Obj *list_ptr = Tcl_FSSplitPath(project_homedir_ptr, &list_length);
+        if (!list_ptr || !list_length) {
+            return NULL;
+        }
+        DBG(fprintf(stderr, "GetProjectHomeDir: list_length: %zd list: %s\n", list_length, Tcl_GetString(list_ptr)));
+        Tcl_DecrRefCount(project_homedir_ptr);
+        Tcl_IncrRefCount(list_ptr);
+        project_homedir_ptr = Tcl_FSJoinPath(list_ptr, list_length - 1);
+        Tcl_IncrRefCount(project_homedir_ptr);
+        Tcl_DecrRefCount(list_ptr);
+    }
+    Tcl_DecrRefCount(project_filename_ptr);
+    Tcl_DecrRefCount(project_homedir_ptr);
+    fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
+    return NULL;
 }

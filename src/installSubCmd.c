@@ -256,19 +256,20 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
 }
 
 int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    Tcl_Obj *cwd = Tcl_FSGetCwd(interp);
-    if (!cwd) {
-        fprintf(stderr, "error: getting current working directory failed\n");
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
         return TCL_ERROR;
     }
-    Tcl_IncrRefCount(cwd);
+
+    fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr));
 
     Tcl_Obj *packages_filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
     Tcl_IncrRefCount(packages_filename_ptr);
     Tcl_Obj *path_to_packages_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, cwd, packages_filename_ptr, &path_to_packages_file_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, packages_filename_ptr, &path_to_packages_file_ptr)) {
         Tcl_DecrRefCount(packages_filename_ptr);
-        Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(project_home_dir_ptr);
         return TCL_ERROR;
     }
     Tcl_DecrRefCount(packages_filename_ptr);
@@ -277,9 +278,9 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
     Tcl_IncrRefCount(lock_filename_ptr);
     Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, cwd, lock_filename_ptr, &path_to_lock_file_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
         Tcl_DecrRefCount(lock_filename_ptr);
-        Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(project_home_dir_ptr);
         return TCL_ERROR;
     }
     Tcl_DecrRefCount(lock_filename_ptr);
@@ -287,7 +288,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 
     if (TCL_OK != ttrek_CheckFileExists(path_to_packages_file_ptr)) {
         fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
-        Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(project_home_dir_ptr);
         Tcl_DecrRefCount(path_to_packages_file_ptr);
         return TCL_ERROR;
     }
@@ -319,14 +320,14 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
     fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
 
-    if (TCL_OK != ttrek_InstallDependency(interp, cwd, path_to_packages_file_ptr, path_to_lock_file_ptr, package_name, package_version)) {
+    if (TCL_OK != ttrek_InstallDependency(interp, project_home_dir_ptr, path_to_packages_file_ptr, path_to_lock_file_ptr, package_name, package_version)) {
         fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
-        Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(project_home_dir_ptr);
         Tcl_DecrRefCount(path_to_packages_file_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
     }
-    Tcl_DecrRefCount(cwd);
+    Tcl_DecrRefCount(project_home_dir_ptr);
     Tcl_DecrRefCount(path_to_packages_file_ptr);
     ckfree(remObjv);
     return TCL_OK;
