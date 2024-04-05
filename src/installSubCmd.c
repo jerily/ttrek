@@ -10,6 +10,8 @@
 #include "base64.h"
 #include "registry.h"
 
+#define MAX_INSTALL_SCRIPT_LEN 1048576
+
 static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
     cJSON *root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_ptr, &root)) {
@@ -158,7 +160,8 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         Tcl_DecrRefCount(installed_version);
     }
 
-    const size_t MAX_INSTALL_SCRIPT_LEN = 1024*1024;
+    fprintf(stderr, "resolved_version: %s\n", resolved_version);
+
     char install_script[MAX_INSTALL_SCRIPT_LEN];
     Tcl_Size install_script_len;
     base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script, &install_script_len);
