@@ -99,17 +99,7 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         fprintf(stderr, "error: could not get version for %s\n", name);
         return TCL_ERROR;
     }
-    if (installed_version) {
-        if (strcmp(Tcl_GetString(installed_version), version) == 0) {
-            Tcl_DecrRefCount(installed_version);
-            fprintf(stderr, "info: %s@%s is already installed\n", name, version);
-            return TCL_OK;
-        }
-        Tcl_DecrRefCount(installed_version);
-    }
 
-    char install_filename[256];
-    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", name, version);
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, name, version);
 
@@ -147,7 +137,7 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
             base64_decode(base64_patch_diff, strnlen(base64_patch_diff, 1024*1024), patch_diff, &patch_diff_len);
 
             char patch_filename[256];
-            snprintf(patch_filename, sizeof(install_filename), "build/%s", patch_name);
+            snprintf(patch_filename, sizeof(patch_filename), "build/%s", patch_name);
 
             Tcl_Obj *patch_file_path_ptr;
             ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(patch_filename, -1), &patch_file_path_ptr);
@@ -156,18 +146,29 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         }
     }
 
+    cJSON *version_node = cJSON_GetObjectItem(install_spec_root, "version");
+    const char *resolved_version = version_node->valuestring;
+
+    if (installed_version) {
+        if (strcmp(Tcl_GetString(installed_version), resolved_version) == 0) {
+            Tcl_DecrRefCount(installed_version);
+            fprintf(stderr, "info: %s@%s is already installed\n", name, resolved_version);
+            return TCL_OK;
+        }
+        Tcl_DecrRefCount(installed_version);
+    }
 
     const size_t MAX_INSTALL_SCRIPT_LEN = 1024*1024;
     char install_script[MAX_INSTALL_SCRIPT_LEN];
     Tcl_Size install_script_len;
     base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script, &install_script_len);
 
+    char install_filename[256];
+    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", name, resolved_version);
+
     Tcl_Obj *install_file_path_ptr;
     ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &install_file_path_ptr);
     ttrek_WriteChars(interp, install_file_path_ptr, Tcl_NewStringObj(install_script, install_script_len), 0777);
-
-    cJSON *version_node = cJSON_GetObjectItem(install_spec_root, "version");
-    const char *resolved_version = version_node->valuestring;
 
     int deps_length = 0;
     Tcl_Obj *deps_list_ptr = Tcl_NewListObj(0, NULL);
@@ -272,30 +273,37 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_Obj **remObjv;
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
-    Tcl_Size package_name_length;
-    char *package = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
-    // "package" is of the form "name@version"
-    // we need to split it into "name" and "version"
-    const char *package_name = strtok(package, "@");
-    const char *package_version = strtok(NULL, "@");
-    if (!package_version) {
-        package_version = "latest";
-    }
-    fprintf(stderr, "package_name: %s\n", package_name);
-    fprintf(stderr, "package_version: %s\n", package_version);
+    for (Tcl_Size i = 0; i < objc; i++) {
+        fprintf(stderr, "i=%zd\n", i);
+        Tcl_Size package_name_length;
+        char *package = Tcl_GetStringFromObj(remObjv[i], &package_name_length);
+        fprintf(stderr, "package: %s\n", package);
 
-    fprintf(stderr, "option_save_dev: %d\n", option_save_dev);
-    fprintf(stderr, "objc: %zd remObjv: %s\n", objc, Tcl_GetString(remObjv[0]));
+        // "package" is of the form "name@version"
+        // we need to split it into "name" and "version"
+        const char *package_name = strtok(package, "@");
+        const char *package_version = strtok(NULL, "@");
+        if (!package_version) {
+            package_version = "latest";
+        }
+        fprintf(stderr, "package_name: %s\n", package_name);
+        fprintf(stderr, "package_version: %s\n", package_version);
 
-    Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
-    fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
+        fprintf(stderr, "option_save_dev: %d\n", option_save_dev);
+        fprintf(stderr, "objc: %zd remObjv: %s\n", objc, Tcl_GetString(remObjv[i]));
 
-    if (TCL_OK != ttrek_InstallDependency(interp, project_home_dir_ptr, path_to_packages_file_ptr, path_to_lock_file_ptr, package_name, package_version)) {
-        fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        Tcl_DecrRefCount(path_to_packages_file_ptr);
-        ckfree(remObjv);
-        return TCL_ERROR;
+        Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
+        fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
+
+        if (TCL_OK !=
+            ttrek_InstallDependency(interp, project_home_dir_ptr, path_to_packages_file_ptr, path_to_lock_file_ptr,
+                                    package_name, package_version)) {
+            fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
+            Tcl_DecrRefCount(project_home_dir_ptr);
+            Tcl_DecrRefCount(path_to_packages_file_ptr);
+            ckfree(remObjv);
+            return TCL_ERROR;
+        }
     }
     Tcl_DecrRefCount(project_home_dir_ptr);
     Tcl_DecrRefCount(path_to_packages_file_ptr);

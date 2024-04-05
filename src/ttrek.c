@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
                 break;
             case SUBCMD_INSTALL:
                 fprintf(stderr, "install\n");
-                if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
+                if (TCL_OK != ttrek_InstallSubCmd(interp, objc-2, &objv[2])) {
                     fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }
