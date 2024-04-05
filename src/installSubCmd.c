@@ -1,8 +1,14 @@
+/**
+ * Copyright Jerily LTD. All Rights Reserved.
+ * SPDX-FileCopyrightText: 2024 Neofytos Dimitriou (neo@jerily.cy)
+ * SPDX-License-Identifier: MIT.
+ */
+
 #include <string.h>
-#include <curl/curl.h>
 #include "subCmdDecls.h"
 #include "common.h"
 #include "base64.h"
+#include "registry.h"
 
 static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
     cJSON *root = NULL;
@@ -87,31 +93,6 @@ static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path
     return TCL_OK;
 }
 
-struct MemoryStruct {
-    char *memory;
-    Tcl_Size size;
-};
-
-static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    size_t realsize = size * nmemb;
-    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
-
-    char *ptr = Tcl_Realloc(mem->memory, mem->size + realsize + 1);
-    if(!ptr) {
-        /* out of memory! */
-        printf("not enough memory (realloc returned NULL)\n");
-        return 0;
-    }
-
-    mem->memory = ptr;
-    memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
-
-    return realsize;
-}
-
 static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, Tcl_Obj *path_to_lock_file_ptr, const char *name, const char *version) {
     Tcl_Obj *installed_version = NULL;
     if (TCL_OK != ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, name, &installed_version)) {
@@ -132,37 +113,21 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, name, version);
 
-    struct MemoryStruct chunk;
-
-    chunk.memory = Tcl_Alloc(1);  /* grown as needed by the realloc above */
-    chunk.size = 0;    /* no data at this point */
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    CURL *curl_handle = curl_easy_init();
-    curl_easy_setopt(curl_handle, CURLOPT_URL, install_spec_url);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &chunk);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "ttrek/1.0");
-
-    CURLcode ret = curl_easy_perform(curl_handle);
-    if (ret == CURLE_OK) {
-        fprintf(stderr, "%lu bytes retrieved\n", (unsigned long)chunk.size);
-    } else {
-        fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(ret));
-        SetResult("failed to fetch spec file");
+    Tcl_DString ds;
+    Tcl_DStringInit(&ds);
+    if (TCL_OK != ttrek_RegistryGet(interp, install_spec_url, &ds)) {
+        fprintf(stderr, "error: could not get install spec for %s@%s\n", name, version);
         return TCL_ERROR;
     }
-    curl_easy_cleanup(curl_handle);
-    curl_global_cleanup();
 
-    cJSON *install_spec_root = cJSON_Parse(chunk.memory);
+    cJSON *install_spec_root = cJSON_Parse(Tcl_DStringValue(&ds));
     cJSON *install_script_node = cJSON_GetObjectItem(install_spec_root, "install_script");
     if (!install_script_node) {
         fprintf(stderr, "error: install_script not found in spec file\n");
         cJSON_free(install_spec_root);
         return TCL_ERROR;
     }
-    Tcl_Free(chunk.memory);
+    Tcl_DStringFree(&ds);
 
     const char *base64_install_script_str = install_script_node->valuestring;
 
@@ -200,6 +165,9 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     Tcl_Obj *install_file_path_ptr;
     ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &install_file_path_ptr);
     ttrek_WriteChars(interp, install_file_path_ptr, Tcl_NewStringObj(install_script, install_script_len), 0777);
+
+    cJSON *version_node = cJSON_GetObjectItem(install_spec_root, "version");
+    const char *resolved_version = version_node->valuestring;
 
     int deps_length = 0;
     Tcl_Obj *deps_list_ptr = Tcl_NewListObj(0, NULL);
@@ -248,9 +216,9 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
 
     if (path_to_packages_file_ptr) {
-        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, name, version);
+        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, name, resolved_version);
     }
-    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, name, version);
+    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, name, resolved_version);
 
     return TCL_OK;
 }

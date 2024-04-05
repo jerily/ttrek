@@ -4,13 +4,11 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#ifndef TTREK_SUBCMDDECLS_H
-#define TTREK_SUBCMDDECLS_H
+#ifndef TTREK_REGISTRY_H
+#define TTREK_REGISTRY_H
 
 #include "common.h"
 
-SubCmdProc(ttrek_InitSubCmd);
-SubCmdProc(ttrek_InstallSubCmd);
-SubCmdProc(ttrek_RunSubCmd);
+int ttrek_RegistryGet(Tcl_Interp *interp, const char *url, Tcl_DString *dsPtr);
 
-#endif //TTREK_SUBCMDDECLS_H
+#endif //TTREK_REGISTRY_H

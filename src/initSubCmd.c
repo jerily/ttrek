@@ -1,3 +1,9 @@
+/**
+ * Copyright Jerily LTD. All Rights Reserved.
+ * SPDX-FileCopyrightText: 2024 Neofytos Dimitriou (neo@jerily.cy)
+ * SPDX-License-Identifier: MIT.
+ */
+
 #include <string.h>
 #include "subCmdDecls.h"
 
