@@ -305,7 +305,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
     Tcl_Size package_name_length;
-    const char *package = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
+    char *package = Tcl_GetStringFromObj(remObjv[1], &package_name_length);
     // "package" is of the form "name@version"
     // we need to split it into "name" and "version"
     const char *package_name = strtok(package, "@");
@@ -317,7 +317,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     fprintf(stderr, "package_version: %s\n", package_version);
 
     fprintf(stderr, "option_save_dev: %d\n", option_save_dev);
-    fprintf(stderr, "objc: %d remObjv: %s\n", objc, Tcl_GetString(remObjv[0]));
+    fprintf(stderr, "objc: %zd remObjv: %s\n", objc, Tcl_GetString(remObjv[0]));
 
     Tcl_Obj *homeDirPtr = Tcl_GetVar2Ex(interp, "env", "HOME", TCL_GLOBAL_ONLY);
     fprintf(stderr, "homeDirPtr: %s\n", Tcl_GetString(homeDirPtr));
