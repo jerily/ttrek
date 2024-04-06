@@ -111,9 +111,9 @@ static int ttrek_SemverSatisfiesLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, 
     cJSON *packages = cJSON_GetObjectItem(root, "packages");
 
     // check that it satisfies installed version
-    cJSON *pkg = cJSON_GetObjectItem(packages, name);
-    if (pkg) {
-        cJSON *version_node = cJSON_GetObjectItem(pkg, "version");
+    cJSON *installed_pkg = cJSON_GetObjectItem(packages, name);
+    if (installed_pkg) {
+        cJSON *version_node = cJSON_GetObjectItem(installed_pkg, "version");
         const char *version_str = cJSON_GetStringValue(version_node);
         semver_t installed_semver = {0, 0, 0, NULL, NULL};
         if (semver_parse(version_str, &installed_semver)) {
