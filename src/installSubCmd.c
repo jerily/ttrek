@@ -9,6 +9,7 @@
 #include "common.h"
 #include "base64.h"
 #include "registry.h"
+#include "semver/semver.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
@@ -44,7 +45,7 @@ static int ttrek_EnsureLockFileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
     return TCL_OK;
 }
 
-static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
+static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version, Tcl_Obj *deps_list_ptr) {
 
     if (TCL_OK != ttrek_EnsureLockFileExists(interp, path_ptr)) {
         fprintf(stderr, "error: could not create %s\n", Tcl_GetString(path_ptr));
@@ -65,9 +66,33 @@ static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
     } else {
         cJSON_AddItemToObject(packages, name, cJSON_CreateString(version));
     }
-    cJSON_free(root);
+    cJSON *deps = cJSON_GetObjectItem(root, "deps");
+    if (!deps) {
+        deps = cJSON_CreateObject();
+        cJSON_AddItemToObject(root, "deps", deps);
+    }
+
+    Tcl_Size deps_length;
+    if (TCL_OK != Tcl_ListObjLength(interp, deps_list_ptr, &deps_length)) {
+        fprintf(stderr, "error: could not get length of deps list\n");
+        cJSON_free(root);
+        return TCL_ERROR;
+    }
+    for (int i = 0; i < deps_length; i++) {
+        Tcl_Obj *dep_list_ptr;
+        Tcl_ListObjIndex(interp, deps_list_ptr, i, &dep_list_ptr);
+        Tcl_Obj *dep_name_ptr;
+        Tcl_Obj *dep_range_ptr;
+        Tcl_ListObjIndex(interp, dep_list_ptr, 0, &dep_name_ptr);
+        Tcl_ListObjIndex(interp, dep_list_ptr, 1, &dep_range_ptr);
+        const char *dep_name = Tcl_GetString(dep_name_ptr);
+        const char *dep_range = Tcl_GetString(dep_range_ptr);
+        cJSON_AddItemToObject(deps, dep_name, cJSON_CreateString(dep_range));
+    }
 
     ttrek_WriteJsonFile(interp, path_ptr, root);
+    cJSON_free(root);
+
     return TCL_OK;
 }
 
@@ -95,20 +120,117 @@ static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path
     return TCL_OK;
 }
 
-static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir, Tcl_Obj *path_to_packages_file_ptr, Tcl_Obj *path_to_lock_file_ptr, const char *name, const char *version) {
-    Tcl_Obj *installed_version = NULL;
-    if (TCL_OK != ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, name, &installed_version)) {
-        fprintf(stderr, "error: could not get version for %s\n", name);
+const char *ttrek_GetSemverOp(const char *package_range_str, const char **op) {
+    if (package_range_str) {
+        if (package_range_str[0] == '^') {
+            *op = "^";
+            package_range_str++;
+        } else if (package_range_str[0] == '~') {
+            *op = "~";
+            package_range_str++;
+        } else if (package_range_str[0] == '>') {
+            if (package_range_str[1] == '=') {
+                *op = ">=";
+                package_range_str += 2;
+            } else {
+                *op = ">";
+                package_range_str++;
+            }
+        } else if (package_range_str[0] == '<') {
+            if (package_range_str[1] == '=') {
+                *op = "<=";
+                package_range_str += 2;
+            } else {
+                *op = "<";
+                package_range_str++;
+            }
+        } else if (package_range_str[0] == '=') {
+            *op = "=";
+            package_range_str++;
+        }
+    }
+    return package_range_str;
+}
+
+static int
+ttrek_InstallDependency(
+        Tcl_Interp *interp,
+        Tcl_Obj *path_to_rootdir,
+        Tcl_Obj *path_to_packages_file_ptr,
+        Tcl_Obj *path_to_lock_file_ptr,
+        const char *pkg_name,
+        semver_t *pkg_semver_ptr,
+        const char *op
+) {
+
+    if (pkg_semver_ptr) {
+        Tcl_Obj *installed_version_ptr = NULL;
+        if (TCL_OK ==
+            ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, pkg_name, &installed_version_ptr)) {
+            if (installed_version_ptr) {
+                const char *resolved_version = Tcl_GetString(installed_version_ptr);
+                semver_t resolved_semver = {0, 0, 0, NULL, NULL};
+                if (semver_parse(resolved_version, &resolved_semver)) {
+                    fprintf(stderr, "error: could not parse resolved version: %s\n", resolved_version);
+                    return TCL_ERROR;
+                }
+                if (semver_satisfies(*pkg_semver_ptr, resolved_semver, "=")) {
+                    fprintf(stderr, "info: %s@%s is already installed\n", pkg_name, resolved_version);
+                    Tcl_DecrRefCount(installed_version_ptr);
+                    return TCL_OK;
+                }
+                Tcl_DecrRefCount(installed_version_ptr);
+            }
+        }
+    }
+
+    char package_versions_url[256];
+    snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, pkg_name);
+    Tcl_DString versions_ds;
+    Tcl_DStringInit(&versions_ds);
+    if (TCL_OK != ttrek_RegistryGet(interp, package_versions_url, &versions_ds)) {
+        fprintf(stderr, "error: could not get versions for %s\n", pkg_name);
         return TCL_ERROR;
     }
 
+    // parse the versions json
+    Tcl_Obj *resolved_version_ptr = NULL;
+    cJSON *versions_root = cJSON_Parse(Tcl_DStringValue(&versions_ds));
+    Tcl_DStringFree(&versions_ds);
+    for (int i = 0; i < cJSON_GetArraySize(versions_root); i++) {
+        cJSON *version_item = cJSON_GetArrayItem(versions_root, i);
+        const char *version_str = version_item->valuestring;
+        semver_t dep_semver = {0, 0, 0, NULL, NULL};
+        if (semver_parse(version_str, &dep_semver)) {
+            fprintf(stderr, "error: could not parse version: %s\n", version_str);
+            cJSON_free(versions_root);
+            return TCL_ERROR;
+        }
+
+        if (pkg_semver_ptr == NULL || semver_satisfies(dep_semver, *pkg_semver_ptr, op)) {
+            fprintf(stderr, "info: found a version that satisfies the semver constraint: %s\n", version_str);
+            resolved_version_ptr = Tcl_NewStringObj(version_str, -1);
+            Tcl_IncrRefCount(resolved_version_ptr);
+            break;
+        }
+
+    }
+    cJSON_free(versions_root);
+
+    if (!resolved_version_ptr) {
+        fprintf(stderr, "error: could not find a version that satisfies the semver constraint\n");
+        return TCL_ERROR;
+    }
+
+    Tcl_Size resolved_version_len;
+    const char *resolved_version = Tcl_GetStringFromObj(resolved_version_ptr, &resolved_version_len);
     char install_spec_url[256];
-    snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, name, version);
+    snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, pkg_name, resolved_version);
 
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
     if (TCL_OK != ttrek_RegistryGet(interp, install_spec_url, &ds)) {
-        fprintf(stderr, "error: could not get install spec for %s@%s\n", name, version);
+        fprintf(stderr, "error: could not get install spec for %s@%s\n", pkg_name, resolved_version);
         return TCL_ERROR;
     }
 
@@ -149,15 +271,10 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     }
 
     cJSON *version_node = cJSON_GetObjectItem(install_spec_root, "version");
-    const char *resolved_version = version_node->valuestring;
-
-    if (installed_version) {
-        if (strcmp(Tcl_GetString(installed_version), resolved_version) == 0) {
-            Tcl_DecrRefCount(installed_version);
-            fprintf(stderr, "info: %s@%s is already installed\n", name, resolved_version);
-            return TCL_OK;
-        }
-        Tcl_DecrRefCount(installed_version);
+    if (strncmp(resolved_version, version_node->valuestring, resolved_version_len)) {
+        fprintf(stderr, "error: resolved version does not match version in spec file\n");
+        cJSON_free(install_spec_root);
+        return TCL_ERROR;
     }
 
     fprintf(stderr, "resolved_version: %s\n", resolved_version);
@@ -167,7 +284,7 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script, &install_script_len);
 
     char install_filename[256];
-    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", name, resolved_version);
+    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", pkg_name, resolved_version);
 
     Tcl_Obj *install_file_path_ptr;
     ttrek_ResolvePath(interp, path_to_rootdir, Tcl_NewStringObj(install_filename, -1), &install_file_path_ptr);
@@ -175,15 +292,16 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
 
     int deps_length = 0;
     Tcl_Obj *deps_list_ptr = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(deps_list_ptr);
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, "dependencies");
     for (int i = 0; i < cJSON_GetArraySize(deps_node); i++) {
         cJSON *dep_item = cJSON_GetArrayItem(deps_node, i);
         const char *dep_name = dep_item->string;
-        const char *dep_version = dep_item->valuestring;
+        const char *dep_range = dep_item->valuestring;
         fprintf(stderr, "dep_name: %s\n", dep_name);
-        fprintf(stderr, "dep_version: %s\n", dep_version);
+        fprintf(stderr, "dep_range: %s\n", dep_range);
         // add to list of dependencies
-        Tcl_Obj *objv[2] = {Tcl_NewStringObj(dep_name, -1), Tcl_NewStringObj(dep_version, -1)};
+        Tcl_Obj *objv[2] = {Tcl_NewStringObj(dep_name, -1), Tcl_NewStringObj(dep_range, -1)};
         Tcl_Obj *dep_list_ptr = Tcl_NewListObj(2, objv);
         Tcl_ListObjAppendElement(interp, deps_list_ptr, dep_list_ptr);
         deps_length++;
@@ -195,14 +313,22 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
         Tcl_Obj *dep_list_ptr;
         Tcl_ListObjIndex(interp, deps_list_ptr, i, &dep_list_ptr);
         Tcl_Obj *dep_name_ptr;
-        Tcl_Obj *dep_version_ptr;
+        Tcl_Obj *dep_range_ptr;
         Tcl_ListObjIndex(interp, dep_list_ptr, 0, &dep_name_ptr);
-        Tcl_ListObjIndex(interp, dep_list_ptr, 1, &dep_version_ptr);
+        Tcl_ListObjIndex(interp, dep_list_ptr, 1, &dep_range_ptr);
         const char *dep_name = Tcl_GetString(dep_name_ptr);
-        const char *dep_version = Tcl_GetString(dep_version_ptr);
+        const char *dep_range = Tcl_GetString(dep_range_ptr);
+
+        const char *dep_op = "=";
+        const char *dep_version = ttrek_GetSemverOp(dep_range, &dep_op);
+        semver_t dep_semver = {0, 0, 0, NULL, NULL};
+        if (semver_parse(dep_version, &dep_semver)) {
+            fprintf(stderr, "error: could not parse dep range version: %s\n", dep_range);
+            return TCL_ERROR;
+        }
         if (TCL_OK !=
-            ttrek_InstallDependency(interp, path_to_rootdir, NULL, path_to_lock_file_ptr, dep_name, dep_version)) {
-            fprintf(stderr, "error: could not install dependency: %s@%s\n", dep_name, dep_version);
+            ttrek_InstallDependency(interp, path_to_rootdir, NULL, path_to_lock_file_ptr, dep_name, &dep_semver, dep_op)) {
+            fprintf(stderr, "error: could not install dependency: %s@%s\n", dep_name, dep_range);
             return TCL_ERROR;
         }
     }
@@ -220,10 +346,16 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
 
     if (path_to_packages_file_ptr) {
-        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, name, resolved_version);
+        char rendered_pkg_semver[256];
+        semver_render(pkg_semver_ptr, rendered_pkg_semver);
+        Tcl_Obj * rendered = Tcl_NewStringObj(op, -1);
+        Tcl_AppendToObj(rendered, rendered_pkg_semver, -1);
+        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, Tcl_GetString(rendered));
     }
-    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, name, resolved_version);
+    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, pkg_name, resolved_version, deps_list_ptr);
 
+    Tcl_DecrRefCount(deps_list_ptr);
+    Tcl_DecrRefCount(resolved_version_ptr);
     return TCL_OK;
 }
 
@@ -285,12 +417,22 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         // "package" is of the form "name@version"
         // we need to split it into "name" and "version"
         const char *package_name = strtok(package, "@");
-        const char *package_version = strtok(NULL, "@");
-        if (!package_version) {
-            package_version = "latest";
+        const char *package_range_str = strtok(NULL, "@");
+        const char *op = "=";
+        package_range_str = ttrek_GetSemverOp(package_range_str, &op);
+
+        const char *package_semver_str = package_range_str;
+        semver_t package_semver = {0, 0, 0, NULL, NULL};
+        if (package_semver_str && semver_parse(package_semver_str, &package_semver)) {
+            fprintf(stderr, "error: could not parse package semver version: %s\n", package_semver_str);
+            Tcl_DecrRefCount(project_home_dir_ptr);
+            Tcl_DecrRefCount(path_to_packages_file_ptr);
+            ckfree(remObjv);
+            return TCL_ERROR;
         }
+
         fprintf(stderr, "package_name: %s\n", package_name);
-        fprintf(stderr, "package_version: %s\n", package_version);
+        fprintf(stderr, "package_version: %s\n", package_semver_str);
 
         fprintf(stderr, "option_save_dev: %d\n", option_save_dev);
         fprintf(stderr, "objc: %zd remObjv: %s\n", objc, Tcl_GetString(remObjv[i]));
@@ -300,8 +442,8 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 
         if (TCL_OK !=
             ttrek_InstallDependency(interp, project_home_dir_ptr, path_to_packages_file_ptr, path_to_lock_file_ptr,
-                                    package_name, package_version)) {
-            fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_version);
+                                    package_name, package_semver_str ? &package_semver : NULL, op)) {
+            fprintf(stderr, "error: could not install dependency: %s@%s\n", package_name, package_semver_str);
             Tcl_DecrRefCount(project_home_dir_ptr);
             Tcl_DecrRefCount(path_to_packages_file_ptr);
             ckfree(remObjv);
