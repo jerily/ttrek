@@ -13,7 +13,39 @@
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
-static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version) {
+const char *ttrek_GetSemverOp(const char *package_range_str, const char **op) {
+    if (package_range_str) {
+        if (package_range_str[0] == '^') {
+            *op = "^";
+            package_range_str++;
+        } else if (package_range_str[0] == '~') {
+            *op = "~";
+            package_range_str++;
+        } else if (package_range_str[0] == '>') {
+            if (package_range_str[1] == '=') {
+                *op = ">=";
+                package_range_str += 2;
+            } else {
+                *op = ">";
+                package_range_str++;
+            }
+        } else if (package_range_str[0] == '<') {
+            if (package_range_str[1] == '=') {
+                *op = "<=";
+                package_range_str += 2;
+            } else {
+                *op = "<";
+                package_range_str++;
+            }
+        } else if (package_range_str[0] == '=') {
+            *op = "=";
+            package_range_str++;
+        }
+    }
+    return package_range_str;
+}
+
+static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version, const char *op) {
     cJSON *root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_ptr, &root)) {
         fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_ptr));
@@ -21,23 +53,30 @@ static int ttrek_AddPackageToJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
     }
 
     cJSON *dependencies = cJSON_GetObjectItem(root, "dependencies");
+    Tcl_Obj *range_ptr = Tcl_NewStringObj(op, -1);
+    Tcl_IncrRefCount(range_ptr);
+    Tcl_AppendToObj(range_ptr, version, -1);
+    const char *range_str = Tcl_GetString(range_ptr);
+    cJSON *range_node = cJSON_CreateString(range_str);
     cJSON *pkg = cJSON_GetObjectItem(dependencies, name);
     if (pkg) {
         // modify the value
-        cJSON_ReplaceItemInObject(dependencies, name, cJSON_CreateString(version));
+        cJSON_ReplaceItemInObject(dependencies, name, range_node);
     } else {
-        cJSON_AddItemToObject(dependencies, name, cJSON_CreateString(version));
+        cJSON_AddItemToObject(dependencies, name, range_node);
     }
     cJSON *devDependencies = cJSON_GetObjectItem(root, "devDependencies");
-    cJSON_free(root);
-
     ttrek_WriteJsonFile(interp, path_ptr, root);
+    Tcl_DecrRefCount(range_ptr);
+    cJSON_free(root);
     return TCL_OK;
 }
 
 static int ttrek_EnsureLockFileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
     if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
         cJSON *root = cJSON_CreateObject();
+        cJSON *deps = cJSON_CreateObject();
+        cJSON_AddItemToObject(root, "dependencies", deps);
         cJSON *packages = cJSON_CreateObject();
         cJSON_AddItemToObject(root, "packages", packages);
         return ttrek_WriteJsonFile(interp, path_ptr, root);
@@ -45,7 +84,7 @@ static int ttrek_EnsureLockFileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
     return TCL_OK;
 }
 
-static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version, Tcl_Obj *deps_list_ptr) {
+static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, const char *version, const char *op, Tcl_Obj *deps_list_ptr) {
 
     if (TCL_OK != ttrek_EnsureLockFileExists(interp, path_ptr)) {
         fprintf(stderr, "error: could not create %s\n", Tcl_GetString(path_ptr));
@@ -81,6 +120,23 @@ static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
     }
     cJSON_AddItemToObject(item_node, "requires", reqs_node);
 
+    // add range to dependencies
+    cJSON *deps = cJSON_GetObjectItem(root, "dependencies");
+    cJSON *dep = cJSON_GetObjectItem(deps, name);
+    Tcl_Obj *range_ptr = Tcl_NewStringObj(op, -1);
+    Tcl_IncrRefCount(range_ptr);
+    Tcl_AppendToObj(range_ptr, version, -1);
+    const char *range_str = Tcl_GetString(range_ptr);
+    cJSON *range_node = cJSON_CreateString(range_str);
+    if (dep) {
+        // modify the value
+        cJSON_ReplaceItemInObject(deps, name, range_node);
+    } else {
+        cJSON_AddItemToObject(deps, name, range_node);
+    }
+    Tcl_DecrRefCount(range_ptr);
+
+    // add the package to the packages list together with its dependencies
     cJSON *packages = cJSON_GetObjectItem(root, "packages");
     cJSON *pkg = cJSON_GetObjectItem(packages, name);
     if (pkg) {
@@ -108,39 +164,42 @@ static int ttrek_SemverSatisfiesLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, 
         return TCL_ERROR;
     }
 
-    cJSON *packages = cJSON_GetObjectItem(root, "packages");
-
-    // check that it satisfies installed version
-    cJSON *installed_pkg = cJSON_GetObjectItem(packages, name);
-    if (installed_pkg) {
-        cJSON *version_node = cJSON_GetObjectItem(installed_pkg, "version");
-        const char *version_str = cJSON_GetStringValue(version_node);
-        semver_t installed_semver = {0, 0, 0, NULL, NULL};
-        if (semver_parse(version_str, &installed_semver)) {
-            fprintf(stderr, "error: could not parse installed semver version: %s\n", version_str);
+    // check that it satisfies dependencies
+    cJSON *deps_node = cJSON_GetObjectItem(root, "dependencies");
+    cJSON *dep_node = cJSON_GetObjectItem(deps_node, name);
+    if (dep_node) {
+        const char *dep_str = dep_node->valuestring;
+        const char *dep_op = "^";
+        dep_str = ttrek_GetSemverOp(dep_str, &dep_op);
+        semver_t dep_semver = {0, 0, 0, NULL, NULL};
+        if (semver_parse(dep_str, &dep_semver)) {
+            fprintf(stderr, "error: could not parse dep semver version: %s\n", dep_str);
             cJSON_free(root);
             return TCL_ERROR;
         }
-        if (!semver_satisfies(*semver_ptr, installed_semver, op)) {
+        if (!semver_satisfies(*semver_ptr, dep_semver, dep_op)) {
             cJSON_free(root);
             return 0;
         }
     }
 
     // check that it satisfies requirements of other packages
+    cJSON *packages = cJSON_GetObjectItem(root, "packages");
     for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
         cJSON *pkg = cJSON_GetArrayItem(packages, i);
         cJSON *reqs_node = cJSON_GetObjectItem(pkg, "requires");
         cJSON *req_node = cJSON_GetObjectItem(reqs_node, name);
         if (req_node) {
             const char *req_str = req_node->valuestring;
+            const char *req_op = "^";
+            req_str = ttrek_GetSemverOp(req_str, &req_op);
             semver_t req_semver = {0, 0, 0, NULL, NULL};
             if (semver_parse(req_str, &req_semver)) {
-                fprintf(stderr, "error: could not parse semver version: %s\n", req_str);
+                fprintf(stderr, "error: could not parse req semver version: %s\n", req_str);
                 cJSON_free(root);
                 return TCL_ERROR;
             }
-            if (!semver_satisfies(*semver_ptr, req_semver, op)) {
+            if (!semver_satisfies(*semver_ptr, req_semver, req_op)) {
                 cJSON_free(root);
                 return 0;
             }
@@ -176,38 +235,6 @@ static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path
     return TCL_OK;
 }
 
-const char *ttrek_GetSemverOp(const char *package_range_str, const char **op) {
-    if (package_range_str) {
-        if (package_range_str[0] == '^') {
-            *op = "^";
-            package_range_str++;
-        } else if (package_range_str[0] == '~') {
-            *op = "~";
-            package_range_str++;
-        } else if (package_range_str[0] == '>') {
-            if (package_range_str[1] == '=') {
-                *op = ">=";
-                package_range_str += 2;
-            } else {
-                *op = ">";
-                package_range_str++;
-            }
-        } else if (package_range_str[0] == '<') {
-            if (package_range_str[1] == '=') {
-                *op = "<=";
-                package_range_str += 2;
-            } else {
-                *op = "<";
-                package_range_str++;
-            }
-        } else if (package_range_str[0] == '=') {
-            *op = "=";
-            package_range_str++;
-        }
-    }
-    return package_range_str;
-}
-
 static int
 ttrek_InstallDependency(
         Tcl_Interp *interp,
@@ -218,27 +245,6 @@ ttrek_InstallDependency(
         semver_t *pkg_semver_ptr,
         const char *op
 ) {
-
-    if (pkg_semver_ptr) {
-        Tcl_Obj *installed_version_ptr = NULL;
-        if (TCL_OK ==
-            ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, pkg_name, &installed_version_ptr)) {
-            if (installed_version_ptr) {
-                const char *resolved_version = Tcl_GetString(installed_version_ptr);
-                semver_t resolved_semver = {0, 0, 0, NULL, NULL};
-                if (semver_parse(resolved_version, &resolved_semver)) {
-                    fprintf(stderr, "error: could not parse resolved version: %s\n", resolved_version);
-                    return TCL_ERROR;
-                }
-                if (semver_satisfies(*pkg_semver_ptr, resolved_semver, "=")) {
-                    fprintf(stderr, "info: %s@%s is already installed\n", pkg_name, resolved_version);
-                    Tcl_DecrRefCount(installed_version_ptr);
-                    return TCL_OK;
-                }
-                Tcl_DecrRefCount(installed_version_ptr);
-            }
-        }
-    }
 
     char package_versions_url[256];
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, pkg_name);
@@ -278,6 +284,30 @@ ttrek_InstallDependency(
     if (!resolved_version_ptr) {
         fprintf(stderr, "error: could not find a version that satisfies the semver constraint\n");
         return TCL_ERROR;
+    }
+
+    semver_t resolved_semver = {0, 0, 0, NULL, NULL};
+    if (semver_parse(Tcl_GetString(resolved_version_ptr), &resolved_semver)) {
+        fprintf(stderr, "error: could not parse resolved version: %s\n", Tcl_GetString(resolved_version_ptr));
+        return TCL_ERROR;
+    }
+    Tcl_Obj *installed_version_ptr = NULL;
+    if (TCL_OK ==
+        ttrek_GetPackageVersionFromLockFile(interp, path_to_lock_file_ptr, pkg_name, &installed_version_ptr)) {
+        if (installed_version_ptr) {
+            const char *installed_version = Tcl_GetString(installed_version_ptr);
+            semver_t installed_semver = {0, 0, 0, NULL, NULL};
+            if (semver_parse(installed_version, &installed_semver)) {
+                fprintf(stderr, "error: could not parse resolved version: %s\n", installed_version);
+                return TCL_ERROR;
+            }
+            if (semver_satisfies(resolved_semver, installed_semver, "=")) {
+                fprintf(stderr, "info: %s@%s is already installed\n", pkg_name, installed_version);
+                Tcl_DecrRefCount(installed_version_ptr);
+                return TCL_OK;
+            }
+            Tcl_DecrRefCount(installed_version_ptr);
+        }
     }
 
     Tcl_Size resolved_version_len;
@@ -409,12 +439,12 @@ ttrek_InstallDependency(
             semver_render(pkg_semver_ptr, rendered_pkg_semver);
             Tcl_Obj *rendered = Tcl_NewStringObj(op, -1);
             Tcl_AppendToObj(rendered, rendered_pkg_semver, -1);
-            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, Tcl_GetString(rendered));
+            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, Tcl_GetString(rendered), op);
         } else {
-            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, resolved_version);
+            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, resolved_version, op);
         }
     }
-    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, pkg_name, resolved_version, deps_list_ptr);
+    ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, pkg_name, resolved_version, op, deps_list_ptr);
 
     Tcl_DecrRefCount(deps_list_ptr);
     Tcl_DecrRefCount(resolved_version_ptr);
@@ -476,11 +506,11 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         char *package = Tcl_GetStringFromObj(remObjv[i], &package_name_length);
         fprintf(stderr, "package: %s\n", package);
 
-        // "package" is of the form "name@version"
-        // we need to split it into "name" and "version"
+        // "package" is of the form "name@range"
+        // we need to split it into "name" and "range"
         const char *package_name = strtok(package, "@");
         const char *package_range_str = strtok(NULL, "@");
-        const char *op = "=";
+        const char *op = "^";
         package_range_str = ttrek_GetSemverOp(package_range_str, &op);
 
         const char *package_semver_str = package_range_str;
