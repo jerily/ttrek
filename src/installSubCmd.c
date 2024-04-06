@@ -58,19 +58,9 @@ static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
         return TCL_ERROR;
     }
 
-    cJSON *packages = cJSON_GetObjectItem(root, "packages");
-    cJSON *pkg = cJSON_GetObjectItem(packages, name);
-    if (pkg) {
-        // modify the value
-        cJSON_ReplaceItemInObject(packages, name, cJSON_CreateString(version));
-    } else {
-        cJSON_AddItemToObject(packages, name, cJSON_CreateString(version));
-    }
-    cJSON *deps = cJSON_GetObjectItem(root, "deps");
-    if (!deps) {
-        deps = cJSON_CreateObject();
-        cJSON_AddItemToObject(root, "deps", deps);
-    }
+    cJSON *item_node = cJSON_CreateObject();
+    cJSON_AddItemToObject(item_node, "version", cJSON_CreateString(version));
+    cJSON *reqs_node = cJSON_CreateObject();
 
     Tcl_Size deps_length;
     if (TCL_OK != Tcl_ListObjLength(interp, deps_list_ptr, &deps_length)) {
@@ -87,7 +77,17 @@ static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
         Tcl_ListObjIndex(interp, dep_list_ptr, 1, &dep_range_ptr);
         const char *dep_name = Tcl_GetString(dep_name_ptr);
         const char *dep_range = Tcl_GetString(dep_range_ptr);
-        cJSON_AddItemToObject(deps, dep_name, cJSON_CreateString(dep_range));
+        cJSON_AddItemToObject(reqs_node, dep_name, cJSON_CreateString(dep_range));
+    }
+    cJSON_AddItemToObject(item_node, "requires", reqs_node);
+
+    cJSON *packages = cJSON_GetObjectItem(root, "packages");
+    cJSON *pkg = cJSON_GetObjectItem(packages, name);
+    if (pkg) {
+        // modify the value
+        cJSON_ReplaceItemInObject(packages, name, item_node);
+    } else {
+        cJSON_AddItemToObject(packages, name, item_node);
     }
 
     ttrek_WriteJsonFile(interp, path_ptr, root);
@@ -111,7 +111,8 @@ static int ttrek_GetPackageVersionFromLockFile(Tcl_Interp *interp, Tcl_Obj *path
     cJSON *packages = cJSON_GetObjectItem(root, "packages");
     cJSON *pkg = cJSON_GetObjectItem(packages, name);
     if (pkg) {
-        *installed_version = Tcl_NewStringObj(pkg->valuestring, -1);
+        cJSON *version_node = cJSON_GetObjectItem(pkg, "version");
+        *installed_version = Tcl_NewStringObj(cJSON_GetStringValue(version_node), -1);
         Tcl_IncrRefCount(*installed_version);
     } else {
         *installed_version = NULL;
@@ -346,11 +347,15 @@ ttrek_InstallDependency(
     fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
 
     if (path_to_packages_file_ptr) {
-        char rendered_pkg_semver[256];
-        semver_render(pkg_semver_ptr, rendered_pkg_semver);
-        Tcl_Obj * rendered = Tcl_NewStringObj(op, -1);
-        Tcl_AppendToObj(rendered, rendered_pkg_semver, -1);
-        ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, Tcl_GetString(rendered));
+        if (pkg_semver_ptr) {
+            char rendered_pkg_semver[256];
+            semver_render(pkg_semver_ptr, rendered_pkg_semver);
+            Tcl_Obj *rendered = Tcl_NewStringObj(op, -1);
+            Tcl_AppendToObj(rendered, rendered_pkg_semver, -1);
+            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, Tcl_GetString(rendered));
+        } else {
+            ttrek_AddPackageToJsonFile(interp, path_to_packages_file_ptr, pkg_name, resolved_version);
+        }
     }
     ttrek_AddPackageToLockFile(interp, path_to_lock_file_ptr, pkg_name, resolved_version, deps_list_ptr);
 
