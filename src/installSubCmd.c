@@ -96,7 +96,7 @@ static int ttrek_AddPackageToLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, con
     return TCL_OK;
 }
 
-static int ttrek_SemverSatisfiesLockFileRequirements(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, semver_t *semver_ptr, const char *op) {
+static int ttrek_SemverSatisfiesLockFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, const char *name, semver_t *semver_ptr, const char *op) {
     if (TCL_OK != ttrek_EnsureLockFileExists(interp, path_ptr)) {
         fprintf(stderr, "error: could not create %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
@@ -109,6 +109,25 @@ static int ttrek_SemverSatisfiesLockFileRequirements(Tcl_Interp *interp, Tcl_Obj
     }
 
     cJSON *packages = cJSON_GetObjectItem(root, "packages");
+
+    // check that it satisfies installed version
+    cJSON *pkg = cJSON_GetObjectItem(packages, name);
+    if (pkg) {
+        cJSON *version_node = cJSON_GetObjectItem(pkg, "version");
+        const char *version_str = cJSON_GetStringValue(version_node);
+        semver_t installed_semver = {0, 0, 0, NULL, NULL};
+        if (semver_parse(version_str, &installed_semver)) {
+            fprintf(stderr, "error: could not parse installed semver version: %s\n", version_str);
+            cJSON_free(root);
+            return TCL_ERROR;
+        }
+        if (!semver_satisfies(*semver_ptr, installed_semver, op)) {
+            cJSON_free(root);
+            return 0;
+        }
+    }
+
+    // check that it satisfies requirements of other packages
     for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
         cJSON *pkg = cJSON_GetArrayItem(packages, i);
         cJSON *reqs_node = cJSON_GetObjectItem(pkg, "requires");
@@ -245,7 +264,7 @@ ttrek_InstallDependency(
         }
 
         if (pkg_semver_ptr == NULL || semver_satisfies(dep_semver, *pkg_semver_ptr, op)) {
-            if (ttrek_SemverSatisfiesLockFileRequirements(interp, path_to_lock_file_ptr, pkg_name, &dep_semver, op)) {
+            if (ttrek_SemverSatisfiesLockFile(interp, path_to_lock_file_ptr, pkg_name, &dep_semver, op)) {
                 fprintf(stderr, "info: found a version that satisfies the semver constraint: %s\n", version_str);
                 resolved_version_ptr = Tcl_NewStringObj(version_str, -1);
                 Tcl_IncrRefCount(resolved_version_ptr);
