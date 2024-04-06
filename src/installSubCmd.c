@@ -175,9 +175,9 @@ static int ttrek_InstallDependency(Tcl_Interp *interp, Tcl_Obj *path_to_rootdir,
 
     int deps_length = 0;
     Tcl_Obj *deps_list_ptr = Tcl_NewListObj(0, NULL);
-    cJSON *dependencies = cJSON_GetObjectItem(install_spec_root, "dependencies");
-    for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
-        cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
+    cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, "dependencies");
+    for (int i = 0; i < cJSON_GetArraySize(deps_node); i++) {
+        cJSON *dep_item = cJSON_GetArrayItem(deps_node, i);
         const char *dep_name = dep_item->string;
         const char *dep_version = dep_item->valuestring;
         fprintf(stderr, "dep_name: %s\n", dep_name);

@@ -72,7 +72,7 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root) {
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) {
     void *handle;
-    Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT|TCL_STDERR);
+    Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT);
     if (!chan) {
         SetResult("could not open command channel");
         return TCL_ERROR;
@@ -84,6 +84,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) 
     }
     // make "chan" non-blocking
     Tcl_SetChannelOption(interp, chan, "-blocking", "0");
+    Tcl_SetChannelOption(interp, chan, "-buffering", "none");
 
     while (!Tcl_Eof(chan)) {
         if (Tcl_ReadChars(chan, resultPtr, -1, 0) < 0) {
