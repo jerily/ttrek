@@ -9,25 +9,43 @@
 
 int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    // write to file
-    Tcl_Obj *filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
-    Tcl_IncrRefCount(filename_ptr);
+    Tcl_Obj *spec_file_name_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
+    Tcl_IncrRefCount(spec_file_name_ptr);
+    Tcl_Obj *lock_file_name_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
+    Tcl_IncrRefCount(lock_file_name_ptr);
     Tcl_Obj *cwd = Tcl_FSGetCwd(interp);
     if (!cwd) {
         fprintf(stderr, "error: getting current working directory failed\n");
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(cwd);
-    Tcl_Obj *path_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, cwd, filename_ptr, &path_ptr)) {
+    Tcl_Obj *path_to_spec_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, spec_file_name_ptr, &path_to_spec_ptr)) {
         Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
         return TCL_ERROR;
     }
+    Tcl_IncrRefCount(path_to_spec_ptr);
+
+    Tcl_Obj *path_to_lock_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, cwd, lock_file_name_ptr, &path_to_lock_ptr)) {
+        Tcl_DecrRefCount(cwd);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
+        return TCL_ERROR;
+    }
+    Tcl_IncrRefCount(path_to_lock_ptr);
     Tcl_DecrRefCount(cwd);
 
-    Tcl_IncrRefCount(path_ptr);
-    if (TCL_OK == ttrek_CheckFileExists(path_ptr)) {
-        fprintf(stderr, "error: %s already exists\n", PACKAGES_JSON_FILE);
+    if (TCL_OK == ttrek_CheckFileExists(path_to_spec_ptr)) {
+        fprintf(stderr, "error: %s already exists\n", SPEC_JSON_FILE);
+        Tcl_DecrRefCount(path_to_spec_ptr);
+        Tcl_DecrRefCount(path_to_lock_ptr);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
         return TCL_ERROR;
     }
 
@@ -60,20 +78,34 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         project_version[strcspn(project_version, "\n")] = 0;
     }
 
-    cJSON *root = cJSON_CreateObject();
+    cJSON *spec_root = cJSON_CreateObject();
     cJSON *name = cJSON_CreateString(project_name);
-    cJSON_AddItemToObject(root, "name", name);
+    cJSON_AddItemToObject(spec_root, "name", name);
     cJSON *version = cJSON_CreateString(project_version);
-    cJSON_AddItemToObject(root, "version", version);
+    cJSON_AddItemToObject(spec_root, "version", version);
     cJSON *scripts = cJSON_CreateObject();
-    cJSON_AddItemToObject(root, "scripts", scripts);
-    cJSON *dependencies = cJSON_CreateObject();
-    cJSON_AddItemToObject(root, "dependencies", dependencies);
+    cJSON_AddItemToObject(spec_root, "scripts", scripts);
+    cJSON *spec_dependencies = cJSON_CreateObject();
+    cJSON_AddItemToObject(spec_root, "dependencies", spec_dependencies);
     cJSON *devDependencies = cJSON_CreateObject();
-    cJSON_AddItemToObject(root, "devDependencies", devDependencies);
+    cJSON_AddItemToObject(spec_root, "devDependencies", devDependencies);
 
-    ttrek_WriteJsonFile(interp, path_ptr, root);
+    ttrek_WriteJsonFile(interp, path_to_spec_ptr, spec_root);
 
+    cJSON *lock_root = cJSON_CreateObject();
+    cJSON *lock_packages = cJSON_CreateObject();
+    cJSON_AddItemToObject(lock_root, "packages", lock_packages);
+    cJSON *lock_dependencies = cJSON_CreateObject();
+    cJSON_AddItemToObject(lock_root, "dependencies", lock_dependencies);
+    ttrek_WriteJsonFile(interp, path_to_lock_ptr, lock_root);
+
+
+    cJSON_Delete(spec_root);
+    cJSON_Delete(lock_root);
+    Tcl_DecrRefCount(path_to_spec_ptr);
+    Tcl_DecrRefCount(path_to_lock_ptr);
+    Tcl_DecrRefCount(spec_file_name_ptr);
+    Tcl_DecrRefCount(lock_file_name_ptr);
     ckfree(remObjv);
     return TCL_OK;
 }

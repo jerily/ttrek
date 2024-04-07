@@ -51,7 +51,7 @@ typedef int Tcl_Size;
 static const char *VERSION = XSTR(PROJECT_VERSION);
 
 static const char *REGISTRY_URL = "http://localhost:8080/registry";
-static const char *PACKAGES_JSON_FILE = "ttrek.json";
+static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);

@@ -23,7 +23,6 @@ static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *u
 }
 
 int ttrek_RegistryGet(Tcl_Interp *interp, const char *url, Tcl_DString *dsPtr) {
-    curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl_handle = curl_easy_init();
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);
@@ -39,6 +38,5 @@ int ttrek_RegistryGet(Tcl_Interp *interp, const char *url, Tcl_DString *dsPtr) {
         return TCL_ERROR;
     }
     curl_easy_cleanup(curl_handle);
-    curl_global_cleanup();
     return TCL_OK;
 }

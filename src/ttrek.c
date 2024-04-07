@@ -7,6 +7,7 @@
 #include <tcl.h>
 #include <string.h>
 #include <cjson/cJSON.h>
+#include <curl/curl.h>
 #include "subCmdDecls.h"s
 #include "common.h"s
 
@@ -47,11 +48,14 @@ int main(int argc, char *argv[]) {
                 ttrek_InitSubCmd(interp, objc-1, &objv[1]);
                 break;
             case SUBCMD_INSTALL:
+                curl_global_init(CURL_GLOBAL_ALL);
                 fprintf(stderr, "install\n");
                 if (TCL_OK != ttrek_InstallSubCmd(interp, objc-2, &objv[2])) {
                     fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                    curl_global_cleanup();
                     return 1;
                 }
+                curl_global_cleanup();
                 break;
             case SUBCMD_UNINSTALL:
                 fprintf(stderr, "uninstall\n");

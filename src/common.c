@@ -119,7 +119,7 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
         return NULL;
     }
     Tcl_IncrRefCount(project_homedir_ptr);
-    Tcl_Obj *project_filename_ptr = Tcl_NewStringObj(PACKAGES_JSON_FILE, -1);
+    Tcl_Obj *project_filename_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
     Tcl_IncrRefCount(project_filename_ptr);
     Tcl_Obj *path_project_file_ptr;
     while (Tcl_GetCharLength(project_homedir_ptr) > 0) {
@@ -162,6 +162,6 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
     }
     Tcl_DecrRefCount(project_filename_ptr);
     Tcl_DecrRefCount(project_homedir_ptr);
-    fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", PACKAGES_JSON_FILE);
+    fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
     return NULL;
 }
