@@ -7,6 +7,10 @@
 #ifndef TTREK_COMMON_H
 #define TTREK_COMMON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <tcl.h>
 #include "cjson/cJSON.h"
 
@@ -48,6 +52,7 @@ typedef int Tcl_Size;
 #   endif
 #endif
 
+
 static const char *VERSION = XSTR(PROJECT_VERSION);
 
 static const char *REGISTRY_URL = "http://localhost:8080/registry";
@@ -55,12 +60,23 @@ static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
+
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
+
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root);
+
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr);
+
 int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root);
+
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions);
+
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
+
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif //TTREK_COMMON_H

@@ -8,14 +8,15 @@
 #include <string.h>
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
-#include "subCmdDecls.h"s
-#include "common.h"s
+#include "subCmdDecls.h"
+#include "common.h"
 
 static const char *subcommands[] = {
         "init",
         "install",
         "uninstall",
         "run",
+        "pretend",
         NULL
 };
 
@@ -23,7 +24,8 @@ enum subcommand {
     SUBCMD_INIT,
     SUBCMD_INSTALL,
     SUBCMD_UNINSTALL,
-    SUBCMD_RUN
+    SUBCMD_RUN,
+    SUBCMD_PRETEND
 };
 
 int main(int argc, char *argv[]) {
@@ -63,6 +65,13 @@ int main(int argc, char *argv[]) {
             case SUBCMD_RUN:
                 if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
                     fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                    return 1;
+                }
+                break;
+            case SUBCMD_PRETEND:
+                fprintf(stderr, "pretend\n");
+                if (TCL_OK != ttrek_PretendSubCmd(interp, objc-2, &objv[2])) {
+                    fprintf(stderr, "error: pretend subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }
                 break;

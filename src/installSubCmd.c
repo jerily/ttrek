@@ -13,7 +13,7 @@
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
-const char *ttrek_GetSemverOp(const char *package_range_str, const char **op) {
+const char *ttrek_GetRangeOp(const char *package_range_str, const char **op) {
     if (package_range_str) {
         if (package_range_str[0] == '^') {
             *op = "^";
@@ -165,7 +165,7 @@ static int ttrek_SemverSatisfiesLock(Tcl_Interp *interp, cJSON *lock_root, const
     if (dep_node) {
         const char *dep_str = dep_node->valuestring;
         const char *dep_op = "^";
-        dep_str = ttrek_GetSemverOp(dep_str, &dep_op);
+        dep_str = ttrek_GetRangeOp(dep_str, &dep_op);
         semver_t dep_semver = {0, 0, 0, NULL, NULL};
         if (semver_parse(dep_str, &dep_semver)) {
             fprintf(stderr, "error: could not parse dep semver version: %s\n", dep_str);
@@ -185,7 +185,7 @@ static int ttrek_SemverSatisfiesLock(Tcl_Interp *interp, cJSON *lock_root, const
         if (req_node) {
             const char *req_str = req_node->valuestring;
             const char *req_op = "^";
-            req_str = ttrek_GetSemverOp(req_str, &req_op);
+            req_str = ttrek_GetRangeOp(req_str, &req_op);
             semver_t req_semver = {0, 0, 0, NULL, NULL};
             if (semver_parse(req_str, &req_semver)) {
                 fprintf(stderr, "error: could not parse req semver version: %s\n", req_str);
@@ -363,7 +363,7 @@ ttrek_InstallDependency(
         fprintf(stderr, "dep_range: %s\n", dep_range);
         // add to list of dependencies
         const char *dep_op = "^";
-        dep_range = ttrek_GetSemverOp(dep_range, &dep_op);
+        dep_range = ttrek_GetRangeOp(dep_range, &dep_op);
         Tcl_Obj *dep_range_ptr = Tcl_NewStringObj(dep_op, -1);
         Tcl_AppendToObj(dep_range_ptr, dep_range, -1);
         Tcl_Obj *objv[2] = {Tcl_NewStringObj(dep_name, -1), dep_range_ptr};
@@ -385,7 +385,7 @@ ttrek_InstallDependency(
         const char *dep_range = Tcl_GetString(dep_range_ptr);
 
         const char *dep_op = "=";
-        const char *dep_version = ttrek_GetSemverOp(dep_range, &dep_op);
+        const char *dep_version = ttrek_GetRangeOp(dep_range, &dep_op);
         semver_t dep_semver = {0, 0, 0, NULL, NULL};
         if (semver_parse(dep_version, &dep_semver)) {
             fprintf(stderr, "error: could not parse dep range version: %s\n", dep_range);
@@ -512,7 +512,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         const char *package_name = strtok(package, "@");
         const char *package_range_str = strtok(NULL, "@");
         const char *op = "^";
-        package_range_str = ttrek_GetSemverOp(package_range_str, &op);
+        package_range_str = ttrek_GetRangeOp(package_range_str, &op);
 
         const char *package_semver_str = package_range_str;
         semver_t package_semver = {0, 0, 0, NULL, NULL};

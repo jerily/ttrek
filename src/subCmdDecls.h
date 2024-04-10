@@ -7,10 +7,19 @@
 #ifndef TTREK_SUBCMDDECLS_H
 #define TTREK_SUBCMDDECLS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "common.h"
 
 SubCmdProc(ttrek_InitSubCmd);
 SubCmdProc(ttrek_InstallSubCmd);
 SubCmdProc(ttrek_RunSubCmd);
+SubCmdProc(ttrek_PretendSubCmd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif //TTREK_SUBCMDDECLS_H
