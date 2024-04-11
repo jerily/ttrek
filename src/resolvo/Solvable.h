@@ -33,15 +33,16 @@ public:
     }
 };
 
+// The inner representation of a solvable, which can be either a package or the root solvable
+enum class SolvableInnerType {
+    Root,
+    Package
+};
+
 // The InternalSolvable class template represents a package that can be installed
 template<typename V>
 class InternalSolvable {
 private:
-// The inner representation of a solvable, which can be either a package or the root solvable
-    enum class SolvableInnerType {
-        Root,
-        Package
-    };
 
     SolvableInnerType type;
     std::unique_ptr<Solvable<V>> package;
@@ -63,6 +64,10 @@ public:
     const Solvable<V> *get_solvable() const {
         assert(type == SolvableInnerType::Package);
         return package.get();
+    }
+
+    SolvableInnerType get_type() const {
+        return type;
     }
 };
 

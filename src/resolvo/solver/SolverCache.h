@@ -150,7 +150,7 @@ public:
             provider.sort_candidates(this, sorted_candidates);
             auto favored_id = candidates->favored;
             if (favored_id.has_value()) {
-                auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value());
+                auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value_());
                 if (pos != sorted_candidates.end()) {
                     std::rotate(sorted_candidates.begin(), pos, pos + 1);
                 }

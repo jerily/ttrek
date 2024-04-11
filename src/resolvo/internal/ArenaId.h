@@ -1,3 +1,6 @@
+#ifndef ARENA_ID_H
+#define ARENA_ID_H
+
 #include <cstddef>
 #include <cstdint>
 #include <cassert>
@@ -14,3 +17,5 @@ public:
     }
 
 };
+
+#endif // ARENA_ID_H

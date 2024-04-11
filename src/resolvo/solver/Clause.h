@@ -22,10 +22,11 @@
 
 
 struct Literal {
+public:
     SolvableId solvable_id;
     bool negate;
 
-    Literal(SolvableId id, bool neg) : solvable_id(std::move(id)), negate(neg) {}
+    explicit Literal(SolvableId id, bool neg) : solvable_id(std::move(id)), negate(neg) {}
 
     // Returns the value that would make the literal evaluate to true if assigned to the literal's solvable
     bool satisfying_value() const {

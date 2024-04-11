@@ -17,7 +17,7 @@ private:
 public:
     Problem() = default;
 
-    void addClause(const ClauseId& clauseId) {
+    void add_clause(const ClauseId& clauseId) {
         if (std::find(clauses.cbegin(), clauses.cend(), clauseId) == clauses.cend()) {
             clauses.push_back(clauseId);
         }

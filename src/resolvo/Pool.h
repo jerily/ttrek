@@ -7,26 +7,34 @@
 #include <memory>
 #include <iostream>
 #include <cassert>
+#include <optional>
 #include "internal/StringId.h"
 #include "internal/NameId.h"
 #include "internal/SolvableId.h"
 #include "internal/VersionSetId.h"
+#include "internal/ClauseId.h"
 #include "internal/Arena.h"
 #include "Solvable.h"
 
-// The Pool class
+// A pool that stores data related to the available packages.
+//
+// A pool never releases its memory until it is dropped. References returned by the pool will
+// remain valid for the lifetime of the pool. This allows inserting into the pool without requiring
+// a mutable reference to the pool.
+// This is what we refer to as `Frozen` data can be added but old data can never be removed or mutated.
 template<typename VS, typename N>
 class Pool {
 private:
-    Arena<ClauseId, InternalSolvable < typename VS::V>> solvables;
-    std::unordered_map<N, NameId> names_to_ids;
     Arena<NameId, N> package_names;
     Arena<StringId, std::string> strings;
-    std::unordered_map<std::string, StringId> string_to_ids;
     std::unordered_map<std::pair<NameId, VS>, VersionSetId> version_set_to_id;
-    Arena<VersionSetId, std::pair<NameId, VS>> version_sets;
 
 public:
+    Arena<ClauseId, InternalSolvable<typename VS::V>> solvables;
+    std::unordered_map<N, NameId> names_to_ids;
+    std::unordered_map<std::string, StringId> string_to_ids;
+    Arena<VersionSetId, std::pair<NameId, VS>> version_sets;
+
     Pool() {
 // Initialize with a root solvable if needed
         solvables.alloc(InternalSolvable<typename VS::V>::new_root());
@@ -36,6 +44,8 @@ public:
         return Pool();
     }
 
+    // Interns a generic string into the `Pool` and returns its `StringId`. Strings are
+    // deduplicated.
     StringId intern_string(const std::string &name) {
         auto it = string_to_ids.find(name);
         if (it != string_to_ids.end()) {
@@ -47,10 +57,17 @@ public:
         return id;
     }
 
-    const std::string &resolve_string(StringId string_id) const {
-// Implementation to resolve string
+    // Returns the string associated with the provided [`StringId`].
+    //
+    // Panics if the string is not found in the pool.
+    const std::string &resolve_string(const StringId &string_id) const {
+        return strings[string_id];
     }
 
+    // Interns a package name into the `Pool`, returning its `NameId`. Names are deduplicated. If
+    // the same name is inserted twice the same `NameId` will be returned.
+    //
+    // The original name can be resolved using the [`Self::resolve_package_name`] function.
     NameId intern_package_name(const N &name) {
         auto it = names_to_ids.find(name);
         if (it != names_to_ids.end()) {
@@ -62,36 +79,77 @@ public:
         return next_id;
     }
 
-    const N &resolve_package_name(NameId name_id) const {
-// Implementation to resolve package name
+    // Returns the package name associated with the provided [`NameId`].
+    //
+    // Panics if the package name is not found in the pool.
+    const N &resolve_package_name(const NameId &name_id) const {
+        return package_names[name_id];
     }
 
+    // Returns the [`NameId`] associated with the specified name or `None` if the name has not
+    // previously been interned using [`Self::intern_package_name`].
+    std::optional<NameId> lookup_package_name(const N &name) const {
+        auto it = names_to_ids.find(name);
+        if (it != names_to_ids.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    // Adds a solvable to a repo and returns it's [`SolvableId`].
+    //
+    // Unlike some of the other interning functions this function does *not* deduplicate any of the
+    // inserted elements. A unique Id will be returned everytime this function is called.
     ClauseId intern_solvable(NameId name_id, const typename VS::V &record) {
         return solvables.alloc(InternalSolvable<typename VS::V>::new_solvable(name_id, record));
     }
 
+    // Returns the solvable associated to the provided id
+    //
+    // Panics if the solvable is not found in the pool
     const Solvable<typename VS::V> &resolve_solvable(ClauseId id) const {
-// Implementation to resolve solvable
+        return resolve_internal_solvable(id).solvable;
     }
 
-    VersionSetId intern_version_set(NameId package_name, const VS &version_set) {
-        auto key = std::make_pair(package_name, version_set);
-        auto it = version_set_to_id.findkey;
-        if (it != version_set_to_id.end()) {
-            return it->second;
+    // Returns the solvable associated to the provided id
+    //
+    // Panics if the solvable is not found in the pool
+    InternalSolvable<typename VS::V> &resolve_internal_solvable(ClauseId id) {
+        return solvables[id];
+    }
+
+    // Interns a version set into the [`Pool`], returning its [`VersionSetId`]. The returned
+    // [`VersionSetId`] can be used to retrieve a reference to the original version set using
+    // [`Self::resolve_version-set`].
+    //
+    // A version set is always associated with a specific package name to which it applies. The
+    // passed in package name can be retrieved using [`Self::resolve_version_set_package_name`].
+    //
+    // Version sets are deduplicated. This means that if the same version set is inserted twice
+    // they will share the same [`VersionSetId`].
+    VersionSetId intern_version_set(const NameId &package_name, const VS &version_set) {
+        auto optional_entry = version_set_to_id.findkey(std::make_pair<>(package_name, version_set));
+        if (optional_entry.has_value()) {
+            return optional_entry.value();
+        } else {
+            auto id = version_sets.alloc(std::make_pair<>(package_name, version_set.clone()));
+            version_set_to_id.insert(std::make_pair<>(std::make_pair<>(package_name, version_set), id));
+            return id;
         }
-
-        VersionSetId id = version_sets.allockey;
-        version_set_to_id[key] = id;
-        return id;
     }
 
+    // Returns the version set associated with the provided id
+    //
+    // Panics if the version set is not found in the pool
     const VS &resolve_version_set(VersionSetId id) const {
-// Implementation to resolve version set
+        return version_sets[id].second;
     }
 
+    // Returns the package name associated with the provide id.
+    //
+    // Panics if the version set is not found in the pool
     NameId resolve_version_set_package_name(VersionSetId id) const {
-// Implementation to resolve version set package name
+        return version_sets[id].first;
     }
 };
 

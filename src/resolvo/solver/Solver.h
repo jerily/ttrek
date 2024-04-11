@@ -10,6 +10,7 @@
 #include "../internal/LearntClauseId.h"
 #include "../internal/Arena.h"
 #include "../Pool.h"
+#include "../Common.h"
 #include "Clause.h"
 #include "WatchMap.h"
 #include "../Problem.h"
@@ -17,6 +18,7 @@
 #include "PropagationError.h"
 #include <memory>
 #include <any>
+#include <set>
 
 template<typename SolvableId, typename VersionSetId, typename ClauseId>
 struct AddClauseOutput {
@@ -38,6 +40,32 @@ class Mapping;
 
 // NowOrNeverRuntime is a placeholder for the actual async runtime type
 using NowOrNeverRuntime = void; // Replace with actual async runtime type
+
+namespace TaskResult {
+    struct Dependencies {
+        SolvableId solvable_id;
+        DependenciesVariant dependencies;
+    };
+
+    struct SortedCandidates {
+        SolvableId solvable_id;
+        VersionSetId version_set_id;
+        std::vector<SolvableId> candidates;
+    };
+
+    struct NonMatchingCandidates {
+        SolvableId solvable_id;
+        VersionSetId version_set_id;
+        std::vector<SolvableId> non_matching_candidates;
+    };
+
+    struct Candidates {
+        NameId name_id;
+        std::vector<SolvableId> package_candidates;
+    };
+}
+
+using TaskResultVariant = std::variant<TaskResult::Dependencies, TaskResult::SortedCandidates, TaskResult::NonMatchingCandidates, TaskResult::Candidates>;
 
 // Drives the SAT solving process
 template<typename VS, typename N, typename D, typename RT = NowOrNeverRuntime>
@@ -63,7 +91,7 @@ private:
 public:
 
     // The Pool used by the solver
-    std::shared_ptr<Pool<VS, N>> pool;
+    Pool<VS, N> pool;
     RT async_runtime;
     SolverCache<VS, N, D, RT> cache;
     Arena<ClauseId, ClauseState> clauses_;
@@ -96,6 +124,293 @@ public:
         }
 
         return steps;
+    }
+
+    // Adds clauses for a solvable. These clauses include requirements and constrains on other
+    // solvables.
+    //
+    // Returns the added clauses, and an additional list with conflicting clauses (if any).
+    //
+    // If the provider has requested the solving process to be cancelled, the cancellation value
+    // will be returned as an `Err(...)`.
+    std::pair<AddClauseOutput<SolvableId, VersionSetId, ClauseId>, std::optional<std::any>> add_clauses_for_solvables(
+            const std::vector<SolvableId> &solvable_ids) {
+
+        auto output = AddClauseOutput<SolvableId, VersionSetId, ClauseId>();
+
+        // Mark the initial seen solvables as seen
+        std::vector<SolvableId> pending_solvables;
+        auto clauses_added_for_solvable = clauses_added_for_solvable_;
+        for (auto &solvable_id: solvable_ids) {
+            if (clauses_added_for_solvable_.find(solvable_id) == clauses_added_for_solvable_.end()) {
+                pending_solvables.push_back(solvable_id);
+            }
+        }
+
+
+        std::unordered_set<SolvableId, SolvableId::Hash> seen(pending_solvables.cbegin(), pending_solvables.cend());
+        std::vector<TaskResultVariant> pending_futures;
+        while (true) {
+            // Iterate over all pending solvables and request their dependencies.
+            for (SolvableId solvable_id: pending_solvables) {
+                // Get the solvable information and request its requirements and constraints
+                auto solvable = pool.resolve_internal_solvable(solvable_id);
+
+                //tracing::trace!(
+                //                    "┝━ adding clauses for dependencies of {}",
+                //                    solvable.display(&self.pool)
+                //                );
+
+                auto solvable_inner_type = solvable.get_inner().get_type();
+                if (solvable_inner_type == SolvableInnerType::Root) {
+                    auto known_dependencies = KnownDependencies{root_requirements_, std::vector<VersionSetId>()};
+                    auto task_result = TaskResult::Dependencies{solvable_id, Dependencies::Known{known_dependencies}};
+                    auto get_dependencies_fut = task_result;
+                    pending_futures.emplace_back(get_dependencies_fut);
+                } else if (solvable_inner_type == SolvableInnerType::Package) {
+                    auto deps = cache.get_or_cache_dependencies(solvable_id);
+                    auto task_result = TaskResult::Dependencies{solvable_id, deps};
+                    auto get_dependencies_fut = task_result;
+                    pending_futures.emplace_back(get_dependencies_fut);
+                }
+
+            }
+
+            if (pending_futures.empty()) {
+                // No more pending results
+                break;
+            }
+
+            auto &result = pending_futures.front();  // todo: pending_futures.next()
+
+            auto continue_p = std::visit([this, &output, &pending_futures, &pending_solvables, &seen](auto &&arg) {
+                using T = std::decay_t<decltype(arg)>;
+
+                if constexpr (std::is_same_v<T, TaskResult::Dependencies>) {
+                    auto task_result = std::any_cast<TaskResult::Dependencies>(arg);
+                    auto solvable_id = task_result.solvable_id;
+                    auto dependencies = task_result.dependencies;
+
+                    auto solvable = pool.resolve_internal_solvable(solvable_id);
+
+                    // tracing::trace!(
+                    //                        "dependencies available for {}",
+                    //                        solvable.display(&self.pool)
+                    //                    );
+
+                    auto continue_inner_p = std::visit([this, &output, &pending_futures](auto &&arg_inner) {
+                        using T_INNER = std::decay_t<decltype(arg_inner)>;
+
+                        auto requirements = std::vector<VersionSetId>();
+                        auto constrains = std::vector<VersionSetId>();
+                        if constexpr (std::is_same_v<T_INNER, Dependencies::Known>) {
+                            auto known_dependencies = std::any_cast<Dependencies::Known>(
+                                    dependencies).known_dependencies;
+                            requirements = known_dependencies.requirements;
+                            constrains = known_dependencies.constrains;
+                        } else if constexpr (std::is_same_v<T_INNER, Dependencies::Unknown>) {
+                            auto reason = std::any_cast<Dependencies::Unknown>(dependencies).reason;
+
+                            // There is no information about the solvable's dependencies, so we add
+                            // an exclusion clause for it
+                            auto clause_id = clauses_.alloc(ClauseState::exclude(solvable_id, reason));
+
+                            // Exclusions are negative assertions, tracked outside of the watcher system
+                            output.negative_assertions.emplace_back(solvable_id, clause_id);
+
+                            // There might be a conflict now
+                            if (decision_tracker_.assigned_value(solvable_id).has_value()) {
+                                output.conflicting_clauses.push_back(clause_id);
+                            }
+
+                            return true;  // continue
+                        }
+
+
+                        std::vector<VersionSetId> chain = requirements;
+                        chain.emplace_back(constrains);
+                        for (auto &version_set_id: chain) {
+                            auto dependency_name = pool.resolve_version_set_package_name(version_set_id);
+
+                            if (clauses_added_for_solvable_.insert(dependency_name).second) {
+                                // tracing::trace!(
+                                //                                "┝━ adding clauses for package '{}'",
+                                //                                        self.pool.resolve_package_name(dependency_name)
+                                //                        );
+
+                                auto package_candidates = cache.get_or_cache_candidates(dependency_name);
+                                pending_futures.emplace_back(
+                                        TaskResult::Candidates{dependency_name, package_candidates});
+                            }
+                        }
+
+                        for (VersionSetId version_set_id: requirements) {
+                            auto candidates = cache.get_or_cache_sorted_candidates(version_set_id);
+                            pending_futures.emplace_back(
+                                    TaskResult::SortedCandidates{solvable_id, version_set_id, candidates});
+                        }
+
+                        for (VersionSetId version_set_id: constrains) {
+                            auto non_matching_candidates = cache.get_or_cache_non_matching_candidates(version_set_id);
+                            pending_futures.emplace_back(TaskResult::NonMatchingCandidates{solvable_id, version_set_id,
+                                                                                           non_matching_candidates});
+                        }
+
+                        return false;
+                    }, dependencies);
+
+                    if (continue_inner_p) {
+                        return true;  // continue
+                    }
+
+                } else if constexpr (std::is_same_v<T, TaskResult::Candidates>) {
+                    auto task_result = std::any_cast<TaskResult::Candidates>(arg);
+                    auto name_id = task_result.name_id;
+                    auto package_candidates = task_result.package_candidates;
+                    auto solvable = pool.resolve_package_name(name_id);
+                    // tracing::trace!("package candidates available for {}", solvable);
+
+                    auto locked_solvable_id = package_candidates.locked;
+                    auto candidates = package_candidates.candidates;
+
+                    // Check the assumption that no decision has been made about any of the solvables.
+                    for (auto &candidate: candidates) {
+                        // "a decision has been made about a candidate of a package that was not properly added yet."
+                        assert(decision_tracker_.assigned_value(candidate).has_value());
+                    }
+
+                    // Each candidate gets a clause to disallow other candidates.
+
+                    for (int i = 0; i < candidates.size(); i++) {
+                        for (int j = i + 1; j < candidates.size(); j++) {
+                            auto clause_id = clauses_.alloc(ClauseState::forbid_multiple(candidates[i], candidates[j]));
+                            assert(clauses_[clause_id].has_watches());
+                            output.clauses_to_watch.push_back(clause_id);
+                        }
+                    }
+
+                    // If there is a locked solvable, forbid other solvables.
+
+                    if (locked_solvable_id.has_value()) {
+                        for (auto &other_candidate: candidates) {
+                            if (other_candidate != locked_solvable_id.value()) {
+                                auto clause_id = clauses_.alloc(
+                                        ClauseState::lock(locked_solvable_id.value(), other_candidate));
+                                assert(clauses_[clause_id].has_watches());
+                                output.clauses_to_watch.push_back(clause_id);
+                            }
+                        }
+                    }
+
+                    // Add a clause for solvables that are externally excluded.
+
+                    for (auto &[excluded_solvable, reason]: package_candidates.excluded) {
+                        auto clause_id = clauses_.alloc(ClauseState::exclude(excluded_solvable, reason));
+
+                        // Exclusions are negative assertions, tracked outside of the watcher system
+                        output.negative_assertions.push_back({excluded_solvable, clause_id});
+
+                        // Conflicts should be impossible here
+                        //                        debug_assert!(self.decision_tracker.assigned_value(solvable) != Some(true));
+                        assert(decision_tracker_.assigned_value(excluded_solvable).has_value());
+                    }
+                } else if constexpr (std::is_same_v<T, TaskResult::SortedCandidates>) {
+                    auto task_result = std::any_cast<TaskResult::SortedCandidates>(arg);
+                    auto solvable_id = task_result.solvable_id;
+                    auto version_set_id = task_result.version_set_id;
+                    auto candidates = task_result.candidates;
+
+                    auto version_set_name = pool.resolve_package_name(
+                            pool.resolve_version_set_package_name(version_set_id));
+
+                    auto version_set = pool.resolve_version_set(version_set_id);
+
+                    //tracing::trace!(
+                    //                        "sorted candidates available for {} {}",
+                    //                        version_set_name,
+                    //                        version_set
+                    //                    );
+
+                    // Queue requesting the dependencies of the candidates as well if they are cheaply
+                    // available from the dependency provider.
+
+                    for (auto &candidate: candidates) {
+                        if (seen.insert(candidate) && cache.are_dependencies_available_for(candidate) &&
+                            clauses_added_for_solvable_.insert(candidate)) {
+                            pending_solvables.emplace_back(candidate);
+                        }
+                    }
+
+                    // Add the requirements clause
+                    auto no_candidates = candidates.empty();
+                    auto [requires_clause, conflict] = ClauseState::requires(
+                            solvable_id,
+                            version_set_id,
+                            candidates,
+                            decision_tracker_
+                    );
+
+                    auto clause_id = clauses_.alloc(requires_clause);
+                    auto clause = clauses_[clause_id];
+
+                    //let &Clause::Requires(solvable_id, version_set_id) = &clause.kind else {
+                    //                        unreachable!();
+                    //                    };
+
+                    if (clause.has_watches()) {
+                        output.clauses_to_watch.push_back(clause_id);
+                    }
+
+                    output.new_requires_clauses.push_back({solvable_id, version_set_id, clause_id});
+
+                    if (conflict) {
+                        output.conflicting_clauses.push_back(clause_id);
+                    } else if (no_candidates) {
+                        // Add assertions for unit clauses (i.e. those with no matching candidates)
+                        output.negative_assertions.push_back({solvable_id, clause_id});
+                    }
+
+                } else if constexpr (std::is_same_v<T, TaskResult::NonMatchingCandidates>) {
+                    auto task_result = std::any_cast<TaskResult::NonMatchingCandidates>(arg);
+                    auto solvable_id = task_result.solvable_id;
+                    auto version_set_id = task_result.version_set_id;
+                    auto non_matching_candidates = task_result.non_matching_candidates;
+
+                    auto version_set_name = pool.resolve_package_name(
+                            pool.resolve_version_set_package_name(version_set_id));
+                    auto version_set = pool.resolve_version_set(version_set_id);
+
+                    //tracing::trace!(
+                    //                        "non matching candidates available for {} {}",
+                    //                        version_set_name,
+                    //                        version_set
+                    //                    );
+
+                    // Add forbidden clauses for the candidates
+                    for (auto &forbidden_candidate: non_matching_candidates) {
+                        auto [constrains_clause, conflict] = clauses_.alloc(
+                                ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id,
+                                                        decision_tracker_));
+                        auto clause_id = clauses_.alloc(constrains_clause);
+                        output.clauses_to_watch.push_back(clause_id);
+
+                        if (conflict) {
+                            output.conflicting_clauses.push_back(clause_id);
+                        }
+                    }
+                }
+
+                return false;
+            }, result);
+
+            if (continue_p) {
+                continue;
+            }
+
+        }
+
+        return {output, std::nullopt};
+
     }
 
     // Run the CDCL algorithm to solve the SAT problem
@@ -215,10 +530,11 @@ public:
             //                        clause=self.clauses.borrow()[clause_id].debug(&self.pool));
             //            }
 
-            // if let Err(_first_conflicting_clause_id) = self.process_add_clause_output(output) {
-            //                self.decision_tracker.clear();
-            //                level = 0;
-            //            }
+            auto optional_conflicting_clause_id = process_add_clause_output(output);
+            if (optional_conflicting_clause_id.has_value()) {
+                decision_tracker_.clear();
+                level = 0;
+            }
         }
     }
 
@@ -254,7 +570,7 @@ public:
 
     std::pair<uint32_t, std::optional<UnsolvableOrCancelled>> resolve_dependencies(uint32_t level) {
         while (true) {
-            auto decision = decision_tracker_.decide();
+            auto decision = decide();
             if (!decision.has_value()) {
                 break;
             }
@@ -493,7 +809,7 @@ public:
 
         auto optional_value = cache.provider.should_cancel_with_value();
         if (optional_value.has_value()) {
-            return PropagationErrorCancelled(optional_value.value());
+            return PropagationErrorCancelled(optional_value.value_());
         }
 
         // Negative assertions derived from other rules (assertions are clauses that consist of a
@@ -580,7 +896,6 @@ public:
                 clause_id = clause.next_watched_clause(pkg);
 
 
-
                 auto optional_payload = clause.watch_turned_false(pkg, decision_tracker_.get_map(),
                                                                   learnt_clauses_);
 
@@ -590,7 +905,8 @@ public:
                                                                             cache.version_set_to_sorted_candidates,
                                                                             decision_tracker_.get_map());
                     if (optional_variable.has_value()) {
-                        assert(std::find(clause.watched_literals_.cbegin(), clause.watched_literals_.cend(), optional_variable.value()) == clause.watched_literals_.cend());
+                        assert(std::find(clause.watched_literals_.cbegin(), clause.watched_literals_.cend(),
+                                         optional_variable.value()) == clause.watched_literals_.cend());
 
                         watches_.update_watched(predecessor_clause, clause, this_clause_id, watch_index, pkg,
                                                 optional_variable.value());
@@ -633,5 +949,187 @@ public:
             }
         }
         return std::nullopt;
+    }
+
+
+    // Adds the clause with `clause_id` to the current `Problem`
+    //
+    // Because learnt clauses are not relevant for the user, they are not added to the `Problem`.
+    // Instead, we report the clauses that caused them.
+    //fn analyze_unsolvable_clause(
+
+    void analyze_unsolvable_clause(const Arena<ClauseId, ClauseState> &clauses,
+                                   const std::unordered_map<LearntClauseId, std::vector<ClauseId>> &learnt_why,
+                                   const ClauseId &clause_id,
+                                   Problem &problem, std::unordered_set<ClauseId> &seen) {
+        auto &clause = clauses[clause_id];
+        if (clause.get_kind().get_type() == ClauseType::Learnt) {
+            auto learnt_clause_id = static_cast<const LearntClause *>(&(clause.get_kind()))->learnt_clause_id_;
+            if (seen.find(clause_id) == seen.end()) {
+                return;
+            }
+
+            for (auto &cause: learnt_why.at(learnt_clause_id)) {
+                analyze_unsolvable_clause(clauses, learnt_why, cause, problem, seen);
+            }
+        } else {
+            problem.add_clause(clause_id);
+        }
+    }
+
+    // Create a [`Problem`] based on the id of the clause that triggered an unrecoverable conflict
+    Problem analyze_unsolvable(const ClauseId &clause_id) {
+        auto last_decision = decision_tracker_.get_stack().back();
+        auto highest_level = decision_tracker_.get_level(last_decision.solvable_id);
+        assert(highest_level == 1);
+
+        auto problem = Problem();
+
+        std::unordered_set<SolvableId, SolvableId::Hash> involved;
+        auto &clause = clauses_[clause_id];
+        clause.get_kind().visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+                                         [&involved](const Literal &literal) {
+                                             involved.insert(literal.solvable_id);
+                                         });
+
+        std::unordered_set<ClauseId, ClauseId::Hash> seen;
+        analyze_unsolvable_clause(clauses_, learnt_why_, clause_id, problem, seen);
+
+        auto stack = decision_tracker_.get_stack();
+        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            auto &decision = *it;
+            if (decision.solvable_id == SolvableId::root()) {
+                continue;
+            }
+
+            auto why = decision.derived_from;
+
+            if (involved.find(decision.solvable_id) == involved.end()) {
+                continue;
+            }
+
+            assert(why != ClauseId::install_root());
+
+            analyze_unsolvable_clause(clauses_, learnt_why_, why, problem, seen);
+
+            auto &why_clause = clauses_[why];
+
+            why_clause.get_kind().visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+                                                 [&decision, this, &involved](const Literal &literal) {
+                                                     if (literal.eval(decision_tracker_.get_map()) ==
+                                                         std::optional<bool>(true)) {
+                                                         assert(literal.solvable_id == decision.solvable_id);
+                                                     } else {
+                                                         involved.insert(literal.solvable_id);
+                                                     }
+                                                 });
+        }
+
+        return problem;
+    }
+
+    // Analyze the causes of the conflict and learn from it
+    //
+    // This function finds the combination of assignments that caused the conflict and adds a new
+    // clause to the solver to forbid that combination of assignments (i.e. learn from this mistake
+    // so it is not repeated in the future). It corresponds to the `Solver.analyze` function from
+    // the MiniSAT paper.
+    //
+    // Returns the level to which we should backtrack, the id of the learnt clause and the literal
+    // that should be assigned (by definition, when we learn a clause, all its literals except one
+    // evaluate to false, so the value of the remaining literal must be assigned to make the clause
+    // become true)
+
+    std::tuple<uint32_t, ClauseId, Literal> analyze(uint32_t current_level, SolvableId conflicting_solvable,
+                                                    ClauseId clause_id) {
+        std::unordered_set<SolvableId, SolvableId::Hash> seen;
+        uint32_t causes_at_current_level = 0;
+        std::vector<Literal> learnt;
+        uint32_t back_track_to = 0;
+
+        bool s_value;
+        std::vector<ClauseId> learnt_why;
+        bool first_iteration = true;
+        while (true) {
+            learnt_why.push_back(clause_id);
+
+            auto &clause = clauses_[clause_id];
+            clause.get_kind().visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+                                             [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
+                                                     &s_value, &clause_id, &learnt, this](const Literal &literal) {
+                                                 if (!first_iteration && literal.solvable_id == conflicting_solvable) {
+                                                     return;
+                                                 }
+
+                                                 if (seen.find(literal.solvable_id) != seen.end()) {
+                                                     return;
+                                                 }
+
+                                                 auto decision_level = decision_tracker_.get_level(literal.solvable_id);
+                                                 if (decision_level == current_level) {
+                                                     causes_at_current_level++;
+                                                 } else if (current_level > 1) {
+                                                     auto learnt_literal = Literal(literal.solvable_id,
+                                                                                   !decision_tracker_.assigned_value(
+                                                                                           literal.solvable_id).value());
+                                                     learnt.push_back(learnt_literal);
+                                                     back_track_to = std::max(back_track_to, decision_level);
+                                                 } else {
+                                                     throw std::runtime_error("Unreachable");
+                                                 }
+                                             });
+
+            first_iteration = false;
+
+            while (true) {
+                auto [last_decision, last_decision_level] = decision_tracker_.undo_last();
+                conflicting_solvable = last_decision.solvable_id;
+                s_value = last_decision.value;
+                clause_id = last_decision.derived_from;
+
+                current_level = last_decision_level;
+
+                // We are interested in the first literal we come across that caused the conflicting
+                // assignment
+                if (seen.find(last_decision.solvable_id) != seen.end()) {
+                    break;
+                }
+            }
+
+            causes_at_current_level--;
+            if (causes_at_current_level == 0) {
+                break;
+            }
+        }
+
+
+        auto last_literal = Literal(conflicting_solvable, s_value);
+        learnt.push_back(last_literal);
+
+        auto learnt_id = learnt_clauses_.alloc(learnt);
+        learnt_why_.insert({learnt_id, learnt_why});
+
+        clause_id = clauses_.alloc(Clause::learnt(learnt_id, learnt));
+        learnt_clause_ids_.push_back(clause_id);
+
+        auto &clause = clauses_[clause_id];
+        if (clause.has_watches()) {
+            watches_.start_watching(clause, clause_id);
+        }
+
+        //        tracing::debug!("├─ Learnt disjunction:",);
+        //        for lit in learnt {
+        //                tracing::debug!(
+        //                "│  - {}{}",
+        //                if lit.negate { "NOT " } else { "" },
+        //                lit.solvable_id.display(&self.pool)
+        //                );
+        //        }
+
+        // Should revert at most to the root level
+        auto target_level = back_track_to < 1 ? 1 : back_track_to;
+        decision_tracker_.undo_until(target_level);
+        return {target_level, clause_id, last_literal};
+
     }
 };

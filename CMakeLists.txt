@@ -84,6 +84,7 @@ add_executable(${TARGET}
         src/resolvo/solver/UnsolvableOrCancelled.h
         src/resolvo/internal/FrozenCopyMap.h
         src/resolvo/solver/SolverCache.h
+        src/resolvo/Common.h
 )
 
 

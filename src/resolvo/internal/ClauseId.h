@@ -4,16 +4,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cassert>
+#include <memory>
 #include "ArenaId.h"
 
 // The id associated to a solvable
 class ClauseId : public ArenaId {
-private:
-    std::uint32_t value;
-
 public:
 
-    explicit ClauseId(std::uint32_t value) : value(value) {}
+    explicit ClauseId(std::uint32_t value) : value_(value) {}
 
 // There is a guarantee that ClauseId(0) will always be "Clause::InstallRoot". This assumption
 // is verified by the solver.
@@ -22,7 +20,7 @@ public:
     }
 
     bool is_root() const {
-        return value == 0;
+        return value_ == 0;
     }
 
     static ClauseId null() {
@@ -30,16 +28,30 @@ public:
     }
 
     bool is_null() const {
-        return value == UINT32_MAX;
+        return value_ == UINT32_MAX;
     }
 
     std::size_t to_usize() const override {
-        return static_cast<std::size_t>(value);
+        return static_cast<std::size_t>(value_);
     }
 
     bool operator==(const ClauseId& other) const {
-        return value == other.value;
+        return value_ == other.value_;
     }
+
+    bool operator!=(const ClauseId& other) const {
+        return value_ != other.value_;
+    }
+
+    struct Hash {
+        std::size_t operator()(const ClauseId& id) const {
+            return std::hash<uint32_t>{}(id.value_);
+        }
+    };
+
+private:
+    std::uint32_t value_;
+
 };
 
 #endif // CLAUSEID_H

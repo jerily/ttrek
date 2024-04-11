@@ -1,5 +1,5 @@
-#ifndef SOLVABLEID_H
-#define SOLVABLEID_H
+#ifndef SOLVABLE_ID_H
+#define SOLVABLE_ID_H
 
 #include <cstddef>
 #include <cstdint>
@@ -52,17 +52,22 @@ public:
         return value_ != other;
     }
 
+    bool operator!() const {
+        return !value_;
+    }
+
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value_);
     }
 
-    // hash
-    std::size_t hash() const {
-        return std::hash<uint32_t>{}(value_);
-    }
+    struct Hash {
+        std::size_t operator()(const SolvableId& id) const {
+            return std::hash<uint32_t>{}(id.value_);
+        }
+    };
 
 private:
     uint32_t value_;
 };
 
-#endif // SOLVABLEID_H
+#endif // SOLVABLE_ID_H
