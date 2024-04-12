@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <any>
+#include <future>
 #include "../internal/CandidatesId.h"
 #include "../internal/DependenciesId.h"
 #include "../internal/FrozenCopyMap.h"
@@ -10,11 +11,9 @@
 #include "../internal/FrozenMap.h"
 #include "../Pool.h"
 #include "../Problem.h"
+#include "../Common.h"
 #include "Clause.h"
 #include "WatchMap.h"
-
-class Dependencies;
-class Candidates;
 
 // Keeps a cache of previously computed and/or requested information about solvables and version
 // sets.
@@ -54,11 +53,11 @@ public:
             auto in_flight_request = package_name_to_candidates_in_flight.find(package_name);
             if (in_flight_request != package_name_to_candidates_in_flight.end()) {
                 // Found an in-flight request, wait for that request to finish and return the computed result.
-                in_flight_request->second->listen();
+                in_flight_request->second.get();
                 return candidates[package_name_to_candidates.get_copy(package_name).value()];
             } else {
                 // Prepare an in-flight notifier for other requests coming in.
-                package_name_to_candidates_in_flight[package_name] = std::make_shared<Event>();
+                package_name_to_candidates_in_flight[package_name] = std::make_shared<std::future<Candidates>>();
 
                 // Otherwise we have to get them from the DependencyProvider
                 auto candidates = provider.get_candidates(package_name).value_or(Candidates());
@@ -73,13 +72,13 @@ public:
                 }
 
                 // Allocate an ID so we can refer to the candidates from everywhere
-                auto candidates_id = this->candidates.alloc(candidates);
-                package_name_to_candidates.insert_copy(package_name, candidates_id);
+                auto package_candidates_id = candidates.alloc(candidates);
+                package_name_to_candidates.insert_copy(package_name, package_candidates_id);
 
                 // Remove the in-flight request now that we inserted the result and notify any waiters
                 auto notifier = package_name_to_candidates_in_flight[package_name];
                 package_name_to_candidates_in_flight.erase(package_name);
-                notifier->notify(std::numeric_limits<std::size_t>::max());
+// TODO: check                notifier->notify(std::numeric_limits<std::size_t>::max());
 
                 return candidates[candidates_id];
             }
@@ -90,15 +89,15 @@ public:
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_matching_candidates(VersionSetId version_set_id) {
-        auto candidates = version_set_candidates.get(version_set_id);
-        if (candidates.has_value()) {
-            return candidates.value();
+        auto temp_candidates = version_set_candidates.get(version_set_id);
+        if (temp_candidates.has_value()) {
+            return temp_candidates.value();
         } else {
             auto package_name = provider.pool().resolve_version_set_package_name(version_set_id);
             auto version_set = provider.pool().resolve_version_set(version_set_id);
-            auto candidates = get_or_cache_candidates(package_name);
+            auto package_candidates = get_or_cache_candidates(package_name);
             std::vector<SolvableId> matching_candidates;
-            for (auto p : candidates->candidates) {
+            for (auto p : package_candidates.candidates) {
                 auto version = provider.pool().resolve_internal_solvable(p).solvable().inner();
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
@@ -164,7 +163,7 @@ private:
     // A mapping from package name to a list of candidates.
     Arena<CandidatesId, Candidates> candidates;
     FrozenCopyMap<NameId, CandidatesId> package_name_to_candidates;
-    std::map<NameId, Rc<Event>> package_name_to_candidates_in_flight;
+    std::map<NameId, std::shared_ptr<std::future<Candidates>>> package_name_to_candidates_in_flight;
 
     // A mapping of `VersionSetId` to the candidates that match that set.
     FrozenMap<VersionSetId, std::vector<SolvableId>> version_set_candidates;
@@ -174,7 +173,7 @@ private:
     FrozenMap<VersionSetId, std::vector<SolvableId>> version_set_inverse_candidates;
 
     // A mapping from a solvable to a list of dependencies
-    Arena<DependenciesId, Dependencies> solvable_dependencies;
+    Arena<DependenciesId, DependenciesVariant> solvable_dependencies;
     FrozenCopyMap<SolvableId, DependenciesId> solvable_to_dependencies;
 
     // A mapping that indicates that the dependencies for a particular solvable can cheaply be

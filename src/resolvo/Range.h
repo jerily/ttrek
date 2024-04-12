@@ -1,0 +1,331 @@
+// This file was originally taken from:
+// <https://raw.githubusercontent.com/pubgrub-rs/pubgrub/dev/src/range.rs>
+// SPDX-License-Identifier: MPL-2.0
+
+// Ranges are constraints defining sets of versions. They are a convenience struct that implements
+// [`VersionSet`] for any version type that implements [`Ord`] + [`Clone`].
+//
+// Concretely, those constraints correspond to any set of versions representable as the
+// concatenation, union, and complement of the ranges building blocks.
+//
+// Those building blocks are:
+//  - [empty()](Range::empty): the empty set
+//  - [full()](Range::full): the set of all possible versions
+//  - [singleton(v)](Range::singleton): the set containing only the version v
+//  - [higher_than(v)](Range::higher_than): the set defined by `v <= versions`
+//  - [strictly_higher_than(v)](Range::strictly_higher_than): the set defined by `v < versions`
+//  - [lower_than(v)](Range::lower_than): the set defined by `versions <= v`
+//  - [strictly_lower_than(v)](Range::strictly_lower_than): the set defined by `versions < v`
+//  - [between(v1, v2)](Range::between): the set defined by `v1 <= versions < v2`
+//
+// Ranges can be created from any type that implements [`Ord`] + [`Clone`].
+
+#include <utility>
+#include <variant>
+#include <vector>
+#include <stdexcept>
+#include <optional>
+
+template <typename V>
+struct Excluded {
+    V value;
+};
+
+template <typename V>
+struct Included {
+    V value;
+};
+
+struct Unbounded {};
+
+template <typename V>
+using BoundVariant = std::variant<Excluded<V>, Included<V>, Unbounded>;
+
+template <typename V>
+class Range {
+public:
+    using Interval = std::pair<BoundVariant<V>, BoundVariant<V>>;
+
+    Range() = default;
+
+    explicit Range(std::vector<Interval> segments) : segments(std::move(segments)) {}
+
+    // Empty set of versions
+    static Range empty() {
+        return Range();
+    }
+
+    // Set of all possible versions
+    static Range full() {
+        return Range({{Unbounded(), Unbounded()}});
+    }
+
+    // Set of all versions higher or equal to some version
+    static Range higher_than(const V &v) {
+        return Range({{Included<V>(v), Unbounded()}});
+    }
+
+    // Set of all versions higher to some version
+    static Range strictly_higher_than(const V &v) {
+        return Range({{Excluded<V>(v), Unbounded()}});
+    }
+
+    // Set of all versions lower to some version
+    static Range strictly_lower_than(const V &v) {
+        return Range({{Unbounded(), Excluded<V>(v)}});
+    }
+
+    // Set of all versions lower or equal to some version
+    static Range lower_than(const V &v) {
+        return Range({{Unbounded(), Included<V>(v)}});
+    }
+
+    // Set of versions greater or equal to `v1` but less than `v2`.
+    static Range between(const V &v1, const V &v2) {
+        return Range({{Included<V>(v1), Excluded<V>(v2)}});
+    }
+
+    // Set containing exactly one version
+    static Range singleton(const V &v) {
+        return Range({{Included<V>(v), Included<V>(v)}});
+    }
+
+    // Returns the complement of this Range.
+    Range complement() const {
+
+        if (segments.empty()) {
+            return full();
+        }
+
+        return std::visit([this](const auto &segment) {
+            auto [low, high] = segment;
+            using T_LOW = std::decay_t<decltype(low)>;
+            using T_HIGH = std::decay_t<decltype(high)>;
+
+            if constexpr (std::is_same_v<T_LOW, Unbounded> && std::is_same_v<T_HIGH, Unbounded>) {
+                return empty();
+            } else if constexpr (std::is_same_v<T_LOW, Included<V>> && std::is_same_v<T_HIGH, Unbounded>) {
+                return strictly_lower_than(low.value);
+            } else if constexpr (std::is_same_v<T_LOW, Excluded<V>> && std::is_same_v<T_HIGH, Unbounded>) {
+                return lower_than(low.value);
+            } else if constexpr (std::is_same_v<T_LOW, Unbounded> && std::is_same_v<T_HIGH, Included<V>>) {
+                return negate_segments(Excluded<V>(high.value),
+                                       std::vector<Interval>(segments.begin() + 1, segments.end()));
+            } else if constexpr (std::is_same_v<T_LOW, Unbounded> && std::is_same_v<T_HIGH, Excluded<V>>) {
+                return negate_segments(Included<V>(high.value),
+                                       std::vector<Interval>(segments.begin() + 1, segments.end()));
+            } else {
+                return negate_segments(Unbounded(), segments);
+            }
+        }, segments[0]);
+    }
+
+    // Helper function performing the negation of intervals in segments.
+    Range negate_segments(BoundVariant<V> start, std::vector<Interval> segments_to_negate) {
+        std::vector<Interval> complement_segments;
+        for (auto [v1, v2] : segments_to_negate) {
+            auto bound = std::visit([](const auto &v) {
+                if constexpr (std::is_same_v<decltype(v), Included<V>>) {
+                    return Excluded<V>(v.value);
+                } else if constexpr (std::is_same_v<decltype(v), Excluded<V>>) {
+                    return Included<V>(v.value);
+                } else {
+                    throw std::runtime_error("Unreachable");
+                }
+            }, v1);
+            complement_segments.push_back({start, bound});
+            start = std::visit([](const auto &v) {
+                if constexpr (std::is_same_v<decltype(v), Included<V>>) {
+                    return Excluded<V>(v.value);
+                } else if constexpr (std::is_same_v<decltype(v), Excluded<V>>) {
+                    return Included<V>(v.value);
+                } else {
+                    return Unbounded();
+                }
+            }, v2);
+        }
+        if (!std::holds_alternative<Unbounded>(start)) {
+            complement_segments.push_back({start, Unbounded()});
+        }
+
+        return Range(complement_segments);
+    }
+
+    // Convert to something that can be used with
+    // [BTreeMap::range](std::collections::BTreeMap::range).
+    // All versions contained in self, will be in the output,
+    // but there may be versions in the output that are not contained in self.
+    // Returns None if the range is empty.
+
+    std::optional<std::pair<BoundVariant<V>, BoundVariant<V>>> bounding_range() const {
+        if (segments.empty()) {
+            return std::nullopt;
+        }
+        auto start = segments.front().first;
+        auto end = segments.back().second;
+        return std::make_pair(start, end);
+    }
+
+    // Returns true if the this Range contains the specified value.
+    bool contains(const V &v) const {
+        for (auto [start, end]: segments) {
+            auto result = std::visit([&v](const auto &start_arg, const auto &end_arg) {
+                if constexpr (std::is_same_v<decltype(start_arg), Unbounded> && std::is_same_v<decltype(end_arg), Unbounded>) {
+                    return true;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Unbounded> && std::is_same_v<decltype(end_arg), Included<V>>) {
+                    return v <= end_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Unbounded> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
+                    return v < end_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Unbounded>) {
+                    return v >= start_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
+                    return v >= start_arg.value && v <= end_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
+                    return v >= start_arg.value && v < end_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Unbounded>) {
+                    return v > start_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
+                    return v > start_arg.value && v <= end_arg.value;
+                } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
+                    return v > start_arg.value && v < end_arg.value;
+                }
+            }, start, end);
+
+            if (result) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Computes the union of this `Range` and another.
+    Range union_with(const Range &other) const {
+        return complement().intersection(other.complement()).complement();
+    }
+
+    // Computes the intersection of two sets of versions.
+    Range intersection_with(const Range &other) const {
+        std::vector<Interval> result_segments;
+        auto left_iter = this.segments.cbegin();
+        auto right_iter = other.segments.cbegin();
+        while (left_iter != this.segments.cend() && right_iter != other.segments.cend()) {
+            auto [left_start, left_end] = *left_iter;
+            auto [right_start, right_end] = *right_iter;
+
+            auto start = std::visit([&left_start, &right_start](const auto &l, const auto &r) {
+                if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Included<V>) {
+                    return Included<V>(std::max(l.value, r.value));
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                    return Excluded<V>(std::max(l.value, r.value));
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                    if (l.value <= r.value) {
+                        return Excluded<V>(r.value);
+                    } else {
+                        return l;
+                    }
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>) {
+                    if (r.value < l.value) {
+                        return Included<V>(r.value);
+                    } else {
+                        return l;
+                    }
+                } else if constexpr (std::is_same_v<decltype(l), Unbounded> && std::is_same_v<decltype(r), Included<V>>) {
+                    return r;
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Unbounded>) {
+                    return l;
+                } else {
+                    throw std::runtime_error("Unreachable");
+                }
+            }, left_start, right_start);
+
+            auto end = std::visit([&left_end, &right_end](const auto &l, const auto &r) {
+                if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Included<V>>) {
+                    return Included<V>(std::min(l.value, r.value));
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                    return Excluded<V>(std::min(l.value, r.value));
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                    if (l.value >= r.value) {
+                        return Excluded<V>(r.value);
+                    } else {
+                        return l;
+                    }
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>) {
+                    if (r.value > l.value) {
+                        return Included<V>(r.value);
+                    } else {
+                        return l;
+                    }
+                } else if constexpr (std::is_same_v<decltype(l), Unbounded> && std::is_same_v<decltype(r), Included<V>) {
+                    return r;
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Unbounded>) {
+                    return l;
+                } else {
+                    throw std::runtime_error("Unreachable");
+                }
+            }, left_end, right_end);
+
+            if (valid_segment(start, end)) {
+                result_segments.push_back({start, end});
+            }
+
+            if (end == left_end) {
+                ++left_iter;
+            }
+
+            if (end == right_end) {
+                ++right_iter;
+            }
+        }
+        return Range(result_segments);
+    }
+
+private:
+    std::vector<Interval> segments;
+
+    void check_invariants() {
+        for (size_t i = 0; i < segments.size() - 1; ++i) {
+            auto [l_end, r_start] = std::make_pair(segments[i].second, segments[i + 1].first);
+            if (std::holds_alternative<Included<V>>(l_end) && std::holds_alternative<Included<V>>(r_start)) {
+                if (std::get<Included<V>>(l_end).value >= std::get<Included<V>>(r_start).value) {
+                    throw std::runtime_error("Invalid range");
+                }
+            } else if (std::holds_alternative<Included<V>>(l_end) && std::holds_alternative<Excluded<V>>(r_start)) {
+                if (std::get<Included<V>>(l_end).value >= std::get<Excluded<V>>(r_start).value) {
+                    throw std::runtime_error("Invalid range");
+                }
+            } else if (std::holds_alternative<Excluded<V>>(l_end) && std::holds_alternative<Included<V>>(r_start)) {
+                if (std::get<Excluded<V>>(l_end).value >= std::get<Included<V>>(r_start).value) {
+                    throw std::runtime_error("Invalid range");
+                }
+            } else if (std::holds_alternative<Excluded<V>>(l_end) && std::holds_alternative<Excluded<V>>(r_start)) {
+                if (std::get<Excluded<V>>(l_end).value > std::get<Excluded<V>>(r_start).value) {
+                    throw std::runtime_error("Invalid range");
+                }
+            } else {
+                throw std::runtime_error("Invalid range");
+            }
+        }
+        for (auto [s, e] : segments) {
+            if (!valid_segment(s, e)) {
+                throw std::runtime_error("Invalid range");
+            }
+        }
+    }
+
+    bool valid_segment(const BoundVariant<V> &start, const BoundVariant<V> &end) {
+        return std::visit([](const auto &start_arg, const auto &end_arg) {
+            if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
+                return start_arg.value <= end_arg.value;
+            } else if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
+                return start_arg.value < end_arg.value;
+            } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
+                return start_arg.value < end_arg.value;
+            } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
+                return start_arg.value < end_arg.value;
+            } else {
+                return true;
+            }
+        }, start, end);
+    }
+
+};
