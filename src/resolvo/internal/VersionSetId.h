@@ -1,3 +1,6 @@
+#ifndef VERSION_SET_ID_H
+#define VERSION_SET_ID_H
+
 #include <cstddef>
 #include <cstdint>
 #include <cassert>
@@ -15,6 +18,10 @@ public:
 
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value);
+    }
+
+    static VersionSetId from_usize(std::size_t x) {
+        return VersionSetId(static_cast<std::uint32_t>(x));
     }
 
     size_t operator()(const VersionSetId& vsid) const {
@@ -45,3 +52,5 @@ public:
         return value >= vsid.value;
     }
 };
+
+#endif // VERSION_SET_ID_H

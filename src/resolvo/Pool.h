@@ -15,6 +15,7 @@
 #include "internal/ClauseId.h"
 #include "internal/Arena.h"
 #include "Solvable.h"
+#include "internal/FrozenCopyMap.h"
 
 // A pool that stores data related to the available packages.
 //
@@ -22,22 +23,22 @@
 // remain valid for the lifetime of the pool. This allows inserting into the pool without requiring
 // a mutable reference to the pool.
 // This is what we refer to as `Frozen` data can be added but old data can never be removed or mutated.
-template<typename VS, typename N>
+template<typename VS, typename N = std::string>
 class Pool {
 private:
     Arena<NameId, N> package_names;
     Arena<StringId, std::string> strings;
-    std::unordered_map<std::pair<NameId, VS>, VersionSetId> version_set_to_id;
+    FrozenCopyMap<std::pair<NameId, VS>, VersionSetId> version_set_to_id;
 
 public:
-    Arena<ClauseId, InternalSolvable<typename VS::V>> solvables;
+    Arena<ClauseId, InternalSolvable<typename VS::ValueType>> solvables;
     std::unordered_map<N, NameId> names_to_ids;
     std::unordered_map<std::string, StringId> string_to_ids;
     Arena<VersionSetId, std::pair<NameId, VS>> version_sets;
 
     Pool() {
 // Initialize with a root solvable if needed
-        solvables.alloc(InternalSolvable<typename VS::V>::new_root());
+        solvables.alloc(InternalSolvable<typename VS::ValueType>::new_root());
     }
 
     static Pool default_pool() {
@@ -75,7 +76,7 @@ public:
         }
 
         NameId next_id = package_names.alloc(name);
-        names_to_ids[name] = next_id;
+        names_to_ids.insert(std::make_pair(name, next_id));
         return next_id;
     }
 
@@ -100,21 +101,21 @@ public:
     //
     // Unlike some of the other interning functions this function does *not* deduplicate any of the
     // inserted elements. A unique Id will be returned everytime this function is called.
-    ClauseId intern_solvable(NameId name_id, const typename VS::V &record) {
-        return solvables.alloc(InternalSolvable<typename VS::V>::new_solvable(name_id, record));
+    ClauseId intern_solvable(NameId name_id, const typename VS::ValueType &record) {
+        return solvables.alloc(InternalSolvable<typename VS::ValueType>::new_solvable(name_id, record));
     }
 
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    const Solvable<typename VS::V> &resolve_solvable(ClauseId id) const {
+    const Solvable<typename VS::ValueType> &resolve_solvable(ClauseId id) const {
         return resolve_internal_solvable(id).solvable;
     }
 
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    InternalSolvable<typename VS::V> &resolve_internal_solvable(ClauseId id) {
+    InternalSolvable<typename VS::ValueType> &resolve_internal_solvable(ClauseId id) {
         return solvables[id];
     }
 
@@ -128,12 +129,12 @@ public:
     // Version sets are deduplicated. This means that if the same version set is inserted twice
     // they will share the same [`VersionSetId`].
     VersionSetId intern_version_set(const NameId &package_name, const VS &version_set) {
-        auto optional_entry = version_set_to_id.findkey(std::make_pair<>(package_name, version_set));
-        if (optional_entry.has_value()) {
-            return optional_entry.value();
+        auto optional_id = version_set_to_id.get_copy(std::make_pair<>(package_name, version_set));
+        if (optional_id.has_value()) {
+            return optional_id.value();
         } else {
             auto id = version_sets.alloc(std::make_pair<>(package_name, version_set.clone()));
-            version_set_to_id.insert(std::make_pair<>(std::make_pair<>(package_name, version_set), id));
+            version_set_to_id.insert_copy(std::make_pair<>(package_name, version_set), id);
             return id;
         }
     }

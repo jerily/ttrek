@@ -7,6 +7,7 @@
 #include <string.h>
 #include "subCmdDecls.h"
 #include "minisat/Solver.h"
+#include "resolvo/tests/solver.h"
 #include <signal.h>
 
 using namespace Minisat;
@@ -27,6 +28,10 @@ static void SIGINT_exit(int signum) {
     _exit(1); }
 
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+    BundleBoxProvider provider;
+    provider.requirements({"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"});
+
+
     Solver S;
     solver = &S;
     // Use signal handlers that forcibly quit until the solver will be able to respond to

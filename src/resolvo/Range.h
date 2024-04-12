@@ -1,3 +1,6 @@
+#ifndef RANGE_h
+#define RANGE_h
+
 // This file was originally taken from:
 // <https://raw.githubusercontent.com/pubgrub-rs/pubgrub/dev/src/range.rs>
 // SPDX-License-Identifier: MPL-2.0
@@ -11,11 +14,11 @@
 // Those building blocks are:
 //  - [empty()](Range::empty): the empty set
 //  - [full()](Range::full): the set of all possible versions
-//  - [singleton(v)](Range::singleton): the set containing only the version v
-//  - [higher_than(v)](Range::higher_than): the set defined by `v <= versions`
-//  - [strictly_higher_than(v)](Range::strictly_higher_than): the set defined by `v < versions`
-//  - [lower_than(v)](Range::lower_than): the set defined by `versions <= v`
-//  - [strictly_lower_than(v)](Range::strictly_lower_than): the set defined by `versions < v`
+//  - [singleton{v}](Range::singleton): the set containing only the version v
+//  - [higher_than{v}](Range::higher_than): the set defined by `v <= versions`
+//  - [strictly_higher_than{v}](Range::strictly_higher_than): the set defined by `v < versions`
+//  - [lower_than{v}](Range::lower_than): the set defined by `versions <= v`
+//  - [strictly_lower_than{v}](Range::strictly_lower_than): the set defined by `versions < v`
 //  - [between(v1, v2)](Range::between): the set defined by `v1 <= versions < v2`
 //
 // Ranges can be created from any type that implements [`Ord`] + [`Clone`].
@@ -29,26 +32,68 @@
 template <typename V>
 struct Excluded {
     V value;
+
+    size_t hash() const {
+        return std::hash<V>{}(value);
+    }
+
+    bool operator==(const Excluded &other) const {
+        return value == other.value;
+    }
 };
 
 template <typename V>
 struct Included {
     V value;
+
+    size_t hash() const {
+        return std::hash<V>{}(value);
+    }
+
+    bool operator==(const Included &other) const {
+        return value == other.value;
+    }
 };
 
-struct Unbounded {};
+struct Unbounded {
+    size_t hash() const {
+        return 0;
+    }
+
+    bool operator==(const Unbounded &other) const {
+        return true;
+    }
+};
 
 template <typename V>
 using BoundVariant = std::variant<Excluded<V>, Included<V>, Unbounded>;
 
+
+namespace std {
+    template<typename V>
+    struct hash<BoundVariant<V>> {
+        std::size_t operator()(const BoundVariant<V> &bound) const {
+            return std::visit([](const auto &v) {
+                return v.hash();
+            }, bound);
+        }
+    };
+}
+
+template <typename V>
+using Interval = std::pair<BoundVariant<V>, BoundVariant<V>>;
+
 template <typename V>
 class Range {
 public:
-    using Interval = std::pair<BoundVariant<V>, BoundVariant<V>>;
+
+    using ValueType = V;
+
+    std::vector<Interval<V>> segments;
 
     Range() = default;
 
-    explicit Range(std::vector<Interval> segments) : segments(std::move(segments)) {}
+    explicit Range(std::vector<Interval<V>> segments) : segments(std::move(segments)) {}
 
     // Empty set of versions
     static Range empty() {
@@ -62,32 +107,32 @@ public:
 
     // Set of all versions higher or equal to some version
     static Range higher_than(const V &v) {
-        return Range({{Included<V>(v), Unbounded()}});
+        return Range({{Included<V>{v}, Unbounded()}});
     }
 
     // Set of all versions higher to some version
     static Range strictly_higher_than(const V &v) {
-        return Range({{Excluded<V>(v), Unbounded()}});
+        return Range({{Excluded<V>{v}, Unbounded()}});
     }
 
     // Set of all versions lower to some version
     static Range strictly_lower_than(const V &v) {
-        return Range({{Unbounded(), Excluded<V>(v)}});
+        return Range({{Unbounded(), Excluded<V>{v}}});
     }
 
     // Set of all versions lower or equal to some version
     static Range lower_than(const V &v) {
-        return Range({{Unbounded(), Included<V>(v)}});
+        return Range({{Unbounded(), Included<V>{v}}});
     }
 
     // Set of versions greater or equal to `v1` but less than `v2`.
-    static Range between(const V &v1, const V &v2) {
-        return Range({{Included<V>(v1), Excluded<V>(v2)}});
+    static Range between(V v1, V v2) {
+        return Range({{Included<V>{v1}, Excluded<V>{v2}}});
     }
 
     // Set containing exactly one version
     static Range singleton(const V &v) {
-        return Range({{Included<V>(v), Included<V>(v)}});
+        return Range({{Included<V>{v}, Included<V>{v}}});
     }
 
     // Returns the complement of this Range.
@@ -110,10 +155,10 @@ public:
                 return lower_than(low.value);
             } else if constexpr (std::is_same_v<T_LOW, Unbounded> && std::is_same_v<T_HIGH, Included<V>>) {
                 return negate_segments(Excluded<V>(high.value),
-                                       std::vector<Interval>(segments.begin() + 1, segments.end()));
+                                       std::vector<Interval<V>>(segments.begin() + 1, segments.end()));
             } else if constexpr (std::is_same_v<T_LOW, Unbounded> && std::is_same_v<T_HIGH, Excluded<V>>) {
                 return negate_segments(Included<V>(high.value),
-                                       std::vector<Interval>(segments.begin() + 1, segments.end()));
+                                       std::vector<Interval<V>>(segments.begin() + 1, segments.end()));
             } else {
                 return negate_segments(Unbounded(), segments);
             }
@@ -121,8 +166,8 @@ public:
     }
 
     // Helper function performing the negation of intervals in segments.
-    Range negate_segments(BoundVariant<V> start, std::vector<Interval> segments_to_negate) {
-        std::vector<Interval> complement_segments;
+    Range negate_segments(BoundVariant<V> start, std::vector<Interval<V>> segments_to_negate) {
+        std::vector<Interval<V>> complement_segments;
         for (auto [v1, v2] : segments_to_negate) {
             auto bound = std::visit([](const auto &v) {
                 if constexpr (std::is_same_v<decltype(v), Included<V>>) {
@@ -205,25 +250,25 @@ public:
 
     // Computes the intersection of two sets of versions.
     Range intersection_with(const Range &other) const {
-        std::vector<Interval> result_segments;
-        auto left_iter = this.segments.cbegin();
+        std::vector<Interval<V>> result_segments;
+        auto left_iter = segments.cbegin();
         auto right_iter = other.segments.cbegin();
-        while (left_iter != this.segments.cend() && right_iter != other.segments.cend()) {
+        while (left_iter != segments.cend() && right_iter != other.segments.cend()) {
             auto [left_start, left_end] = *left_iter;
             auto [right_start, right_end] = *right_iter;
 
             auto start = std::visit([&left_start, &right_start](const auto &l, const auto &r) {
-                if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Included<V>) {
+                if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Included<V>>) {
                     return Included<V>(std::max(l.value, r.value));
-                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>>) {
                     return Excluded<V>(std::max(l.value, r.value));
-                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>>) {
                     if (l.value <= r.value) {
                         return Excluded<V>(r.value);
                     } else {
                         return l;
                     }
-                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>>) {
                     if (r.value < l.value) {
                         return Included<V>(r.value);
                     } else {
@@ -241,21 +286,21 @@ public:
             auto end = std::visit([&left_end, &right_end](const auto &l, const auto &r) {
                 if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Included<V>>) {
                     return Included<V>(std::min(l.value, r.value));
-                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Excluded<V>>) {
                     return Excluded<V>(std::min(l.value, r.value));
-                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Excluded<V>>) {
                     if (l.value >= r.value) {
                         return Excluded<V>(r.value);
                     } else {
                         return l;
                     }
-                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Excluded<V>> && std::is_same_v<decltype(r), Included<V>>) {
                     if (r.value > l.value) {
                         return Included<V>(r.value);
                     } else {
                         return l;
                     }
-                } else if constexpr (std::is_same_v<decltype(l), Unbounded> && std::is_same_v<decltype(r), Included<V>) {
+                } else if constexpr (std::is_same_v<decltype(l), Unbounded> && std::is_same_v<decltype(r), Included<V>>) {
                     return r;
                 } else if constexpr (std::is_same_v<decltype(l), Included<V>> && std::is_same_v<decltype(r), Unbounded>) {
                     return l;
@@ -279,8 +324,15 @@ public:
         return Range(result_segments);
     }
 
+    Range clone() const {
+        return Range(segments);
+    }
+
+    bool operator==(const Range &other) const {
+        return segments == other.segments;
+    }
+
 private:
-    std::vector<Interval> segments;
 
     void check_invariants() {
         for (size_t i = 0; i < segments.size() - 1; ++i) {
@@ -329,3 +381,23 @@ private:
     }
 
 };
+
+namespace std {
+    template<typename V>
+    struct hash<Range<V>> {
+        std::size_t operator()(const Range<V> &range) const {
+            std::size_t seed = 0;
+            for (auto [start, end] : range.segments) {
+                seed ^= std::visit([](const auto &start_arg, const auto &end_arg) {
+                    std::size_t seed = 0;
+                    seed ^= std::hash<BoundVariant<V>>{}(start_arg) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                    seed ^= std::hash<BoundVariant<V>>{}(end_arg) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                    return seed;
+                }, start, end);
+            }
+            return seed;
+        }
+    };
+}
+
+#endif // RANGE_H

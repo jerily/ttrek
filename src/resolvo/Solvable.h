@@ -55,6 +55,10 @@ public:
     InternalSolvable(NameId name, const V &record)
             : type(SolvableInnerType::Package), package(std::make_unique<Solvable<V>>(record, name)) {}
 
+    static InternalSolvable new_root() {
+        return InternalSolvable();
+    }
+
 // Check if the solvable is root
     bool is_root() const {
         return type == SolvableInnerType::Root;

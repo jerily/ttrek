@@ -15,4 +15,8 @@ public:
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value);
     }
+
+    static StringId from_usize(std::size_t x) {
+        return StringId(static_cast<std::uint32_t>(x));
+    }
 };

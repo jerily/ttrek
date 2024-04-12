@@ -60,6 +60,10 @@ public:
         return static_cast<std::size_t>(value_);
     }
 
+    static SolvableId from_usize(std::size_t x) {
+        return SolvableId(static_cast<std::uint32_t>(x));
+    }
+
     struct Hash {
         std::size_t operator()(const SolvableId& id) const {
             return std::hash<uint32_t>{}(id.value_);

@@ -14,6 +14,9 @@ public:
         return static_cast<std::size_t>(value);
     }
 
+    static DependenciesId from_usize(std::size_t x) {
+        return DependenciesId(static_cast<std::uint32_t>(x));
+    }
 };
 
 #endif // DEPENDENCIES_ID_H

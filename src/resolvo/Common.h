@@ -70,3 +70,15 @@ namespace Dependencies {
 }
 
 using DependenciesVariant = std::variant<Dependencies::Known, Dependencies::Unknown>;
+
+namespace std {
+    template <typename T1, typename T2>
+    struct hash<std::pair<T1, T2>> {
+        std::size_t operator()(const std::pair<T1, T2>& pair) const {
+            auto hash1 = std::hash<T1>{}(pair.first);
+            auto hash2 = std::hash<T2>{}(pair.second);
+            // Combine the two hash values
+            return hash1 ^ (hash2 << 1);
+        }
+    };
+}

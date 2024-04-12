@@ -35,6 +35,10 @@ public:
         return static_cast<std::size_t>(value_);
     }
 
+    static ClauseId from_usize(std::size_t x) {
+        return ClauseId(static_cast<std::uint32_t>(x));
+    }
+
     bool operator==(const ClauseId& other) const {
         return value_ == other.value_;
     }

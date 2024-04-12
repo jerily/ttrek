@@ -14,6 +14,10 @@ public:
         return static_cast<std::size_t>(value);
     }
 
+    static CandidatesId from_usize(std::size_t x) {
+        return CandidatesId(static_cast<std::uint32_t>(x));
+    }
+
 };
 
 #endif // CANDIDATESID_H
