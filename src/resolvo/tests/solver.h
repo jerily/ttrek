@@ -93,6 +93,12 @@ struct Spec {
     }
 };
 
+struct BundleBoxPackageDependencies {
+    std::vector<Spec> dependencies;
+    std::vector<Spec> constrains;
+
+};
+
 //struct BundleBoxProvider {
 //    pool: Rc<Pool<Range<Pack>>>,
 //    packages: IndexMap<String, IndexMap<Pack, BundleBoxPackageDependencies>>,
@@ -115,7 +121,7 @@ class BundleBoxProvider {
 public:
 
     Pool<Range<Pack>> pool;
-    std::unordered_map<std::string, std::unordered_map<Pack, KnownDependencies>> packages;
+    std::unordered_map<std::string, std::unordered_map<Pack, BundleBoxPackageDependencies>> packages;
     std::unordered_map<std::string, Pack> favored;
     std::unordered_map<std::string, Pack> locked;
     std::unordered_map<std::string, std::unordered_map<Pack, std::string>> excluded;
