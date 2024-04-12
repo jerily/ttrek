@@ -8,6 +8,7 @@
 #include <limits>
 #include "ArenaId.h"
 #include "../Pool.h"
+#include "../DisplaySolvable.h"
 
 class SolvableId: ArenaId {
 public:

@@ -1,3 +1,6 @@
+#ifndef STRING_ID_H
+#define STRING_ID_H
+
 #include <cstddef>
 #include <cstdint>
 #include <cassert>
@@ -20,3 +23,5 @@ public:
         return StringId(static_cast<std::uint32_t>(x));
     }
 };
+
+#endif // STRING_ID_H
