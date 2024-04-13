@@ -295,7 +295,7 @@ public:
                     // Check the assumption that no decision has been made about any of the solvables.
                     for (auto &candidate: candidates) {
                         // "a decision has been made about a candidate of a package that was not properly added yet."
-                        assert(decision_tracker_.assigned_value(candidate).has_value());
+                        assert(!decision_tracker_.assigned_value(candidate).has_value());
                     }
 
                     // Each candidate gets a clause to disallow other candidates.
