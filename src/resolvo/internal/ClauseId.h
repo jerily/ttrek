@@ -1,5 +1,5 @@
-#ifndef CLAUSEID_H
-#define CLAUSEID_H
+#ifndef CLAUSE_ID_H
+#define CLAUSE_ID_H
 
 #include <cstddef>
 #include <cstdint>
@@ -47,15 +47,18 @@ public:
         return value_ != other.value_;
     }
 
-    struct Hash {
-        std::size_t operator()(const ClauseId& id) const {
-            return std::hash<uint32_t>{}(id.value_);
-        }
-    };
-
 private:
     std::uint32_t value_;
 
 };
 
-#endif // CLAUSEID_H
+namespace std {
+    template <>
+    struct hash<ClauseId> {
+        std::size_t operator()(const ClauseId& id) const {
+            return std::hash<std::uint32_t>{}(id.to_usize());
+        }
+    };
+}
+
+#endif // CLAUSE_ID_H

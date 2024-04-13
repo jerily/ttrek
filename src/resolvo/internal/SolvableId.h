@@ -7,8 +7,6 @@
 #include <iostream>
 #include <limits>
 #include "ArenaId.h"
-#include "../Pool.h"
-#include "../DisplaySolvable.h"
 
 class SolvableId: ArenaId {
 public:
@@ -29,12 +27,6 @@ public:
 
     bool is_null() const {
         return value_ == std::numeric_limits<uint32_t>::max();
-    }
-
-    // Example function that returns a displayable object
-    template<typename VS, typename N>
-    DisplaySolvable<VS, N> display(const Pool<VS, N>& pool) const {
-        return pool.resolve_internal_solvable(*this).display(pool);
     }
 
     bool operator==(const SolvableId& other) const {
@@ -65,14 +57,19 @@ public:
         return SolvableId(static_cast<std::uint32_t>(x));
     }
 
-    struct Hash {
-        std::size_t operator()(const SolvableId& id) const {
-            return std::hash<uint32_t>{}(id.value_);
-        }
-    };
-
 private:
     uint32_t value_;
 };
+
+
+namespace std {
+    template<>
+    struct hash<SolvableId> {
+        std::size_t operator()(const SolvableId& solvable_id) const {
+            return std::hash<std::uint32_t>()(solvable_id.to_usize());
+        }
+    };
+}
+
 
 #endif // SOLVABLE_ID_H

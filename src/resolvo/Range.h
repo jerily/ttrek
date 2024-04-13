@@ -234,6 +234,7 @@ public:
                 } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
                     return v > start_arg.value && v < end_arg.value;
                 }
+                return false;
             }, start, end);
 
             if (result) {

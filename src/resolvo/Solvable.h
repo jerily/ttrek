@@ -5,11 +5,11 @@
 #include <string>
 #include <iostream>
 #include <cassert>
+#include <utility>
+#include <any>
 #include "internal/StringId.h"
 #include "internal/NameId.h"
 #include "internal/VersionSetId.h"
-#include "internal/SolvableId.h"
-#include "Pool.h"
 
 // The Solvable class template represents a single candidate of a package
 template<typename V>
@@ -20,10 +20,10 @@ private:
 
 public:
 // Constructor
-    Solvable(const V &record, NameId nameId) : inner(record), name(nameId) {}
+    Solvable(const V &record, NameId nameId) : inner(record), name(std::move(nameId)) {}
 
 // Accessor for the record
-    const V &get_inner() const {
+    V get_inner() const {
         return inner;
     }
 
@@ -34,44 +34,60 @@ public:
 };
 
 // The inner representation of a solvable, which can be either a package or the root solvable
-enum class SolvableInnerType {
-    Root,
-    Package
+struct Root {};
+
+template <typename V>
+struct Package {
+    Solvable<V> solvable;
 };
+
+template <typename V>
+using SolvableInnerVariant = std::variant<Root, Package<V>>;
 
 // The InternalSolvable class template represents a package that can be installed
 template<typename V>
 class InternalSolvable {
 private:
-
-    SolvableInnerType type;
-    std::unique_ptr<Solvable<V>> package;
+    SolvableInnerVariant<V> inner;
 
 public:
-// Constructor for root solvable
-    InternalSolvable() : type(SolvableInnerType::Root) {}
 
-// Constructor for package solvable
-    InternalSolvable(NameId name, const V &record)
-            : type(SolvableInnerType::Package), package(std::make_unique<Solvable<V>>(record, name)) {}
+    InternalSolvable(SolvableInnerVariant<V> inner) : inner(std::move(inner)) {}
 
     static InternalSolvable new_root() {
-        return InternalSolvable();
+        return InternalSolvable(Root());
+    }
+
+    // new_solvable
+    static InternalSolvable new_solvable(const NameId &name_id, V record) {
+        return InternalSolvable(Package<V>{Solvable<V>(record, name_id)});
     }
 
 // Check if the solvable is root
     bool is_root() const {
-        return type == SolvableInnerType::Root;
+        return std::holds_alternative<Root>(inner);
     }
 
 // Get the solvable if it's not root
-    const Solvable<V> *get_solvable() const {
-        assert(type == SolvableInnerType::Package);
-        return package.get();
+    std::optional<Solvable<V>> get_solvable() const {
+        return std::visit([](auto &&arg) -> std::optional<Solvable<V>> {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, Package<V>>) {
+                auto package = std::any_cast<Solvable<V>>(arg);
+                return std::make_optional(package.solvable);
+            } else {
+                return std::nullopt;
+            }
+        }, inner);
     }
 
-    SolvableInnerType get_type() const {
-        return type;
+    // Get the solvable if it's not root
+    Solvable<V> get_solvable_unchecked() const {
+        return std::get<Package<V>>(inner).solvable;
+    }
+
+    SolvableInnerVariant<V> get_inner() const {
+        return inner;
     }
 };
 

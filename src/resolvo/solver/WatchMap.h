@@ -15,38 +15,38 @@ private:
 public:
     WatchMap() = default;
 
-    void start_watching(const ClauseState &clause, const ClauseId &clauseId) {
-        for (size_t watch_index = 0; watch_index < clause.watched_literals.size(); ++watch_index) {
-            SolvableId watchedSolvable = clause.watched_literals[watch_index];
+    void start_watching(ClauseState &clause, const ClauseId &clauseId) {
+        for (size_t watch_index = 0; watch_index < clause.watched_literals_.size(); ++watch_index) {
+            SolvableId watchedSolvable = clause.watched_literals_[watch_index];
             ClauseId alreadyWatching = first_clause_watching_solvable(watchedSolvable);
             clause.link_to_clause(watch_index, alreadyWatching);
             watch_solvable(watchedSolvable, clauseId);
         }
     }
 
-    void update_watched(ClauseState *predecessorClause, ClauseState &clause, ClauseId clauseId, size_t watchIndex,
+    void update_watched(std::optional<ClauseState> &predecessorClause, ClauseState &clause, ClauseId clauseId, size_t watchIndex,
                         const SolvableId &previousWatch, const SolvableId &newWatch) {
         // Remove this clause from its current place in the linked list
-        if (predecessorClause != nullptr) {
+        if (predecessorClause.has_value()) {
             // Unlink the clause
-            predecessorClause->unlink_clause(&clause, previousWatch, watchIndex);
+            predecessorClause.value().unlink_clause(&clause, previousWatch, watchIndex);
         } else {
             // This was the first clause in the chain
-            map[previousWatch] = clause.get_linked_clause(watchIndex);
+            map.insert(std::make_pair(previousWatch, clause.get_linked_clause(watchIndex)));
         }
 
         // Set the new watch
-        clause.watched_literals[watchIndex] = newWatch;
-        clause.link_to_clause(watchIndex, map[newWatch]);
-        map[newWatch] = clauseId;
+        clause.watched_literals_[watchIndex] = newWatch;
+        clause.link_to_clause(watchIndex, map.at(newWatch));
+        map.insert(std::make_pair(newWatch, clauseId));
     }
 
-    ClauseId first_clause_watching_solvable(SolvableId watchedSolvable) {
-        return map.count(watchedSolvable) ? map[watchedSolvable] : ClauseId::null();
+    ClauseId first_clause_watching_solvable(const SolvableId& watchedSolvable) {
+        return map.count(watchedSolvable) ? map.at(watchedSolvable) : ClauseId::null();
     }
 
-    void watch_solvable(SolvableId watchedSolvable, ClauseId id) {
-        map[watchedSolvable] = id;
+    void watch_solvable(const SolvableId& watchedSolvable, ClauseId id) {
+        map.insert(std::make_pair(watchedSolvable, id));
     }
 };
 

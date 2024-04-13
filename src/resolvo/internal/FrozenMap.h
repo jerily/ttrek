@@ -18,7 +18,7 @@ public:
         map->insert(std::make_pair(key, value));
     }
 
-    std::optional<V> get(const K& key) {
+    std::optional<V> get(const K& key) const {
         auto it = map->find(key);
         if (it != map->end()) {
             return it->second;

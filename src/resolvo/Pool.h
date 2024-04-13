@@ -14,8 +14,8 @@
 #include "internal/VersionSetId.h"
 #include "internal/ClauseId.h"
 #include "internal/Arena.h"
-#include "Solvable.h"
 #include "internal/FrozenCopyMap.h"
+#include "Solvable.h"
 
 // A pool that stores data related to the available packages.
 //
@@ -31,7 +31,7 @@ private:
     FrozenCopyMap<std::pair<NameId, VS>, VersionSetId> version_set_to_id;
 
 public:
-    Arena<ClauseId, InternalSolvable<typename VS::ValueType>> solvables;
+    Arena<SolvableId, InternalSolvable<typename VS::ValueType>> solvables;
     std::unordered_map<N, NameId> names_to_ids;
     std::unordered_map<std::string, StringId> string_to_ids;
     Arena<VersionSetId, std::pair<NameId, VS>> version_sets;
@@ -54,7 +54,7 @@ public:
         }
 
         StringId id = strings.alloc(name);
-        string_to_ids[name] = id;
+        string_to_ids.insert(std::make_pair(name, id));
         return id;
     }
 
@@ -101,21 +101,21 @@ public:
     //
     // Unlike some of the other interning functions this function does *not* deduplicate any of the
     // inserted elements. A unique Id will be returned everytime this function is called.
-    ClauseId intern_solvable(NameId name_id, const typename VS::ValueType &record) {
+    SolvableId intern_solvable(NameId name_id, const typename VS::ValueType &record) {
         return solvables.alloc(InternalSolvable<typename VS::ValueType>::new_solvable(name_id, record));
     }
 
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    const Solvable<typename VS::ValueType> &resolve_solvable(ClauseId id) const {
-        return resolve_internal_solvable(id).solvable;
+    const Solvable<typename VS::ValueType>& resolve_solvable(const SolvableId& id) const {
+        return resolve_internal_solvable(id).get_solvable_unchecked();
     }
 
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    InternalSolvable<typename VS::ValueType> &resolve_internal_solvable(ClauseId id) {
+    InternalSolvable<typename VS::ValueType> resolve_internal_solvable(const SolvableId& id) const {
         return solvables[id];
     }
 

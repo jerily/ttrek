@@ -18,6 +18,19 @@ public:
     static LearntClauseId from_usize(std::size_t x) {
         return LearntClauseId(static_cast<std::uint32_t>(x));
     }
+
+    bool operator==(const LearntClauseId& other) const {
+        return value == other.value;
+    }
 };
+
+namespace std {
+    template <>
+    struct hash<LearntClauseId> {
+        std::size_t operator()(const LearntClauseId& id) const {
+            return std::hash<std::uint32_t>{}(id.to_usize());
+        }
+    };
+}
 
 #endif // LEARNTCLAUSEID_H

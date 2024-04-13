@@ -1,3 +1,6 @@
+#ifndef DECISION_MAP_H
+#define DECISION_MAP_H
+
 #include <vector>
 #include <iostream>
 #include <cmath>
@@ -78,3 +81,5 @@ private:
     std::vector<DecisionAndLevel> map_;
 };
 
+
+#endif // DECISION_MAP_H

@@ -1,11 +1,17 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 #include <cstddef>
 #include <vector>
 #include <variant>
+#include <optional>
 #include "internal/SolvableId.h"
+#include "internal/StringId.h"
+#include "Pool.h"
 
 // A list of candidate solvables for a specific package. This is returned from
 // [`DependencyProvider::get_candidates`].
-struct Candidates {
+struct PackageCandidates {
     // A list of all solvables for the package.
     std::vector<SolvableId> candidates;
 
@@ -82,3 +88,34 @@ namespace std {
         }
     };
 }
+
+
+template<typename VS, typename N = std::string>
+class DependencyProvider {
+public:
+    // Returns the `Pool` that is used to allocate the Ids returned from this instance
+    virtual const Pool<VS, N>& get_pool() = 0;
+
+    // Sort the specified solvables based on which solvable to try first. The solver will
+    // iteratively try to select the highest version. If a conflict is found with the highest
+    // version the next version is tried. This continues until a solution is found.
+    virtual void sort_candidates(std::vector<SolvableId>& solvables) = 0;
+
+    // Obtains a list of solvables that should be considered when a package with the given name is
+    // requested.
+    virtual std::optional<PackageCandidates> get_candidates(NameId name) = 0;
+
+    // Returns the dependencies for the specified solvable.
+    virtual DependenciesVariant get_dependencies(SolvableId solvable) = 0;
+
+    // Whether the solver should stop the dependency resolution algorithm.
+    //
+    // This method gets called at the beginning of each unit propagation round and before
+    // potentially blocking operations (like [Self::get_dependencies] and [Self::get_candidates]).
+    // If it returns `Some(...)`, the solver will stop and return
+    // [UnsolvableOrCancelled::Cancelled].
+    virtual std::optional<std::string> should_cancel_with_value() = 0;
+
+};
+
+#endif // COMMON_H

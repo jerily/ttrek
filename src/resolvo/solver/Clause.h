@@ -1,3 +1,6 @@
+#ifndef CLAUSE_H
+#define CLAUSE_H
+
 #include <cassert>
 #include <utility>
 #include <vector>
@@ -21,6 +24,7 @@
 #include "../internal/FrozenCopyMap.h"
 #include "DecisionTracker.h"
 #include "DecisionMap.h"
+#include "../internal/FrozenMap.h"
 
 
 struct Literal {
@@ -381,7 +385,7 @@ public:
 
     std::optional<SolvableId> next_unwatched_variable(
             const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
-            const std::map<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
+            const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
             const DecisionMap &decision_map
     ) const {
         auto can_watch = [&](const Literal& solvable_lit) {
@@ -416,8 +420,13 @@ public:
                     return std::optional<SolvableId>(parent);
                 }
 
-                auto &candidates = version_set_to_sorted_candidates.at(version_set_id);
-                auto it = std::find_if(candidates.begin(), candidates.end(), [&](const SolvableId &candidate) {
+                auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
+                if (!optional_candidates.has_value()) {
+                    return std::optional<SolvableId>(std::nullopt);
+                }
+
+                auto &candidates = optional_candidates.value();
+                auto it = std::find_if(candidates.cbegin(), candidates.cend(), [&](const SolvableId &candidate) {
                     return can_watch(Literal(candidate, false));
                 });
 
@@ -453,7 +462,7 @@ public:
     // Visit literals in the clause
     void visit_literals(
             const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
-            const std::map<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
+            const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
             const VisitFunction &visit
     ) const {
         std::visit([&visit, &learnt_clauses, &version_set_to_sorted_candidates](const auto &arg) {
@@ -472,8 +481,11 @@ public:
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
                 auto clause_variant = std::any_cast<Clause::Requires>(arg);
                 visit(Literal(clause_variant.parent, true));
-                for (const SolvableId &id: version_set_to_sorted_candidates.at(clause_variant.requirement)) {
-                    visit(Literal(id, false));
+                auto optional_sorted_candidates = version_set_to_sorted_candidates.get(clause_variant.requirement);
+                if (optional_sorted_candidates.has_value()) {
+                    for (const SolvableId &id: optional_sorted_candidates.value()) {
+                        visit(Literal(id, false));
+                    }
                 }
             } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
                 auto clause_variant = std::any_cast<Clause::Constrains>(arg);
@@ -516,3 +528,5 @@ private:
     ClauseVariant kind_;
 };
 
+
+#endif // CLAUSE_H

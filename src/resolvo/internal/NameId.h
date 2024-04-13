@@ -26,6 +26,10 @@ public:
     bool operator==(const NameId& other) const {
         return value == other.value;
     }
+
+    bool operator<(const NameId& other) const {
+        return value < other.value;
+    }
 };
 
 namespace std {

@@ -6,8 +6,11 @@
 #include "../Common.h"
 #include "../Range.h"
 #include "../Pool.h"
+#include "../DisplaySolvable.h"
+#include "../solver/Solver.h"
 #include <cstdint>
 #include <unordered_set>
+#include <sstream>
 
 // Let's define our own packaging version system and dependency specification.
 // This is a very simple version system, where a package is identified by a name and a version
@@ -45,6 +48,11 @@ struct Pack {
 
     bool operator==(const Pack &other) const {
         return version == other.version;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Pack &pack) {
+        os << "Pack(" << pack.version << ")";
+        return os;
     }
 };
 
@@ -99,24 +107,6 @@ struct BundleBoxPackageDependencies {
 
 };
 
-//struct BundleBoxProvider {
-//    pool: Rc<Pool<Range<Pack>>>,
-//    packages: IndexMap<String, IndexMap<Pack, BundleBoxPackageDependencies>>,
-//    favored: HashMap<String, Pack>,
-//    locked: HashMap<String, Pack>,
-//    excluded: HashMap<String, HashMap<Pack, String>>,
-//    cancel_solving: Cell<bool>,
-//    // TODO: simplify?
-//    concurrent_requests: Arc<AtomicUsize>,
-//    concurrent_requests_max: Rc<Cell<usize>>,
-//    sleep_before_return: bool,
-//
-//    // A mapping of packages that we have requested candidates for. This way we can keep track of duplicate requests.
-//    requested_candidates: RefCell<HashSet<NameId>>,
-//    requested_dependencies: RefCell<HashSet<SolvableId>>,
-//}
-// in c++ it  should be:
-
 class BundleBoxProvider {
 public:
 
@@ -142,8 +132,8 @@ public:
         return version_set_ids;
     }
 
-    void from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &packages) {
-        for (const auto &package : packages) {
+    void from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &p_packages) {
+        for (const auto &package : p_packages) {
             auto name = std::get<0>(package);
             auto version = std::get<1>(package);
             auto deps = std::get<2>(package);
@@ -177,9 +167,129 @@ public:
         packages.at(package_name).insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
     }
 
+    const Pool<Range<Pack>>& get_pool() {
+        return pool;
+    }
+
+    void sort_candidates(std::vector<SolvableId> &solvables) {
+        std::sort(solvables.begin(), solvables.end(), [this](const SolvableId &a, const SolvableId &b) {
+            auto a_pack = pool.resolve_solvable(a).get_inner();
+            auto b_pack = pool.resolve_solvable(b).get_inner();
+            return b_pack.version - a_pack.version;
+        });
+    }
+
+    std::optional<PackageCandidates> get_candidates(const NameId& name_id) {
+        // TODO
+        auto package_name = pool.resolve_package_name(name_id);
+        if (packages.find(package_name) == packages.end()) {
+            return std::nullopt;
+        }
+
+        auto package = packages.at(package_name);
+        PackageCandidates candidates;
+
+
+        auto favored_pack = favored.at(package_name);
+        auto locked_pack = locked.at(package_name);
+        auto excluded_packs = excluded.at(package_name);
+
+        for (const auto &[pack, _] : package) {
+            auto solvable = pool.intern_solvable(name_id, pack);
+            if (favored_pack == pack) {
+                candidates.favored = std::optional(solvable);
+            }
+            if (locked_pack == pack) {
+                candidates.locked = std::optional(solvable);
+            }
+
+            if (excluded_packs.find(pack) != excluded_packs.end()) {
+                candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.at(pack)));
+            }
+        }
+        return candidates;
+    }
+
+    DependenciesVariant get_dependencies(const SolvableId &solvable) {
+        // TODO
+        auto candidate = pool.resolve_solvable(solvable);
+        auto package_name = pool.resolve_package_name(candidate.get_name_id());
+        auto pack = candidate.get_inner();
+
+        if (pack.cancel_during_get_dependencies) {
+            cancel_solving = true;
+            return Dependencies::Unknown{pool.intern_string("cancelled")};
+        }
+
+        if (pack.unknown_deps) {
+            return Dependencies::Unknown{pool.intern_string("could not retrieve deps")};
+        }
+
+        if (packages.find(package_name) == packages.end()) {
+            return Dependencies::Known{KnownDependencies{}};
+        }
+
+        auto deps = packages.at(package_name).at(pack);
+        KnownDependencies result;
+        for (const auto &req : deps.dependencies) {
+            auto dep_name = pool.intern_package_name(req.name);
+            auto dep_spec = pool.intern_version_set(dep_name, req.versions);
+            result.requirements.push_back(dep_spec);
+        }
+
+        for (const auto &req : deps.constrains) {
+            auto dep_name = pool.intern_package_name(req.name);
+            auto dep_spec = pool.intern_version_set(dep_name, req.versions);
+            result.constrains.push_back(dep_spec);
+        }
+
+        return Dependencies::Known{result};
+    }
+
+    std::optional<std::string> should_cancel_with_value() {
+        if (cancel_solving) {
+            return std::optional("cancelled!");
+        } else {
+            return std::nullopt;
+        }
+    }
+
 private:
     std::vector<Spec> dependencies;
     std::vector<Spec> constrains;
 };
+
+
+// Create a string from a [`Transaction`]
+std::string transaction_to_string(BundleBoxProvider &provider, const std::vector<SolvableId> &solvables) {
+    std::stringstream output;
+    for (const auto &solvable : solvables) {
+        auto display_solvable = DisplaySolvable(provider.get_pool(), provider.get_pool().resolve_internal_solvable(solvable));
+        output << display_solvable << "\n";
+    }
+    return output.str();
+}
+
+std::string solve_unsat(BundleBoxProvider &provider, const std::vector<std::string> &specs) {
+    auto requirements = provider.requirements(specs);
+    auto pool = provider.get_pool();
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [steps, err] = solver.solve(requirements);
+    if (err.has_value()) {
+        auto problem = err.value();
+// TODO:        auto graph = problem.graph(solver);
+        std::stringstream output;
+        output << "UNSOLVABLE:\n";
+// TODO:        graph.graphviz(output, pool, true);
+        output << "\n";
+        // TODO
+//        auto error_message = problem.display_user_friendly(solver, pool, DefaultSolvableDisplay());
+//        return error_message.to_string();
+        return "error message";
+    } else {
+        auto reason = provider.should_cancel_with_value();
+        return reason.value();
+    }
+}
 
 #endif // SOLVER_H

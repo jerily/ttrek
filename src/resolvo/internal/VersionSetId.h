@@ -53,4 +53,14 @@ public:
     }
 };
 
+
+namespace std {
+    template<>
+    struct hash<VersionSetId> {
+        std::size_t operator()(const VersionSetId& version_set_id) const {
+            return std::hash<std::uint32_t>()(version_set_id.to_usize());
+        }
+    };
+}
+
 #endif // VERSION_SET_ID_H

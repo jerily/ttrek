@@ -22,6 +22,8 @@ class SolverCache {
 public:
     D provider;
 
+//    std::pair<VS, N> _data;
+
     // A mapping of `VersionSetId` to a sorted list of candidates that match that set.
     FrozenMap<VersionSetId, std::vector<SolvableId>> version_set_to_sorted_candidates;
 
@@ -29,18 +31,18 @@ public:
 
     // Returns a reference to the pool used by the solver
     const Pool<VS, N>& get_pool() {
-        return provider.pool();
+        return provider.get_pool();
     }
 
     // Returns the candidates for the package with the given name. This will either ask the
     // [`DependencyProvider`] for the entries or a cached value.
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
-    const Candidates& get_or_cache_candidates(NameId package_name) {
+    const PackageCandidates& get_or_cache_candidates(NameId package_name) {
         // If we already have the candidates for this package cached we can simply return
-        auto candidates_id = package_name_to_candidates.get_copy(package_name);
-        if (candidates_id.has_value()) {
-            return candidates[candidates_id.value()];
+        auto optional_candidates_id = package_name_to_candidates.get_copy(package_name);
+        if (optional_candidates_id.has_value()) {
+            return candidates[optional_candidates_id.value()];
         } else {
             // Since getting the candidates from the provider is a potentially blocking
             // operation, we want to check beforehand whether we should cancel the solving
@@ -57,13 +59,13 @@ public:
                 return candidates[package_name_to_candidates.get_copy(package_name).value()];
             } else {
                 // Prepare an in-flight notifier for other requests coming in.
-                package_name_to_candidates_in_flight[package_name] = std::make_shared<std::future<Candidates>>();
+                package_name_to_candidates_in_flight[package_name] = std::make_shared<std::future<PackageCandidates>>();
 
                 // Otherwise we have to get them from the DependencyProvider
-                auto candidates = provider.get_candidates(package_name).value_or(Candidates());
+                auto package_candidates = provider.get_candidates(package_name).value_or(PackageCandidates());
                 // Store information about which solvables dependency information is easy to
                 // retrieve.
-                for (auto hint_candidate : candidates.hint_dependencies_available) {
+                for (auto hint_candidate : package_candidates.hint_dependencies_available) {
                     auto idx = hint_candidate.to_usize();
                     if (hint_dependencies_available.size() <= idx) {
                         hint_dependencies_available.resize(idx + 1, false);
@@ -72,7 +74,7 @@ public:
                 }
 
                 // Allocate an ID so we can refer to the candidates from everywhere
-                auto package_candidates_id = candidates.alloc(candidates);
+                auto package_candidates_id = candidates.alloc(package_candidates);
                 package_name_to_candidates.insert_copy(package_name, package_candidates_id);
 
                 // Remove the in-flight request now that we inserted the result and notify any waiters
@@ -80,7 +82,7 @@ public:
                 package_name_to_candidates_in_flight.erase(package_name);
 // TODO: check                notifier->notify(std::numeric_limits<std::size_t>::max());
 
-                return candidates[candidates_id];
+                return candidates[package_candidates_id];
             }
         }
     }
@@ -93,12 +95,12 @@ public:
         if (temp_candidates.has_value()) {
             return temp_candidates.value();
         } else {
-            auto package_name = provider.pool().resolve_version_set_package_name(version_set_id);
-            auto version_set = provider.pool().resolve_version_set(version_set_id);
+            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
+            auto version_set = get_pool().resolve_version_set(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
             std::vector<SolvableId> matching_candidates;
             for (auto p : package_candidates.candidates) {
-                auto version = provider.pool().resolve_internal_solvable(p).solvable().inner();
+                auto version = get_pool().resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
                 }
@@ -112,16 +114,17 @@ public:
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_non_matching_candidates(VersionSetId version_set_id) {
-        auto candidates = version_set_inverse_candidates.get(version_set_id);
-        if (candidates.has_value()) {
-            return candidates.value();
+        auto optional_candidates = version_set_inverse_candidates.get(version_set_id);
+        if (optional_candidates.has_value()) {
+            return optional_candidates.value();
         } else {
-            auto package_name = provider.pool().resolve_version_set_package_name(version_set_id);
-            auto version_set = provider.pool().resolve_version_set(version_set_id);
-            auto candidates = get_or_cache_candidates(package_name);
+            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
+            auto version_set = get_pool().resolve_version_set(version_set_id);
+            auto package_candidates = get_or_cache_candidates(package_name);
             std::vector<SolvableId> non_matching_candidates;
-            for (auto p : candidates->candidates) {
-                auto version = provider.pool().resolve_internal_solvable(p).solvable().inner();
+            for (auto p : package_candidates.candidates) {
+                auto internal_solvable = get_pool().resolve_internal_solvable(p);
+                auto version = internal_solvable.get_solvable_unchecked().get_inner();
                 if (!version_set.contains(version)) {
                     non_matching_candidates.push_back(p);
                 }
@@ -137,19 +140,19 @@ public:
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_sorted_candidates(VersionSetId version_set_id) {
-        auto candidates = version_set_to_sorted_candidates.get(version_set_id);
-        if (candidates.has_value()) {
-            return candidates.value();
+        auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
+        if (optional_candidates.has_value()) {
+            return optional_candidates.value();
         } else {
-            auto package_name = provider.pool().resolve_version_set_package_name(version_set_id);
+            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
             auto matching_candidates = get_or_cache_matching_candidates(version_set_id);
-            auto candidates = get_or_cache_candidates(package_name);
+            auto package_candidates = get_or_cache_candidates(package_name);
             std::vector<SolvableId> sorted_candidates;
             sorted_candidates.insert(sorted_candidates.end(), matching_candidates.begin(), matching_candidates.end());
-            provider.sort_candidates(this, sorted_candidates);
-            auto favored_id = candidates->favored;
+            provider.sort_candidates(sorted_candidates);
+            auto favored_id = package_candidates.favored;
             if (favored_id.has_value()) {
-                auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value_());
+                auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value());
                 if (pos != sorted_candidates.end()) {
                     std::rotate(sorted_candidates.begin(), pos, pos + 1);
                 }
@@ -159,11 +162,51 @@ public:
         }
     }
 
+    // Returns the dependencies of a solvable. Requests the solvables from the
+    // [`DependencyProvider`] if they are not known yet.
+    //
+    // If the provider has requested the solving process to be cancelled, the cancellation value
+    // will be returned as an `Err(...)`.
+    const DependenciesVariant& get_or_cache_dependencies(SolvableId solvable_id) {
+        auto optional_dependencies_id = solvable_to_dependencies.get_copy(solvable_id);
+        if (optional_dependencies_id.has_value()) {
+            return solvable_dependencies[optional_dependencies_id.value()];
+        } else {
+            // Since getting the dependencies from the provider is a potentially blocking
+            // operation, we want to check beforehand whether we should cancel the solving
+            // process
+            if (provider.should_cancel_with_value().has_value()) {
+                throw std::runtime_error("Solver cancelled");
+            }
+
+            auto dependencies = provider.get_dependencies(solvable_id);
+            auto dependencies_id = solvable_dependencies.alloc(dependencies);
+            solvable_to_dependencies.insert_copy(solvable_id, dependencies_id);
+            return solvable_dependencies[dependencies_id];
+        }
+    }
+
+    // Returns true if the dependencies for the given solvable are "cheaply" available. This means
+    // either the dependency provider indicated that the dependencies for a solvable are available
+    // or the dependencies have already been requested.
+    bool are_dependencies_available_for(SolvableId solvable) {
+        auto dependencies_id = solvable_to_dependencies.get_copy(solvable);
+        if (dependencies_id.has_value()) {
+            return true;
+        } else {
+            auto solvable_idx = solvable.to_usize();
+            if (hint_dependencies_available.size() > solvable_idx) {
+                return hint_dependencies_available[solvable_idx];
+            }
+            return false;
+        }
+    }
+
 private:
     // A mapping from package name to a list of candidates.
-    Arena<CandidatesId, Candidates> candidates;
+    Arena<CandidatesId, PackageCandidates> candidates;
     FrozenCopyMap<NameId, CandidatesId> package_name_to_candidates;
-    std::map<NameId, std::shared_ptr<std::future<Candidates>>> package_name_to_candidates_in_flight;
+    std::map<NameId, std::shared_ptr<std::future<PackageCandidates>>> package_name_to_candidates_in_flight;
 
     // A mapping of `VersionSetId` to the candidates that match that set.
     FrozenMap<VersionSetId, std::vector<SolvableId>> version_set_candidates;
