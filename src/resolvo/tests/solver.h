@@ -32,7 +32,8 @@ struct Pack {
     bool cancel_during_get_dependencies;
 
     Pack(uint32_t version, bool unknown_deps = false, bool cancel_during_get_dependencies = false)
-        : version(version), unknown_deps(unknown_deps), cancel_during_get_dependencies(cancel_during_get_dependencies) {}
+            : version(version), unknown_deps(unknown_deps),
+              cancel_during_get_dependencies(cancel_during_get_dependencies) {}
 
     Pack with_unknown_deps() const {
         return Pack(version, true, cancel_during_get_dependencies);
@@ -97,7 +98,7 @@ struct Spec {
         };
 
         // print all split
-        for (const auto &s0 : split) {
+        for (const auto &s0: split) {
             std::cout << s0 << std::endl;
         }
         auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
@@ -128,7 +129,7 @@ public:
 
     std::vector<VersionSetId> requirements(const std::vector<std::string> &requirements) {
         std::vector<VersionSetId> version_set_ids;
-        for (const auto &dep : requirements) {
+        for (const auto &dep: requirements) {
             auto spec = Spec::from_str(dep);
             auto dep_name = pool.intern_package_name(spec.name);
             version_set_ids.push_back(pool.intern_version_set(dep_name, spec.versions));
@@ -136,9 +137,10 @@ public:
         return version_set_ids;
     }
 
-    static BundleBoxProvider from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &p_packages) {
+    static BundleBoxProvider
+    from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &p_packages) {
         auto result = BundleBoxProvider();
-        for (const auto &package : p_packages) {
+        for (const auto &package: p_packages) {
             auto name = std::get<0>(package);
             auto version = std::get<1>(package);
             auto deps = std::get<2>(package);
@@ -159,21 +161,23 @@ public:
         locked.insert(std::make_pair(package_name, Pack(version)));
     }
 
-    void add_package(const std::string &package_name, Pack package_version, const std::vector<std::string> &package_dependencies, const std::vector<std::string> &package_constrains) {
+    void add_package(const std::string &package_name, Pack package_version,
+                     const std::vector<std::string> &package_dependencies,
+                     const std::vector<std::string> &package_constrains) {
         std::vector<Spec> deps;
-        for (const auto &dep : package_dependencies) {
+        for (const auto &dep: package_dependencies) {
             deps.push_back(Spec::from_str(dep));
         }
 
         std::vector<Spec> cons;
-        for (const auto &con : package_constrains) {
+        for (const auto &con: package_constrains) {
             cons.push_back(Spec::from_str(con));
         }
 
         packages[package_name].insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
     }
 
-    const Pool<Range<Pack>>& get_pool() {
+    const Pool<Range<Pack>> &get_pool() {
         return pool;
     }
 
@@ -185,7 +189,7 @@ public:
         });
     }
 
-    std::optional<PackageCandidates> get_candidates(const NameId& name_id) {
+    std::optional<PackageCandidates> get_candidates(const NameId &name_id) {
         // TODO
         auto package_name = pool.resolve_package_name(name_id);
         if (packages.find(package_name) == packages.end()) {
@@ -196,21 +200,24 @@ public:
         PackageCandidates candidates;
 
 
-        auto favored_pack = favored.at(package_name);
-        auto locked_pack = locked.at(package_name);
-        auto excluded_packs = excluded.at(package_name);
+        auto favored_pack =
+                favored.find(package_name) != favored.cend() ? std::optional(favored.at(package_name)) : std::nullopt;
+        auto locked_pack =
+                locked.find(package_name) != locked.cend() ? std::optional(locked.at(package_name)) : std::nullopt;
+        auto excluded_packs = excluded.find(package_name) != excluded.cend() ? std::optional(excluded.at(package_name))
+                                                                             : std::nullopt;
 
-        for (const auto &[pack, _] : package) {
+        for (const auto &[pack, _]: package) {
             auto solvable = pool.intern_solvable(name_id, pack);
-            if (favored_pack == pack) {
+            if (favored_pack.has_value() && favored_pack.value() == pack) {
                 candidates.favored = std::optional(solvable);
             }
-            if (locked_pack == pack) {
+            if (locked_pack.has_value() && locked_pack.value() == pack) {
                 candidates.locked = std::optional(solvable);
             }
 
-            if (excluded_packs.find(pack) != excluded_packs.end()) {
-                candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.at(pack)));
+            if (excluded_packs.has_value() && excluded_packs.value().find(pack) != excluded_packs.value().cend()) {
+                candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.value().at(pack)));
             }
         }
         return candidates;
@@ -237,13 +244,13 @@ public:
 
         auto deps = packages.at(package_name).at(pack);
         KnownDependencies result;
-        for (const auto &req : deps.dependencies) {
+        for (const auto &req: deps.dependencies) {
             auto dep_name = pool.intern_package_name(req.name);
             auto dep_spec = pool.intern_version_set(dep_name, req.versions);
             result.requirements.push_back(dep_spec);
         }
 
-        for (const auto &req : deps.constrains) {
+        for (const auto &req: deps.constrains) {
             auto dep_name = pool.intern_package_name(req.name);
             auto dep_spec = pool.intern_version_set(dep_name, req.versions);
             result.constrains.push_back(dep_spec);
@@ -269,8 +276,9 @@ private:
 // Create a string from a [`Transaction`]
 std::string transaction_to_string(BundleBoxProvider &provider, const std::vector<SolvableId> &solvables) {
     std::stringstream output;
-    for (const auto &solvable : solvables) {
-        auto display_solvable = DisplaySolvable(provider.get_pool(), provider.get_pool().resolve_internal_solvable(solvable));
+    for (const auto &solvable: solvables) {
+        auto display_solvable = DisplaySolvable(provider.get_pool(),
+                                                provider.get_pool().resolve_internal_solvable(solvable));
         output << display_solvable << "\n";
     }
     return output.str();
