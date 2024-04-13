@@ -192,9 +192,7 @@ public:
     std::optional<PackageCandidates> get_candidates(const NameId &name_id) {
         // TODO
 
-        //assert!(
-        //            self.requested_candidates.borrow_mut().insert(name),
-        //            "duplicate get_candidates request"
+        assert(requested_candidates.insert(name_id).second);        //            "duplicate get_candidates request"
         //        );
 
         auto package_name = pool.resolve_package_name(name_id);
@@ -203,7 +201,8 @@ public:
         }
 
         auto package = packages.at(package_name);
-        PackageCandidates candidates;
+        PackageCandidates package_candidates;
+        package_candidates.candidates.reserve(package.size());
 
 
         auto favored_pack =
@@ -215,18 +214,19 @@ public:
 
         for (const auto &[pack, _]: package) {
             auto solvable = pool.intern_solvable(name_id, pack);
+            package_candidates.candidates.push_back(solvable);
             if (favored_pack.has_value() && favored_pack.value() == pack) {
-                candidates.favored = std::optional(solvable);
+                package_candidates.favored = std::optional(solvable);
             }
             if (locked_pack.has_value() && locked_pack.value() == pack) {
-                candidates.locked = std::optional(solvable);
+                package_candidates.locked = std::optional(solvable);
             }
 
             if (excluded_packs.has_value() && excluded_packs.value().find(pack) != excluded_packs.value().cend()) {
-                candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.value().at(pack)));
+                package_candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.value().at(pack)));
             }
         }
-        return candidates;
+        return package_candidates;
     }
 
     DependenciesVariant get_dependencies(const SolvableId &solvable) {

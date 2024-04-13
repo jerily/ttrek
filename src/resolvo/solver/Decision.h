@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "../internal/ClauseId.h"
 #include "../internal/SolvableId.h"
 
@@ -10,5 +12,5 @@ public:
 
     // Constructor
     Decision(SolvableId solvable, bool val, ClauseId derived)
-            : solvable_id(solvable), value(val), derived_from(std::move(derived)) {}
+            : solvable_id(std::move(solvable)), value(val), derived_from(std::move(derived)) {}
 };

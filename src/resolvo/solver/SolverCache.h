@@ -41,7 +41,10 @@ public:
     const PackageCandidates& get_or_cache_candidates(NameId package_name) {
         // If we already have the candidates for this package cached we can simply return
         auto optional_candidates_id = package_name_to_candidates.get_copy(package_name);
+        fprintf(stderr, "get_or_cache_candidates: optional_candidates_id.has_value() = %d\n", optional_candidates_id.has_value());
         if (optional_candidates_id.has_value()) {
+            fprintf(stderr, "get_or_cache_candidates: optional_candidates_id.value() = %d\n", optional_candidates_id.value().to_usize());
+            fprintf(stderr, "get_or_cache_candidates: candidates[optional_candidates_id.value()].candidates.size() = %d\n", candidates[optional_candidates_id.value()].candidates.size());
             return candidates[optional_candidates_id.value()];
         } else {
             // Since getting the candidates from the provider is a potentially blocking
@@ -92,6 +95,7 @@ public:
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_matching_candidates(VersionSetId version_set_id) {
         auto temp_candidates = version_set_candidates.get(version_set_id);
+        fprintf(stderr, "get_or_cache_matching_candidates: temp_candidates.has_value() = %d\n", temp_candidates.has_value());
         if (temp_candidates.has_value()) {
             return temp_candidates.value();
         } else {
@@ -101,6 +105,7 @@ public:
             std::vector<SolvableId> matching_candidates;
             for (auto p : package_candidates.candidates) {
                 auto version = get_pool().resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
+                fprintf(stderr, "version = %d\n", version);
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
                 }
@@ -141,6 +146,7 @@ public:
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_sorted_candidates(VersionSetId version_set_id) {
         auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
+        fprintf(stderr, "optional_candidates.has_value() = %d\n", optional_candidates.has_value());
         if (optional_candidates.has_value()) {
             return optional_candidates.value();
         } else {

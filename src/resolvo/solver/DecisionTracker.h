@@ -51,15 +51,22 @@ public:
         return std::nullopt;
     }
 
+    // Attempts to add a decision
+    //
+    // Returns true if the solvable was undecided, false if it was already decided to the same value
+    //
+    // Returns an error if the solvable was decided to a different value (which means there is a conflict)
     std::optional<bool> try_add_decision(const Decision& decision, uint32_t level) {
-        auto value = assigned_value(decision.solvable_id);
-        if (!value.has_value()) {
+        fprintf(stderr, "try_add_decision: solvable_id=%zd, value=%b, level=%d\n", decision.solvable_id.to_usize(), decision.value, level);
+        auto optional_assigned_value = assigned_value(decision.solvable_id);
+        if (!optional_assigned_value.has_value()) {
             map.set(decision.solvable_id, decision.value, level);
             stack.push_back(decision);
-            return true;
-        } else if (value == decision.value) {
-            return false;
+            return {true};
+        } else if (optional_assigned_value.value() == decision.value) {
+            return {false};
         } else {
+            fprintf(stderr, "conflict HERE: assigned=%b vs decision=%b\n", optional_assigned_value.value(), decision.value);
             return std::nullopt;
         }
     }
