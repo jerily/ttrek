@@ -192,7 +192,7 @@ std::pair<Clause::ForbidMultipleInstances, std::optional<std::array<SolvableId, 
 }
 
 std::pair<Clause::InstallRoot, std::optional<std::array<SolvableId, 2>>> Clause::root() {
-    auto kind = Clause::InstallRoot();
+    auto kind = Clause::InstallRoot{};
     return std::make_pair(kind, std::nullopt);
 }
 
@@ -520,7 +520,7 @@ private:
                 kind
         );
 
-        assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]);
+        DBG(assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]));
         return clause;
     }
 

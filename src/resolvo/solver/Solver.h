@@ -208,11 +208,11 @@ public:
                                 auto constrains = std::vector<VersionSetId>();
                                 if constexpr (std::is_same_v<T_INNER, Dependencies::Known>) {
                                     auto known_dependencies = std::any_cast<Dependencies::Known>(
-                                            dependencies).known_dependencies;
+                                            arg_inner).known_dependencies;
                                     requirements = known_dependencies.requirements;
                                     constrains = known_dependencies.constrains;
                                 } else if constexpr (std::is_same_v<T_INNER, Dependencies::Unknown>) {
-                                    auto reason = std::any_cast<Dependencies::Unknown>(dependencies).reason;
+                                    auto reason = std::any_cast<Dependencies::Unknown>(arg_inner).reason;
 
                                     // There is no information about the solvable's dependencies, so we add
                                     // an exclusion clause for it
@@ -1062,7 +1062,7 @@ public:
             auto &clause = clauses_[clause_id];
             clause.visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
                                   [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
-                                          &clause_id, &learnt, this](const Literal &literal) {
+                                          &learnt, this](const Literal &literal) {
                                       if (!first_iteration && literal.solvable_id == conflicting_solvable) {
                                           return;
                                       }
