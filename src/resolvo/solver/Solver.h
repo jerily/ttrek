@@ -151,9 +151,12 @@ public:
 
         std::unordered_set<SolvableId> seen(pending_solvables.cbegin(), pending_solvables.cend());
         std::vector<TaskResultVariant> pending_futures;
+        auto it = pending_futures.cbegin();
         while (true) {
             // Iterate over all pending solvables and request their dependencies.
-            for (SolvableId solvable_id: pending_solvables) {
+            auto drained_solvables = std::move(pending_solvables);
+            pending_solvables.clear();
+            for (SolvableId solvable_id: drained_solvables) {
                 // Get the solvable information and request its requirements and constraints
                 auto solvable = pool.resolve_internal_solvable(solvable_id);
 
@@ -165,10 +168,10 @@ public:
 
                 auto optional_get_dependencies_fut = std::visit([this, &solvable_id](const auto &arg) -> std::optional<TaskResultVariant> {
                     using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Root>) {
+                    if constexpr (std::is_same_v<T, SolvableInner::Root>) {
                         auto known_dependencies = KnownDependencies{root_requirements_, std::vector<VersionSetId>()};
                         return std::optional(TaskResult::Dependencies{SolvableId::root(), Dependencies::Known{known_dependencies}});
-                    } else if constexpr (std::is_same_v<T, Package<VS>>) {
+                    } else if constexpr (std::is_same_v<T, SolvableInner::Package<VS>>) {
                         auto deps = cache.get_or_cache_dependencies(solvable_id);
                         return std::optional(TaskResult::Dependencies{solvable_id, deps});
                     }
@@ -180,12 +183,12 @@ public:
                 }
             }
 
-            if (pending_futures.empty()) {
+            if (it != pending_futures.cend()) {
                 // No more pending results
                 break;
             }
 
-            auto &result = pending_futures.front();  // todo: pending_futures.next()
+            auto &result = *it++;  // pending_futures.next()
 
             auto continue_p = std::visit([this, &output, &pending_futures, &pending_solvables, &seen](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
@@ -418,6 +421,8 @@ public:
                 continue;
             }
 
+            fprintf(stderr, "here\n");
+
         }
 
         return output;
@@ -481,7 +486,34 @@ public:
             // Propagate decisions from assignments above
             auto propagate_result = propagate(level);
 
-            // TODO: Handle propagation errors
+            if (propagate_result.has_value()) {
+                // Handle propagation errors
+                auto optional_err = std::visit([this, &level](const auto &arg) -> std::optional<UnsolvableOrCancelledVariant> {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, PropagationError::Conflict>) {
+                        auto arg_conflict = std::any_cast<PropagationError::Conflict>(arg);
+                        auto [_1, _2, clause_id] = arg_conflict;
+                        if (level == 1) {
+                            return std::optional(UnsolvableOrCancelled::Unsolvable{analyze_unsolvable(clause_id)});
+                        } else {
+                            // The conflict was caused because new clauses have been added dynamically.
+                            // We need to start over.
+                            tracing::debug("├─ added clause {clause:?} introduces a conflict which invalidates the partial solution");
+                            level = 0;
+                            decision_tracker_.clear();
+                            return std::nullopt;  // continue
+                        }
+                    } else if constexpr (std::is_same_v<T, PropagationError::Cancelled>) {
+                        auto arg_cancelled = std::any_cast<PropagationError::Cancelled>(arg);
+                        return std::optional(UnsolvableOrCancelled::Cancelled{arg_cancelled});
+                    }
+                    return std::nullopt;
+                }, propagate_result.value());
+
+                if (optional_err.has_value()) {
+                    return optional_err;
+                }
+            }
 
             // Enter the solver loop, return immediately if no new assignments have been made.
             auto [resolved_level, err] = resolve_dependencies(level);
@@ -625,7 +657,8 @@ public:
     std::optional<std::tuple<SolvableId, SolvableId, ClauseId>> decide() {
         std::pair<uint32_t, std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>> best_decision;
         for (auto &[solvable_id, deps, clause_id]: requires_clauses_) {
-            if (decision_tracker_.assigned_value(solvable_id) != std::optional<bool>(true)) {
+            auto assigned_value = decision_tracker_.assigned_value(solvable_id);
+            if (!assigned_value.has_value() || !assigned_value.value()) {
                 continue;
             }
 
@@ -635,9 +668,9 @@ public:
             std::optional<SolvableId> first_selectable_candidate;
             int selectable_candidates = 0;
             for (auto &candidate: optional_candidates.value()) {
-                auto assigned_value = decision_tracker_.assigned_value(candidate);
-                if (assigned_value.has_value()) {
-                    if (assigned_value.value()) {
+                auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
+                if (optional_assigned_value.has_value()) {
+                    if (optional_assigned_value.value()) {
                         break;
                     }
                 } else {

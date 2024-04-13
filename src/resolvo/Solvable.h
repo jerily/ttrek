@@ -34,15 +34,18 @@ public:
 };
 
 // The inner representation of a solvable, which can be either a package or the root solvable
-struct Root {};
+namespace SolvableInner {
+    struct Root {
+    };
+
+    template<typename V>
+    struct Package {
+        Solvable<V> solvable;
+    };
+}
 
 template <typename V>
-struct Package {
-    Solvable<V> solvable;
-};
-
-template <typename V>
-using SolvableInnerVariant = std::variant<Root, Package<V>>;
+using SolvableInnerVariant = std::variant<SolvableInner::Root, SolvableInner::Package<V>>;
 
 // The InternalSolvable class template represents a package that can be installed
 template<typename V>
@@ -55,24 +58,24 @@ public:
     InternalSolvable(SolvableInnerVariant<V> inner) : inner(std::move(inner)) {}
 
     static InternalSolvable new_root() {
-        return InternalSolvable(Root());
+        return InternalSolvable(SolvableInner::Root{});
     }
 
     // new_solvable
     static InternalSolvable new_solvable(const NameId &name_id, V record) {
-        return InternalSolvable(Package<V>{Solvable<V>(record, name_id)});
+        return InternalSolvable(SolvableInner::Package<V>{Solvable<V>(record, name_id)});
     }
 
 // Check if the solvable is root
     bool is_root() const {
-        return std::holds_alternative<Root>(inner);
+        return std::holds_alternative<SolvableInner::Root>(inner);
     }
 
 // Get the solvable if it's not root
     std::optional<Solvable<V>> get_solvable() const {
         return std::visit([](auto &&arg) -> std::optional<Solvable<V>> {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, Package<V>>) {
+            if constexpr (std::is_same_v<T, SolvableInner::Package<V>>) {
                 auto package = std::any_cast<Solvable<V>>(arg);
                 return std::make_optional(package.solvable);
             } else {
@@ -83,7 +86,7 @@ public:
 
     // Get the solvable if it's not root
     Solvable<V> get_solvable_unchecked() const {
-        return std::get<Package<V>>(inner).solvable;
+        return std::get<SolvableInner::Package<V>>(inner).solvable;
     }
 
     SolvableInnerVariant<V> get_inner() const {
