@@ -131,7 +131,7 @@ struct BundleBoxPackageDependencies {
 class BundleBoxProvider {
 public:
 
-    Pool<Range<Pack>> pool;
+    std::shared_ptr<Pool<Range<Pack>>> pool = std::make_shared<Pool<Range<Pack>>>(Pool<Range<Pack>>());
     std::unordered_map<std::string, std::unordered_map<Pack, BundleBoxPackageDependencies>> packages;
     std::unordered_map<std::string, Pack> favored;
     std::unordered_map<std::string, Pack> locked;
@@ -147,8 +147,8 @@ public:
         std::vector<VersionSetId> version_set_ids;
         for (const auto &dep: requirements) {
             auto spec = Spec::from_str(dep);
-            auto dep_name = pool.intern_package_name(spec.name);
-            version_set_ids.push_back(pool.intern_version_set(dep_name, spec.versions));
+            auto dep_name = pool->intern_package_name(spec.name);
+            version_set_ids.push_back(pool->intern_version_set(dep_name, spec.versions));
         }
         return version_set_ids;
     }
@@ -193,14 +193,10 @@ public:
         packages[package_name].insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
     }
 
-    const Pool<Range<Pack>> &get_pool() {
-        return pool;
-    }
-
     void sort_candidates(std::vector<SolvableId> &solvables) {
         std::sort(solvables.begin(), solvables.end(), [this](const SolvableId &a, const SolvableId &b) {
-            auto a_pack = pool.resolve_solvable(a).get_inner();
-            auto b_pack = pool.resolve_solvable(b).get_inner();
+            auto a_pack = pool->resolve_solvable(a).get_inner();
+            auto b_pack = pool->resolve_solvable(b).get_inner();
             return b_pack.version - a_pack.version;
         });
     }
@@ -209,9 +205,9 @@ public:
         // TODO
 
         assert(requested_candidates.insert(name_id).second);        //            "duplicate get_candidates request"
-        //        );
 
-        auto package_name = pool.resolve_package_name(name_id);
+        auto package_name = pool->resolve_package_name(name_id);
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_candidates %s\n", package_name.c_str());
         if (packages.find(package_name) == packages.end()) {
             return std::nullopt;
         }
@@ -229,17 +225,18 @@ public:
                                                                              : std::nullopt;
 
         for (const auto &[pack, _]: package) {
-            auto solvable = pool.intern_solvable(name_id, pack);
-            package_candidates.candidates.push_back(solvable);
+            auto solvable_id = pool->intern_solvable(name_id, pack);
+            fprintf(stderr, "^^^^ solvable_id: %d\n", solvable_id.to_usize());
+            package_candidates.candidates.push_back(solvable_id);
             if (favored_pack.has_value() && favored_pack.value() == pack) {
-                package_candidates.favored = std::optional(solvable);
+                package_candidates.favored = std::optional(solvable_id);
             }
             if (locked_pack.has_value() && locked_pack.value() == pack) {
-                package_candidates.locked = std::optional(solvable);
+                package_candidates.locked = std::optional(solvable_id);
             }
 
             if (excluded_packs.has_value() && excluded_packs.value().find(pack) != excluded_packs.value().cend()) {
-                package_candidates.excluded.emplace_back(solvable, pool.intern_string(excluded_packs.value().at(pack)));
+                package_candidates.excluded.emplace_back(solvable_id, pool->intern_string(excluded_packs.value().at(pack)));
             }
         }
         return package_candidates;
@@ -247,17 +244,17 @@ public:
 
     DependenciesVariant get_dependencies(const SolvableId &solvable) {
         // TODO
-        auto candidate = pool.resolve_solvable(solvable);
-        auto package_name = pool.resolve_package_name(candidate.get_name_id());
+        auto candidate = pool->resolve_solvable(solvable);
+        auto package_name = pool->resolve_package_name(candidate.get_name_id());
         auto pack = candidate.get_inner();
 
         if (pack.cancel_during_get_dependencies) {
             cancel_solving = true;
-            return Dependencies::Unknown{pool.intern_string("cancelled")};
+            return Dependencies::Unknown{pool->intern_string("cancelled")};
         }
 
         if (pack.unknown_deps) {
-            return Dependencies::Unknown{pool.intern_string("could not retrieve deps")};
+            return Dependencies::Unknown{pool->intern_string("could not retrieve deps")};
         }
 
         if (packages.find(package_name) == packages.end()) {
@@ -267,14 +264,14 @@ public:
         auto deps = packages.at(package_name).at(pack);
         KnownDependencies result;
         for (const auto &req: deps.dependencies) {
-            auto dep_name = pool.intern_package_name(req.name);
-            auto dep_spec = pool.intern_version_set(dep_name, req.versions);
+            auto dep_name = pool->intern_package_name(req.name);
+            auto dep_spec = pool->intern_version_set(dep_name, req.versions);
             result.requirements.push_back(dep_spec);
         }
 
         for (const auto &req: deps.constrains) {
-            auto dep_name = pool.intern_package_name(req.name);
-            auto dep_spec = pool.intern_version_set(dep_name, req.versions);
+            auto dep_name = pool->intern_package_name(req.name);
+            auto dep_spec = pool->intern_version_set(dep_name, req.versions);
             result.constrains.push_back(dep_spec);
         }
 
@@ -299,8 +296,8 @@ private:
 std::string transaction_to_string(BundleBoxProvider &provider, const std::vector<SolvableId> &solvables) {
     std::stringstream output;
     for (const auto &solvable: solvables) {
-        auto display_solvable = DisplaySolvable(provider.get_pool(),
-                                                provider.get_pool().resolve_internal_solvable(solvable));
+        auto display_solvable = DisplaySolvable(provider.pool,
+                                                provider.pool->resolve_internal_solvable(solvable));
         output << display_solvable << "\n";
     }
     return output.str();
@@ -308,7 +305,7 @@ std::string transaction_to_string(BundleBoxProvider &provider, const std::vector
 
 std::string solve_unsat(BundleBoxProvider &provider, const std::vector<std::string> &specs) {
     auto requirements = provider.requirements(specs);
-    auto pool = provider.get_pool();
+    auto pool = provider.pool;
     auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
     auto [steps, err] = solver.solve(requirements);
     if (err.has_value()) {
@@ -331,7 +328,7 @@ std::string solve_unsat(BundleBoxProvider &provider, const std::vector<std::stri
 // Solve the problem and returns either a solution represented as a string or an error string.
 std::string solve_snapshot(BundleBoxProvider &provider, const std::vector<std::string> &specs) {
     auto requirements = provider.requirements(specs);
-    auto pool = provider.get_pool();
+    auto pool = provider.pool;
     auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
     auto [steps, err] = solver.solve(requirements);
     if (err.has_value()) {

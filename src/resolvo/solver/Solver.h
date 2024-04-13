@@ -88,14 +88,14 @@ private:
 public:
 
     // The Pool used by the solver
-    Pool<VS, N> pool;
+    std::shared_ptr<Pool<VS, N>> pool;
 //    RT async_runtime;
     SolverCache<VS, N, D> cache;
     Arena<ClauseId, ClauseState> clauses_;
 
     // Constructor
     explicit Solver(D provider) :
-            pool(provider.get_pool()), /* async_runtime(NowOrNeverRuntime()), */
+            pool(provider.pool), /* async_runtime(NowOrNeverRuntime()), */
             cache(SolverCache<VS, N, D>(provider)) {}
 
     std::pair<std::vector<SolvableId>, std::optional<UnsolvableOrCancelledVariant>> solve(std::vector<VersionSetId> root_requirements) {
@@ -158,7 +158,7 @@ public:
 
             for (SolvableId solvable_id: drained_solvables) {
                 // Get the solvable information and request its requirements and constraints
-                auto solvable = pool.resolve_internal_solvable(solvable_id);
+                auto solvable = pool->resolve_internal_solvable(solvable_id);
 
                 auto display_solvable = DisplaySolvable(pool, solvable);
                 tracing::trace(
@@ -199,7 +199,7 @@ public:
                     auto solvable_id = task_result.solvable_id;
                     auto dependencies = task_result.dependencies;
 
-                    auto solvable = pool.resolve_internal_solvable(solvable_id);
+                    auto solvable = pool->resolve_internal_solvable(solvable_id);
 
 
                     auto display_solvable = DisplaySolvable(pool, solvable);
@@ -244,12 +244,12 @@ public:
                                 chain.insert(chain.end(), requirements.begin(), requirements.end());
                                 chain.insert(chain.end(), constrains.begin(), constrains.end());
                                 for (auto &version_set_id: chain) {
-                                    auto dependency_name = pool.resolve_version_set_package_name(version_set_id);
+                                    auto dependency_name = pool->resolve_version_set_package_name(version_set_id);
 
                                     if (clauses_added_for_package_.insert(dependency_name).second) {
                                          tracing::trace(
-                                                                        "┝━ adding clauses for package '%s'\n",
-                                                                                pool.resolve_package_name(dependency_name).c_str()
+                                                 "┝━ adding clauses for package '%s'\n",
+                                                 pool->resolve_package_name(dependency_name).c_str()
                                                                 );
 
                                         auto package_candidates = cache.get_or_cache_candidates(dependency_name);
@@ -288,7 +288,7 @@ public:
                     auto task_result = std::any_cast<TaskResult::Candidates>(arg);
                     auto name_id = task_result.name_id;
                     auto package_candidates = task_result.package_candidates;
-                    auto solvable = pool.resolve_package_name(name_id);
+                    auto solvable = pool->resolve_package_name(name_id);
                     // tracing::trace!("package candidates available for {}", solvable);
 
                     auto locked_solvable_id = package_candidates.locked;
@@ -343,10 +343,10 @@ public:
                     auto version_set_id = task_result.version_set_id;
                     auto candidates = task_result.candidates;
 
-                    auto version_set_name = pool.resolve_package_name(
-                            pool.resolve_version_set_package_name(version_set_id));
+                    auto version_set_name = pool->resolve_package_name(
+                            pool->resolve_version_set_package_name(version_set_id));
 
-                    auto version_set = pool.resolve_version_set(version_set_id);
+                    auto version_set = pool->resolve_version_set(version_set_id);
 
                     tracing::trace(
                                             "sorted candidates available for %s %d\n",
@@ -404,9 +404,9 @@ public:
                     auto version_set_id = task_result.version_set_id;
                     auto non_matching_candidates = task_result.non_matching_candidates;
 
-                    auto version_set_name = pool.resolve_package_name(
-                            pool.resolve_version_set_package_name(version_set_id));
-                    auto version_set = pool.resolve_version_set(version_set_id);
+                    auto version_set_name = pool->resolve_package_name(
+                            pool->resolve_version_set_package_name(version_set_id));
+                    auto version_set = pool->resolve_version_set(version_set_id);
 
                     tracing::trace(
                                             "non matching candidates available for %s %s\n",
@@ -482,7 +482,7 @@ public:
                 // `Solver::solve`. If we can find a solution were the root is installable we found a
                 // solution that satisfies the user requirements.
 
-//  todo:               auto display_solvable = DisplaySolvable(pool, SolvableId::root());
+//  todo:               auto display_solvable = DisplaySolvable(*pool_ptr, SolvableId::root());
                 tracing::info(
                                     "╤══ install root at level %d\n",
                                     level
@@ -574,8 +574,8 @@ fprintf(stderr, "add_clauses_output\n");
 
             tracing::debug("====\n==Found newly selected solvables\n");
 //            for (auto &[solvable_id, derived_from]: new_solvables) {
-//                auto display_solvable = DisplaySolvable(pool, solvable_id);
-//                auto display_clause = DisplayClause(pool, clauses_[derived_from]);
+//                auto display_solvable = DisplaySolvable(*pool_ptr, solvable_id);
+//                auto display_clause = DisplayClause(*pool, clauses_[derived_from]);
 //                tracing::debug(
 //                                    "- %s (derived from %s)\n",
 //                                    display_solvable.to_string().c_str(),
@@ -658,7 +658,7 @@ fprintf(stderr, "add_clauses_output\n");
     // Pick a solvable that we are going to assign true. This function uses a heuristic to
     // determine to best decision to make. The function selects the requirement that has the least
     // amount of working available candidates and selects the best candidate from that list. This
-    // ensures that if there are conflicts they are delt with as early as possible.
+    // ensures that if there are conflicts they are dealt with as early as possible.
 
     std::optional<std::tuple<SolvableId, SolvableId, ClauseId>> decide() {
         std::pair<uint32_t, std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>> best_decision;
@@ -674,6 +674,7 @@ fprintf(stderr, "add_clauses_output\n");
             std::optional<SolvableId> first_selectable_candidate;
             int selectable_candidates = 0;
             for (auto &candidate: optional_candidates.value()) {
+                fprintf(stderr, "--->>> candidate: %d\n", candidate.to_usize());
                 auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
                 if (optional_assigned_value.has_value()) {
                     if (optional_assigned_value.value()) {
@@ -696,7 +697,7 @@ fprintf(stderr, "add_clauses_output\n");
         auto [count, the_decision] = best_decision;
         if (the_decision.has_value()) {
             auto [candidate, _solvable_id, clause_id] = the_decision.value();
-            tracing::info("deciding to assign: candidate=%zd solvable_id=%zd clause_id=%zd%\n", candidate.to_usize(),
+            tracing::info("deciding to assign: candidate=%zd solvable_id=%zd clause_id=%zd\n", candidate.to_usize(),
                           _solvable_id.to_usize(), clause_id.to_usize());
             // tracing::info!(
             //                "deciding to assign {}, ({:?}, {} possible candidates)",
@@ -728,14 +729,17 @@ fprintf(stderr, "add_clauses_output\n");
                         const ClauseId &clause_id) {
         level += 1;
 
-        tracing::info("propagate_and_learn\n");
+        tracing::info("propagate_and_learn solvable=%lu required_by=%lu\n", solvable.to_usize(), required_by.to_usize());
 
-        //        tracing::info!(
-        //                "╤══ Install {} at level {level} (required by {})",
-        //                        solvable.display(&self.pool),
-        //                        required_by.display(&self.pool),
-        //        );
-        //
+        auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable));
+        auto display_required_by = DisplaySolvable(pool, pool->resolve_internal_solvable(required_by));
+        tracing::info(
+                "╤══ Install %s at level %d (required by %s)",
+                        display_solvable.to_string().c_str(),
+                        level,
+                        display_required_by.to_string().c_str()
+        );
+
 
         // Add the decision to the tracker
         decision_tracker_.try_add_decision(Decision(solvable, true, clause_id), level);

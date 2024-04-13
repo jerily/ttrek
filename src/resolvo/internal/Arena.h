@@ -26,6 +26,7 @@ public:
         for (auto &chunk: chunks) {
             chunk.clear();
         }
+        fprintf(stderr, "clear\n");
     }
 
 // Constructs a new arena with a capacity for `n` values pre-allocated
@@ -50,11 +51,13 @@ public:
     TId alloc(const TValue &value) {
         std::size_t id = len;
         auto [chunk_idx, offset] = chunk_and_offset(id);
+        fprintf(stderr, "chunk_idx: %zu, offset: %zu\n", chunk_idx, offset);
         if (chunk_idx >= chunks.size()) {
             chunks.emplace_back();
             chunks.back().reserve(CHUNK_SIZE);
         }
         chunks[chunk_idx].push_back(value);
+        fprintf(stderr, "chunks[%zu].size(): %zu\n", chunk_idx, chunks[chunk_idx].size());
         len++;
         return TId::from_usize(id);
     }
@@ -62,6 +65,7 @@ public:
 // Indexing into the arena
     const TValue &operator[](TId id) const {
         auto [chunk, offset] = chunk_and_offset(id.to_usize());
+        fprintf(stderr, "chunk: %zu, offset: %zu chunk[%zu].size(): %zu\n", chunk, offset, chunk, chunks[chunk].size());
         assert(chunk < chunks.size() && offset < chunks[chunk].size());
         return chunks[chunk][offset];
     }

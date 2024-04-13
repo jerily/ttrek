@@ -76,7 +76,7 @@ public:
         return std::visit([](auto &&arg) -> std::optional<Solvable<V>> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, SolvableInner::Package<V>>) {
-                auto package = std::any_cast<Solvable<V>>(arg);
+                auto package = std::any_cast<SolvableInner::Package<V>>(arg);
                 return std::make_optional(package.solvable);
             } else {
                 return std::nullopt;

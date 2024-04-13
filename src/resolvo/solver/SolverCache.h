@@ -30,8 +30,8 @@ public:
     explicit SolverCache(D provider) : provider(provider) {}
 
     // Returns a reference to the pool used by the solver
-    const Pool<VS, N>& get_pool() {
-        return provider.get_pool();
+    std::shared_ptr<Pool<VS, N>> get_pool() {
+        return provider.pool;
     }
 
     // Returns the candidates for the package with the given name. This will either ask the
@@ -99,13 +99,14 @@ public:
         if (temp_candidates.has_value()) {
             return temp_candidates.value();
         } else {
-            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
-            auto version_set = get_pool().resolve_version_set(version_set_id);
+            auto package_name = get_pool()->resolve_version_set_package_name(version_set_id);
+            auto version_set = get_pool()->resolve_version_set(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
             fprintf(stderr, "get_or_cache_matching_candidates: package_candidates.candidates.size() = %d\n", package_candidates.candidates.size());
             std::vector<SolvableId> matching_candidates;
             for (auto p : package_candidates.candidates) {
-                auto version = get_pool().resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
+                fprintf(stderr, "get_or_cache_matching_candidates: p = %d\n", p.to_usize());
+                auto version = get_pool()->resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
                 fprintf(stderr, "get_or_cache_matching_candidates: version = %d contains = %b\n", version, version_set.contains(version));
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
@@ -124,12 +125,12 @@ public:
         if (optional_candidates.has_value()) {
             return optional_candidates.value();
         } else {
-            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
-            auto version_set = get_pool().resolve_version_set(version_set_id);
+            auto package_name = get_pool()->resolve_version_set_package_name(version_set_id);
+            auto version_set = get_pool()->resolve_version_set(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
             std::vector<SolvableId> non_matching_candidates;
             for (auto p : package_candidates.candidates) {
-                auto internal_solvable = get_pool().resolve_internal_solvable(p);
+                auto internal_solvable = get_pool()->resolve_internal_solvable(p);
                 auto version = internal_solvable.get_solvable_unchecked().get_inner();
                 if (!version_set.contains(version)) {
                     non_matching_candidates.push_back(p);
@@ -151,7 +152,7 @@ public:
         if (optional_candidates.has_value()) {
             return optional_candidates.value();
         } else {
-            auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
+            auto package_name = get_pool()->resolve_version_set_package_name(version_set_id);
             auto matching_candidates = get_or_cache_matching_candidates(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
             fprintf(stderr, "->>> get_or_cache_sorted_candidates: matching_candidates.size() = %d\n", matching_candidates.size());
@@ -160,10 +161,15 @@ public:
             provider.sort_candidates(sorted_candidates);
             auto favored_id = package_candidates.favored;
             if (favored_id.has_value()) {
+                fprintf(stderr, "-> get_or_cache_sorted_candidates: favored_id = %d\n", favored_id.value().to_usize());
                 auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value());
                 if (pos != sorted_candidates.end()) {
                     std::rotate(sorted_candidates.begin(), pos, pos + 1);
                 }
+            }
+
+            for (auto p : sorted_candidates) {
+                fprintf(stderr, "-> get_or_cache_sorted_candidates: p = %d\n", p.to_usize());
             }
             version_set_to_sorted_candidates.insert(version_set_id, sorted_candidates);
             return sorted_candidates;
