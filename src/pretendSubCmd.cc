@@ -6,9 +6,13 @@
 
 #include "subCmdDecls.h"
 #include "resolvo/tests/solver.h"
+#include "resolvo/internal/tracing.h"
 
 
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+
+    tracing::trace("Hello %s, world!\n", "neophytos");
+
     // test_unit_propagation_1
     auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>()}});
     auto root_requirements = provider.requirements({"asdf"});

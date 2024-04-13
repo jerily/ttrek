@@ -191,6 +191,12 @@ public:
 
     std::optional<PackageCandidates> get_candidates(const NameId &name_id) {
         // TODO
+
+        //assert!(
+        //            self.requested_candidates.borrow_mut().insert(name),
+        //            "duplicate get_candidates request"
+        //        );
+
         auto package_name = pool.resolve_package_name(name_id);
         if (packages.find(package_name) == packages.end()) {
             return std::nullopt;

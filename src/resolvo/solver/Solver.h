@@ -14,6 +14,7 @@
 #include "Clause.h"
 #include "WatchMap.h"
 #include "../Problem.h"
+#include "../internal/tracing.h"
 #include "UnsolvableOrCancelled.h"
 #include "PropagationError.h"
 #include "SolverCache.h"
@@ -156,10 +157,11 @@ public:
                 // Get the solvable information and request its requirements and constraints
                 auto solvable = pool.resolve_internal_solvable(solvable_id);
 
-                //tracing::trace!(
-                //                    "┝━ adding clauses for dependencies of {}",
-                //                    solvable.display(&self.pool)
-                //                );
+                auto display_solvable = DisplaySolvable(pool, solvable);
+                tracing::trace(
+                                    "┝━ adding clauses for dependencies of %s\n",
+                                    display_solvable.to_string().c_str()
+                                );
 
                 auto optional_get_dependencies_fut = std::visit([this, &solvable_id](const auto &arg) -> std::optional<TaskResultVariant> {
                     using T = std::decay_t<decltype(arg)>;
@@ -195,10 +197,12 @@ public:
 
                     auto solvable = pool.resolve_internal_solvable(solvable_id);
 
-                    // tracing::trace!(
-                    //                        "dependencies available for {}",
-                    //                        solvable.display(&self.pool)
-                    //                    );
+
+                    auto display_solvable = DisplaySolvable(pool, solvable);
+                    tracing::trace(
+                                            "dependencies available for %s\n",
+                                            display_solvable.to_string().c_str()
+                                        );
 
                     auto continue_inner_p = std::visit(
                             [this, &output, &pending_futures, &solvable_id, &dependencies](auto &&arg_inner) {
@@ -237,10 +241,10 @@ public:
                                     auto dependency_name = pool.resolve_version_set_package_name(version_set_id);
 
                                     if (clauses_added_for_package_.insert(dependency_name).second) {
-                                        // tracing::trace!(
-                                        //                                "┝━ adding clauses for package '{}'",
-                                        //                                        self.pool.resolve_package_name(dependency_name)
-                                        //                        );
+                                         tracing::trace(
+                                                                        "┝━ adding clauses for package '%s'\n",
+                                                                                pool.resolve_package_name(dependency_name)
+                                                                );
 
                                         auto package_candidates = cache.get_or_cache_candidates(dependency_name);
                                         pending_futures.emplace_back(
@@ -332,11 +336,11 @@ public:
 
                     auto version_set = pool.resolve_version_set(version_set_id);
 
-                    //tracing::trace!(
-                    //                        "sorted candidates available for {} {}",
-                    //                        version_set_name,
-                    //                        version_set
-                    //                    );
+                    tracing::trace(
+                                            "sorted candidates available for %s %s",
+                                            version_set_name,
+                                            version_set
+                                        );
 
                     // Queue requesting the dependencies of the candidates as well if they are cheaply
                     // available from the dependency provider.
@@ -387,11 +391,11 @@ public:
                             pool.resolve_version_set_package_name(version_set_id));
                     auto version_set = pool.resolve_version_set(version_set_id);
 
-                    //tracing::trace!(
-                    //                        "non matching candidates available for {} {}",
-                    //                        version_set_name,
-                    //                        version_set
-                    //                    );
+                    tracing::trace(
+                                            "non matching candidates available for %s %s",
+                                            version_set_name,
+                                            version_set
+                                        );
 
                     // Add forbidden clauses for the candidates
                     for (auto &forbidden_candidate: non_matching_candidates) {
@@ -458,10 +462,11 @@ public:
                 // `Solver::solve`. If we can find a solution were the root is installable we found a
                 // solution that satisfies the user requirements.
 
-                //tracing::info!(
-                //                    "╤══ install {} at level {level}",
-                //                    SolvableId::root().display(&self.pool)
-                //                );
+//  todo:               auto display_solvable = DisplaySolvable(pool, SolvableId::root());
+                tracing::info(
+                                    "╤══ install root at level %d\n",
+                                    level
+                                );
 
                 decision_tracker_.try_add_decision(Decision(SolvableId::root(), true, ClauseId::install_root()), level);
 
@@ -527,6 +532,18 @@ public:
             //                        self.clauses.borrow()[derived_from].debug(&self.pool),
             //                    )))
             //            );
+            // in c++ it should be:
+
+            tracing::debug("====\n==Found newly selected solvables\n");
+//            for (auto &[solvable_id, derived_from]: new_solvables) {
+//                auto display_solvable = DisplaySolvable(pool, solvable_id);
+//                auto display_clause = DisplayClause(pool, clauses_[derived_from]);
+//                tracing::debug(
+//                                    "- %s (derived from %s)\n",
+//                                    display_solvable.to_string().c_str(),
+//                                    display_clause.to_string().c_str()
+//                                );
+//            }
 
             // Concurrently get the solvable's clauses
             auto new_solvable_ids = std::vector<SolvableId>();
@@ -537,9 +554,10 @@ public:
 
             // Serially process the outputs, to reduce the need for synchronization
             // for &clause_id in &output.conflicting_clauses {
-            //                tracing::debug!("├─ added clause {clause:?} introduces a conflict which invalidates the partial solution",
-            //                        clause=self.clauses.borrow()[clause_id].debug(&self.pool));
-            //            }
+            tracing::debug("├─ added clause %s introduces a conflict which invalidates the partial solution",
+//                        clause=self.clauses.borrow()[clause_id].debug(&self.pool)
+                           "clauses[clause_id]"
+                        );
 
             auto optional_conflicting_clause_id = process_add_clause_output(output);
             if (optional_conflicting_clause_id.has_value()) {
@@ -638,6 +656,7 @@ public:
 
         auto [count, the_decision] = best_decision;
 //        auto [candidate, _solvable_id, clause_id] = the_decision.value();
+tracing::info("deciding to assign\n");
         // tracing::info!(
         //                "deciding to assign {}, ({:?}, {} possible candidates)",
         //                candidate.display(&self.pool),
@@ -659,32 +678,12 @@ public:
     //
     // Returns the new level after this set-propagate-learn round, or a [`Problem`] if we
     // discovered that the requested jobs are unsatisfiable.
-    //fn set_propagate_learn(
-    //    &mut self,
-    //            mut level: u32,
-    //            solvable: SolvableId,
-    //            required_by: SolvableId,
-    //            clause_id: ClauseId,
-    //    ) -> Result<u32, UnsolvableOrCancelled> {
-    //        level += 1;
-    //
-    //        tracing::info!(
-    //                "╤══ Install {} at level {level} (required by {})",
-    //                        solvable.display(&self.pool),
-    //                        required_by.display(&self.pool),
-    //        );
-    //
-    //        // Add the decision to the tracker
-    //        self.decision_tracker
-    //                .try_add_decision(Decision::new(solvable, true, clause_id), level)
-    //        .expect("bug: solvable was already decided!");
-    //
-    //        self.propagate_and_learn(level)
-    //    }
     std::pair<uint32_t, std::optional<UnsolvableOrCancelledVariant>>
     set_propagate_learn(uint32_t level, const SolvableId &solvable, const SolvableId &required_by,
                         const ClauseId &clause_id) {
         level += 1;
+
+        tracing::info("propagate_and_learn\n");
 
         //        tracing::info!(
         //                "╤══ Install {} at level {level} (required by {})",
@@ -704,7 +703,7 @@ public:
             auto propagate_result = propagate(level);
             if (!propagate_result.has_value()) {
                 // Propagation completed
-//                tracing::debug!("╘══ Propagation completed");
+                tracing::debug("╘══ Propagation completed");
                 return {level, std::nullopt};
             }
 
@@ -713,7 +712,7 @@ public:
                 if constexpr (std::is_same_v<T, PropagationError::Cancelled>) {
                     // Propagation cancelled
                     auto err = std::any_cast<PropagationError::Cancelled>(arg);
-//                    tracing::debug!("╘══ Propagation cancelled");
+                    tracing::debug("╘══ Propagation cancelled");
                     return std::make_pair(level, std::optional(UnsolvableOrCancelled::Cancelled{err.data}));
                 } else if constexpr (std::is_same_v<T, PropagationError::Conflict>) {
                     auto err = std::any_cast<PropagationError::Conflict>(arg);
@@ -739,6 +738,7 @@ public:
     std::pair<uint32_t, std::optional<Problem>>
     learn_from_conflict(uint32_t level, const SolvableId &conflicting_solvable,
                         bool attempted_value, const ClauseId &conflicting_clause) {
+                tracing::info("learn_from_conflict\n");
         //        {
         //            tracing::info!(
         //                "├─ Propagation conflicted: could not set {solvable} to {attempted_value}",
@@ -761,7 +761,7 @@ public:
         //        }
 
         if (level == 1) {
-            //            tracing::info!("╘══ UNSOLVABLE");
+                        tracing::info("╘══ UNSOLVABLE");
 
             for (const auto& decision : decision_tracker_.get_stack()) {
                 auto clause = clauses_[decision.derived_from];
