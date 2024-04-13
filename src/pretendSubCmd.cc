@@ -4,15 +4,23 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#include <string.h>
 #include "subCmdDecls.h"
 #include "resolvo/tests/solver.h"
-#include <signal.h>
 
 
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    BundleBoxProvider provider;
-    provider.requirements({"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"});
+    // test_unit_propagation_1
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>()}});
+    auto root_requirements = provider.requirements({"asdf"});
+    auto pool = provider.get_pool();
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(root_requirements);
+
+    assert(!err.has_value());
+
+    const auto& solvable = pool.resolve_solvable(solved[0]);
+    assert(pool.resolve_package_name(solvable.get_name_id()) == "asdf");
+    assert(solvable.get_inner().version == 1);
 
     return TCL_OK;
 }

@@ -96,7 +96,11 @@ struct Spec {
             return Range<Pack>::between(start, end);
         };
 
-        auto spec_versions = version_range(split[1]);
+        // print all split
+        for (const auto &s0 : split) {
+            std::cout << s0 << std::endl;
+        }
+        auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
         return Spec{spec_name, spec_versions};
     }
 };
@@ -132,13 +136,15 @@ public:
         return version_set_ids;
     }
 
-    void from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &p_packages) {
+    static BundleBoxProvider from_packages(const std::vector<std::tuple<std::string, uint32_t, std::vector<std::string>>> &p_packages) {
+        auto result = BundleBoxProvider();
         for (const auto &package : p_packages) {
             auto name = std::get<0>(package);
             auto version = std::get<1>(package);
             auto deps = std::get<2>(package);
-            add_package(name, Pack(version), deps, {});
+            result.add_package(name, Pack(version), deps, {});
         }
+        return result;
     }
 
     void set_favored(const std::string &package_name, uint32_t version) {
@@ -164,7 +170,7 @@ public:
             cons.push_back(Spec::from_str(con));
         }
 
-        packages.at(package_name).insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
+        packages[package_name].insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
     }
 
     const Pool<Range<Pack>>& get_pool() {
@@ -286,6 +292,23 @@ std::string solve_unsat(BundleBoxProvider &provider, const std::vector<std::stri
 //        auto error_message = problem.display_user_friendly(solver, pool, DefaultSolvableDisplay());
 //        return error_message.to_string();
         return "error message";
+    } else {
+        auto reason = provider.should_cancel_with_value();
+        return reason.value();
+    }
+}
+
+// Solve the problem and returns either a solution represented as a string or an error string.
+std::string solve_snapshot(BundleBoxProvider &provider, const std::vector<std::string> &specs) {
+    auto requirements = provider.requirements(specs);
+    auto pool = provider.get_pool();
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [steps, err] = solver.solve(requirements);
+    if (err.has_value()) {
+        auto problem = std::get<UnsolvableOrCancelled::Unsolvable>(err.value());
+        std::stringstream output;
+        output << "UNSOLVABLE:\n";
+        return output.str();
     } else {
         auto reason = provider.should_cancel_with_value();
         return reason.value();
