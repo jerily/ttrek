@@ -224,7 +224,7 @@ public:
                     auto high = std::any_cast<Included<V>>(end_arg);
                     return v <= high.value;
                 } else if constexpr (std::is_same_v<T_start, Unbounded> && std::is_same_v<T_end, Excluded<V>>) {
-                    auto high = std::any_cast<Included<V>>(end_arg);
+                    auto high = std::any_cast<Excluded<V>>(end_arg);
                     return v < high.value;
                 } else if constexpr (std::is_same_v<T_start, Included<V>> && std::is_same_v<T_end, Unbounded>) {
                     auto low = std::any_cast<Included<V>>(start_arg);
@@ -235,18 +235,18 @@ public:
                     return v >= low.value && v <= high.value;
                 } else if constexpr (std::is_same_v<T_start, Included<V>> && std::is_same_v<T_end, Excluded<V>>) {
                     auto low = std::any_cast<Included<V>>(start_arg);
-                    auto high = std::any_cast<Included<V>>(end_arg);
+                    auto high = std::any_cast<Excluded<V>>(end_arg);
                     return v >= low.value && v < high.value;
                 } else if constexpr (std::is_same_v<T_start, Excluded<V>> && std::is_same_v<T_end, Unbounded>) {
-                    auto low = std::any_cast<Included<V>>(start_arg);
+                    auto low = std::any_cast<Excluded<V>>(start_arg);
                     return v > low.value;
                 } else if constexpr (std::is_same_v<T_start, Excluded<V>> && std::is_same_v<T_end, Included<V>>) {
-                    auto low = std::any_cast<Included<V>>(start_arg);
+                    auto low = std::any_cast<Excluded<V>>(start_arg);
                     auto high = std::any_cast<Included<V>>(end_arg);
                     return v > low.value && v <= high.value;
                 } else if constexpr (std::is_same_v<T_start, Excluded<V>> && std::is_same_v<T_end, Excluded<V>>) {
-                    auto low = std::any_cast<Included<V>>(start_arg);
-                    auto high = std::any_cast<Included<V>>(end_arg);
+                    auto low = std::any_cast<Excluded<V>>(start_arg);
+                    auto high = std::any_cast<Excluded<V>>(end_arg);
                     return v > low.value && v < high.value;
                 }
                 return false;
@@ -382,14 +382,25 @@ private:
 
     bool valid_segment(const BoundVariant<V> &start, const BoundVariant<V> &end) {
         return std::visit([](const auto &start_arg, const auto &end_arg) {
-            if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
-                return start_arg.value <= end_arg.value;
-            } else if constexpr (std::is_same_v<decltype(start_arg), Included<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
-                return start_arg.value < end_arg.value;
-            } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Included<V>>) {
-                return start_arg.value < end_arg.value;
-            } else if constexpr (std::is_same_v<decltype(start_arg), Excluded<V>> && std::is_same_v<decltype(end_arg), Excluded<V>>) {
-                return start_arg.value < end_arg.value;
+            using T_start = std::decay_t<decltype(start_arg)>;
+            using T_end = std::decay_t<decltype(end_arg)>;
+
+            if constexpr (std::is_same_v<T_start, Included<V>> && std::is_same_v<T_end, Included<V>>) {
+                auto low = std::any_cast<Included<V>>(start_arg);
+                auto high = std::any_cast<Included<V>>(end_arg);
+                return low.value <= high.value;
+            } else if constexpr (std::is_same_v<T_start, Included<V>> && std::is_same_v<T_end, Excluded<V>>) {
+                auto low = std::any_cast<Included<V>>(start_arg);
+                auto high = std::any_cast<Excluded<V>>(end_arg);
+                return low.value < high.value;
+            } else if constexpr (std::is_same_v<T_start, Excluded<V>> && std::is_same_v<T_end, Included<V>>) {
+                auto low = std::any_cast<Excluded<V>>(start_arg);
+                auto high = std::any_cast<Included<V>>(end_arg);
+                return low.value < high.value;
+            } else if constexpr (std::is_same_v<T_start, Excluded<V>> && std::is_same_v<T_end, Excluded<V>>) {
+                auto low = std::any_cast<Excluded<V>>(start_arg);
+                auto high = std::any_cast<Excluded<V>>(end_arg);
+                return low.value < high.value;
             } else {
                 return true;
             }
