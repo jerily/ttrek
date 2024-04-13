@@ -253,6 +253,7 @@ public:
                                                                 );
 
                                         auto package_candidates = cache.get_or_cache_candidates(dependency_name);
+                                        fprintf(stderr, "add_clauses_for_solvables: package_candidates.candidates size: %zd\n", package_candidates.candidates.size());
                                         pending_futures.emplace_back(
                                                 TaskResult::Candidates{dependency_name, package_candidates});
                                     }
@@ -260,9 +261,10 @@ public:
 
                                 for (VersionSetId version_set_id: requirements) {
                                     // Find all the solvable that match for the given version set
-                                    auto candidates = cache.get_or_cache_sorted_candidates(version_set_id);
+                                    auto sorted_candidates = cache.get_or_cache_sorted_candidates(version_set_id);
+                                    fprintf(stderr, "add_clauses_for_solvables: sorted_candidates size: %zd\n", sorted_candidates.size());
                                     pending_futures.emplace_back(
-                                            TaskResult::SortedCandidates{solvable_id, version_set_id, candidates});
+                                            TaskResult::SortedCandidates{solvable_id, version_set_id, sorted_candidates});
                                 }
 
                                 for (VersionSetId version_set_id: constrains) {
@@ -347,9 +349,10 @@ public:
                     auto version_set = pool.resolve_version_set(version_set_id);
 
                     tracing::trace(
-                                            "sorted candidates available for %s %s\n",
+                                            "sorted candidates available for %s %d\n",
                                             version_set_name.c_str(),
-                                            "version_set"
+                                            candidates.size()
+//                                            version_set
                                         );
 
                     // Queue requesting the dependencies of the candidates as well if they are cheaply
@@ -377,7 +380,6 @@ public:
                     //let &Clause::Requires(solvable_id, version_set_id) = &clause.kind else {
                     //                        unreachable!();
                     //                    };
-                    // in c++ it should be:
 
                     fprintf(stderr, "solvable_id: %d\n", solvable_id.to_usize());
                     fprintf(stderr, "clause_id: %d\n", clause_id.to_usize());

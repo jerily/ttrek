@@ -102,10 +102,11 @@ public:
             auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
             auto version_set = get_pool().resolve_version_set(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
+            fprintf(stderr, "get_or_cache_matching_candidates: package_candidates.candidates.size() = %d\n", package_candidates.candidates.size());
             std::vector<SolvableId> matching_candidates;
             for (auto p : package_candidates.candidates) {
                 auto version = get_pool().resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
-                fprintf(stderr, "version = %d\n", version);
+                fprintf(stderr, "get_or_cache_matching_candidates: version = %d contains = %b\n", version, version_set.contains(version));
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
                 }
@@ -146,13 +147,14 @@ public:
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_sorted_candidates(VersionSetId version_set_id) {
         auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
-        fprintf(stderr, "optional_candidates.has_value() = %d\n", optional_candidates.has_value());
+        fprintf(stderr, "get_or_cache_sorted_candidates: optional_candidates.has_value() = %d\n", optional_candidates.has_value());
         if (optional_candidates.has_value()) {
             return optional_candidates.value();
         } else {
             auto package_name = get_pool().resolve_version_set_package_name(version_set_id);
             auto matching_candidates = get_or_cache_matching_candidates(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
+            fprintf(stderr, "->>> get_or_cache_sorted_candidates: matching_candidates.size() = %d\n", matching_candidates.size());
             std::vector<SolvableId> sorted_candidates;
             sorted_candidates.insert(sorted_candidates.end(), matching_candidates.begin(), matching_candidates.end());
             provider.sort_candidates(sorted_candidates);

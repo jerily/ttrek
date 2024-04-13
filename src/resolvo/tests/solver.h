@@ -51,6 +51,22 @@ struct Pack {
         return version == other.version;
     }
 
+    bool operator<(const Pack &other) const {
+        return version < other.version;
+    }
+
+    bool operator>(const Pack &other) const {
+        return version > other.version;
+    }
+
+    bool operator<=(const Pack &other) const {
+        return version <= other.version;
+    }
+
+    bool operator>=(const Pack &other) const {
+        return version >= other.version;
+    }
+
     friend std::ostream &operator<<(std::ostream &os, const Pack &pack) {
         os << "Pack(" << pack.version << ")";
         return os;
