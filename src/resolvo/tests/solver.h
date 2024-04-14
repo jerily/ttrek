@@ -31,20 +31,41 @@ struct Pack {
     bool unknown_deps;
     bool cancel_during_get_dependencies;
 
-    Pack(uint32_t version, bool unknown_deps = false, bool cancel_during_get_dependencies = false)
-            : version(version), unknown_deps(unknown_deps),
-              cancel_during_get_dependencies(cancel_during_get_dependencies) {}
+    explicit Pack(uint32_t p_version, bool p_unknown_deps = false, bool p_cancel_during_get_dependencies = false)
+            : version(p_version), unknown_deps(p_unknown_deps),
+              cancel_during_get_dependencies(p_cancel_during_get_dependencies) {
 
-    Pack with_unknown_deps() const {
-        return Pack(version, true, cancel_during_get_dependencies);
+        fprintf(stderr, "****************** cancel_during_get_dependencies: %d\n", p_cancel_during_get_dependencies);
     }
 
-    Pack with_cancel_during_get_dependencies() const {
-        return Pack(version, unknown_deps, true);
+    // assignment operator
+    Pack &operator=(const Pack &other) {
+        version = other.version;
+        unknown_deps = other.unknown_deps;
+        cancel_during_get_dependencies = other.cancel_during_get_dependencies;
+        fprintf(stderr, "****************** assignment: cancel_during_get_dependencies: %d\n", other.cancel_during_get_dependencies);
+        return *this;
     }
 
-    Pack offset(uint32_t offset) const {
-        return Pack(version + offset, unknown_deps, cancel_during_get_dependencies);
+    // copy constructor
+    Pack(const Pack &other) {
+        version = other.version;
+        unknown_deps = other.unknown_deps;
+        cancel_during_get_dependencies = other.cancel_during_get_dependencies;
+        fprintf(stderr, "****************** copy: cancel_during_get_dependencies: %d\n", other.cancel_during_get_dependencies);
+    }
+
+//    Pack with_unknown_deps() const {
+//        return Pack(version, true, cancel_during_get_dependencies);
+//    }
+//
+//    Pack with_cancel_during_get_dependencies() const {
+//        return Pack(version, unknown_deps, true);
+//    }
+
+    Pack offset(uint32_t offset) {
+        version = version + offset;
+        return *this;
     }
 
     bool operator==(const Pack &other) const {
@@ -245,17 +266,21 @@ public:
     DependenciesVariant get_dependencies(const SolvableId &solvable) {
         // TODO
         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies solvable_id: %lu\n", solvable.to_usize());
-        auto &candidate = pool->resolve_solvable(solvable);
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: name_id=%lu\n", candidate.get_name_id().to_usize());
+        auto candidate = pool->resolve_solvable(solvable);
+//        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: name_id=%lu\n", candidate.get_name_id().to_usize());
         auto package_name = pool->resolve_package_name(candidate.get_name_id());
         auto pack = candidate.get_inner();
 
+        fprintf(stderr, "cancel_during_get_dependencies: version=%d %d vs %d\n", pack.version, pack.cancel_during_get_dependencies, candidate.get_inner().cancel_during_get_dependencies);
+
         if (pack.cancel_during_get_dependencies) {
             cancel_solving = true;
+            fprintf(stderr, "##################### cancel_during_get_dependencies\n");
             return Dependencies::Unknown{pool->intern_string("cancelled")};
         }
 
         if (pack.unknown_deps) {
+            fprintf(stderr, "##################### could not retrieve deps\n");
             return Dependencies::Unknown{pool->intern_string("could not retrieve deps")};
         }
 

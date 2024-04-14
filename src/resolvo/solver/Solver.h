@@ -777,7 +777,7 @@ fprintf(stderr, "add_clauses_output\n");
             fprintf(stderr, "propagate_result.has_value(): %d\n", propagate_result.has_value());
             if (!propagate_result.has_value()) {
                 // Propagation completed
-                tracing::debug("╘══ Propagation completed");
+                tracing::debug("╘══ Propagation completed\n");
                 return {level, std::nullopt};
             }
 
@@ -786,7 +786,7 @@ fprintf(stderr, "add_clauses_output\n");
                 if constexpr (std::is_same_v<T, PropagationError::Cancelled>) {
                     // Propagation cancelled
                     auto err = std::any_cast<PropagationError::Cancelled>(arg);
-                    tracing::debug("╘══ Propagation cancelled");
+                    tracing::debug("╘══ Propagation cancelled\n");
                     return std::make_pair(level, std::optional(UnsolvableOrCancelled::Cancelled{err.data}));
                 } else if constexpr (std::is_same_v<T, PropagationError::Conflict>) {
                     auto err = std::any_cast<PropagationError::Conflict>(arg);

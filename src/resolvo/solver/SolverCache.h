@@ -107,7 +107,7 @@ public:
             for (auto p : package_candidates.candidates) {
                 fprintf(stderr, "get_or_cache_matching_candidates: p = %d\n", p.to_usize());
                 auto version = get_pool()->resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
-                fprintf(stderr, "get_or_cache_matching_candidates: version = %d contains = %b\n", version, version_set.contains(version));
+                fprintf(stderr, "get_or_cache_matching_candidates: version = %d contains = %d\n", version.version, version_set.contains(version));
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
                 }
@@ -182,6 +182,7 @@ public:
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
     const DependenciesVariant& get_or_cache_dependencies(SolvableId solvable_id) {
+        fprintf(stderr, "get_or_cache_dependencies: solvable_id = %d\n", solvable_id.to_usize());
         auto optional_dependencies_id = solvable_to_dependencies.get_copy(solvable_id);
         if (optional_dependencies_id.has_value()) {
             return solvable_dependencies[optional_dependencies_id.value()];
@@ -190,6 +191,7 @@ public:
             // operation, we want to check beforehand whether we should cancel the solving
             // process
             if (provider.should_cancel_with_value().has_value()) {
+                fprintf(stderr, "solver cancelled");
                 throw std::runtime_error("Solver cancelled");
             }
 

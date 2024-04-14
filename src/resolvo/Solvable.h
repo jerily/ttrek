@@ -20,7 +20,17 @@ private:
 
 public:
 // Constructor
-    Solvable(const V &record, NameId nameId) : inner(record), name(std::move(nameId)) {}
+    Solvable(const V &record, const NameId& nameId) : inner(record), name(nameId) {}
+
+    // assignment operator
+    Solvable& operator=(const Solvable& other) {
+        inner = other.inner;
+        name = other.name;
+        return *this;
+    }
+
+    // copy constructor
+    Solvable(const Solvable& other) : inner(other.inner), name(other.name) {}
 
 // Accessor for the record
     V get_inner() const {
@@ -28,7 +38,7 @@ public:
     }
 
 // Accessor for the name ID
-    NameId get_name_id() const {
+    NameId get_name_id() {
         return name;
     }
 };
@@ -67,7 +77,7 @@ public:
     }
 
 // Get the solvable if it's not root
-    std::optional<Solvable<V>> get_solvable() const {
+    std::optional<Solvable<V>> get_solvable() {
         return std::visit([](auto &&arg) -> std::optional<Solvable<V>> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, SolvableInner::Package<V>>) {
@@ -81,7 +91,7 @@ public:
     }
 
     // Get the solvable if it's not root
-    const Solvable<V>& get_solvable_unchecked() const {
+    Solvable<V> get_solvable_unchecked() {
         return get_solvable().value();
     }
 

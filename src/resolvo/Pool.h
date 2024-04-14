@@ -93,7 +93,7 @@ public:
     // Returns the package name associated with the provided [`NameId`].
     //
     // Panics if the package name is not found in the pool.
-    const N &resolve_package_name(const NameId &name_id) const {
+    N resolve_package_name(const NameId &name_id) {
         return package_names[name_id];
     }
 
@@ -119,14 +119,14 @@ public:
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    const Solvable<typename VS::ValueType>& resolve_solvable(const SolvableId& id) const {
+    Solvable<typename VS::ValueType> resolve_solvable(const SolvableId& id) {
         return resolve_internal_solvable(id).get_solvable_unchecked();
     }
 
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    const InternalSolvable<typename VS::ValueType>& resolve_internal_solvable(const SolvableId& id) const {
+    InternalSolvable<typename VS::ValueType> resolve_internal_solvable(const SolvableId& id) {
         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> resolve_internal_solvable: solvable_id=%lu\n", id.to_usize());
         return solvables[id];
     }
