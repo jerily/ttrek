@@ -358,8 +358,10 @@ public:
                     // available from the dependency provider.
 
                     for (auto &candidate: candidates) {
+                        fprintf(stderr, "add_clauses_for_solvables: candidate: %d\n", candidate.to_usize());
                         if (seen.insert(candidate).second && cache.are_dependencies_available_for(candidate) &&
                             clauses_added_for_solvable_.insert(candidate).second) {
+                            fprintf(stderr, "add_clauses_for_solvables: candidate: %d <<<--- added to pending_solvables\n", candidate.to_usize());
                             pending_solvables.emplace_back(candidate);
                         }
                     }
@@ -601,11 +603,13 @@ fprintf(stderr, "add_clauses_output\n");
             auto output = add_clauses_for_solvables(new_solvable_ids);
 
             // Serially process the outputs, to reduce the need for synchronization
-            // for &clause_id in &output.conflicting_clauses {
-            tracing::debug("├─ added clause %s introduces a conflict which invalidates the partial solution",
+            for (auto &clause_id : output.conflicting_clauses) {
+                tracing::debug("├─ added clause %lu introduces a conflict which invalidates the partial solution\n",
 //                        clause=self.clauses.borrow()[clause_id].debug(&self.pool)
-                           "clauses[clause_id]"
-                        );
+//                               "clauses[clause_id]"
+                            clause_id.to_usize()
+                );
+            }
 
             auto optional_conflicting_clause_id = process_add_clause_output(output);
             if (optional_conflicting_clause_id.has_value()) {
