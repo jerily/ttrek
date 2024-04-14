@@ -50,25 +50,20 @@ using SolvableInnerVariant = std::variant<SolvableInner::Root, SolvableInner::Pa
 // The InternalSolvable class template represents a package that can be installed
 template<typename V>
 class InternalSolvable {
-private:
+public:
     SolvableInnerVariant<V> inner;
 
-public:
-
-    InternalSolvable(SolvableInnerVariant<V> inner) : inner(std::move(inner)) {}
+    explicit InternalSolvable(const SolvableInnerVariant<V> &inner) : inner(inner) {}
 
     static InternalSolvable new_root() {
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> new_root\n");
         return InternalSolvable(SolvableInner::Root{});
     }
 
     // new_solvable
     static InternalSolvable new_solvable(const NameId &name_id, V record) {
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> new_solvable: name_id=%lu\n", name_id.to_usize());
         return InternalSolvable(SolvableInner::Package<V>{Solvable<V>(record, name_id)});
-    }
-
-// Check if the solvable is root
-    bool is_root() const {
-        return std::holds_alternative<SolvableInner::Root>(inner);
     }
 
 // Get the solvable if it's not root
@@ -86,12 +81,9 @@ public:
 
     // Get the solvable if it's not root
     Solvable<V> get_solvable_unchecked() const {
-        return std::get<SolvableInner::Package<V>>(inner).solvable;
+        return get_solvable().value();
     }
 
-    SolvableInnerVariant<V> get_inner() const {
-        return inner;
-    }
 };
 
 

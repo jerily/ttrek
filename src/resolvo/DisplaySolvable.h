@@ -19,27 +19,21 @@ public:
             : pool(poolRef), solvable(solvableRef) {}
 
     friend std::ostream &operator<<(std::ostream &os, const DisplaySolvable &display_solvable) {
-        if (display_solvable.solvable.is_root()) {
-            os << "<root>";
-        } else {
-            const auto &solv = display_solvable.solvable.get_solvable_unchecked();
-            os << display_solvable.pool->resolve_package_name(solv.get_name_id()) << "=" << solv.get_inner();
-        }
+        os << display_solvable.to_string();
         return os;
     }
 
     std::string to_string() const {
         std::ostringstream oss;
-        return oss.str();
-        if (solvable.is_root()) {
-            oss << "<root>";
-        } else {
-            const auto optional_solv = solvable.get_solvable();
-            if (optional_solv.has_value()) {
-                auto solv = optional_solv.value();
-//                oss << pool->resolve_package_name(solv.get_name_id()) << "=" << solv.get_inner();
+        std::visit([&oss](auto &&arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, SolvableInner::Root>) {
+                oss << "<root>";
+            } else if constexpr (std::is_same_v<T, SolvableInner::Package<typename VS::ValueType>>) {
+                const auto &package = std::any_cast<SolvableInner::Package<typename VS::ValueType>>(arg);
+                oss << package.solvable.get_inner();
             }
-        }
+        }, solvable.inner);
         return oss.str();
     }
 

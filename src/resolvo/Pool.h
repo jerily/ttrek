@@ -26,14 +26,24 @@
 template<typename VS, typename N = std::string>
 class Pool {
 private:
+    // Interned package names
     Arena<NameId, N> package_names;
+    // Interned strings
     Arena<StringId, std::string> strings;
+    // Map from version set to the id of their interned counterpart
     FrozenCopyMap<std::pair<NameId, VS>, VersionSetId> version_set_to_id;
 
 public:
+    // All the solvables that have been registered
     Arena<SolvableId, InternalSolvable<typename VS::ValueType>> solvables;
+
+    // Map from package names to the id of their interned counterpart
     std::unordered_map<N, NameId> names_to_ids;
+
+    // Map from package names to the id of their interned counterpart
     std::unordered_map<std::string, StringId> string_to_ids;
+
+    // Interned match specs
     Arena<VersionSetId, std::pair<NameId, VS>> version_sets;
 
     Pool() {
@@ -117,7 +127,7 @@ public:
     //
     // Panics if the solvable is not found in the pool
     InternalSolvable<typename VS::ValueType> resolve_internal_solvable(const SolvableId& id) const {
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> resolve_internal_solvable\n");
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> resolve_internal_solvable: solvable_id=%lu\n", id.to_usize());
         return solvables[id];
     }
 

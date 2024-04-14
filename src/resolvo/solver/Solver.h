@@ -171,12 +171,12 @@ public:
                     if constexpr (std::is_same_v<T, SolvableInner::Root>) {
                         auto known_dependencies = KnownDependencies{root_requirements_, std::vector<VersionSetId>()};
                         return std::optional(TaskResult::Dependencies{solvable_id, Dependencies::Known{known_dependencies}});
-                    } else if constexpr (std::is_same_v<T, SolvableInner::Package<VS>>) {
+                    } else if constexpr (std::is_same_v<T, SolvableInner::Package<typename VS::ValueType>>) {
                         auto deps = cache.get_or_cache_dependencies(solvable_id);
                         return std::optional(TaskResult::Dependencies{solvable_id, deps});
                     }
                     return std::nullopt;
-                }, solvable.get_inner());
+                }, solvable.inner);
 
                 if (optional_get_dependencies_fut.has_value()) {
                     pending_futures.emplace_back(optional_get_dependencies_fut.value());
@@ -222,7 +222,7 @@ public:
                                 } else if constexpr (std::is_same_v<T_INNER, Dependencies::Unknown>) {
                                     auto reason = std::any_cast<Dependencies::Unknown>(arg_inner).reason;
 
-                                    fprintf(stderr, "unknown dependencies: %d\n", reason.to_usize());
+                                    fprintf(stderr, "unknown dependencies: %lu\n", reason.to_usize());
 
                                     // There is no information about the solvable's dependencies, so we add
                                     // an exclusion clause for it
@@ -381,8 +381,8 @@ public:
                     //                        unreachable!();
                     //                    };
 
-                    fprintf(stderr, "solvable_id: %d\n", solvable_id.to_usize());
-                    fprintf(stderr, "clause_id: %d\n", clause_id.to_usize());
+                    fprintf(stderr, "solvable_id: %lu\n", solvable_id.to_usize());
+                    fprintf(stderr, "clause_id: %lu\n", clause_id.to_usize());
 
                     if (clause.has_watches()) {
                         output.clauses_to_watch.push_back(clause_id);
