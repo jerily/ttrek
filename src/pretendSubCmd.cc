@@ -24,9 +24,58 @@ void test_unit_propagation_1() {
     fprintf(stdout, "success\n");
 }
 
+// Test if we can also select a nested version
+void test_unit_propagation_nested() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>{"efgh"}},
+                                                      {{"efgh"}, 4, std::vector<std::string>()},
+                                                      {{"dummy"}, 6, std::vector<std::string>()}});
+    auto root_requirements = provider.requirements({"asdf"});
+    auto pool_ptr = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(root_requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 2);
+
+    auto solvable = pool_ptr->resolve_solvable(solved[0]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "asdf");
+    assert(solvable.get_inner().version == 1);
+
+    solvable = pool_ptr->resolve_solvable(solved[1]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "efgh");
+    assert(solvable.get_inner().version == 4);
+    fprintf(stdout, "success\n");
+}
+
+// Test if we can resolve multiple versions at once
+void test_resolve_multiple() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>()},
+                                                      {{"asdf"}, 2, std::vector<std::string>()},
+                                                      {{"efgh"}, 4, std::vector<std::string>()},
+                                                      {{"efgh"}, 5, std::vector<std::string>()}});
+    auto root_requirements = provider.requirements({"asdf", "efgh"});
+    auto pool_ptr = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(root_requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 2);
+
+    auto solvable = pool_ptr->resolve_solvable(solved[0]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "asdf");
+    assert(solvable.get_inner().version == 2);
+
+    solvable = pool_ptr->resolve_solvable(solved[1]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "efgh");
+    assert(solvable.get_inner().version == 5);
+    fprintf(stdout, "success\n");
+}
+
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     test_unit_propagation_1();
+    test_unit_propagation_nested();
+    test_resolve_multiple();
 
     return TCL_OK;
 }
