@@ -25,13 +25,13 @@ public:
 
     std::string to_string() const {
         std::ostringstream oss;
-        std::visit([&oss](auto &&arg) {
+        std::visit([this, &oss](auto &&arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, SolvableInner::Root>) {
                 oss << "<root>";
             } else if constexpr (std::is_same_v<T, SolvableInner::Package<typename VS::ValueType>>) {
-                const auto &package = std::any_cast<SolvableInner::Package<typename VS::ValueType>>(arg);
-                oss << package.solvable.get_inner();
+                auto package = std::any_cast<SolvableInner::Package<typename VS::ValueType>>(arg);
+                oss << pool->resolve_package_name(package.solvable.get_name_id()) << "=" << package.solvable.get_inner();
             }
         }, solvable.inner);
         return oss.str();

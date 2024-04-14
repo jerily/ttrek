@@ -33,7 +33,7 @@ public:
     Solvable(const Solvable& other) : inner(other.inner), name(other.name) {}
 
 // Accessor for the record
-    V get_inner() const {
+    V get_inner() {
         return inner;
     }
 
@@ -66,13 +66,11 @@ public:
     explicit InternalSolvable(const SolvableInnerVariant<V> &inner) : inner(inner) {}
 
     static InternalSolvable new_root() {
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> new_root\n");
             return InternalSolvable(SolvableInner::Root{});
     }
 
     // new_solvable
     static InternalSolvable new_solvable(const NameId &name_id, V record) {
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> new_solvable: name_id=%lu\n", name_id.to_usize());
         return InternalSolvable(SolvableInner::Package<V>{Solvable<V>(record, name_id)});
     }
 
@@ -82,7 +80,6 @@ public:
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, SolvableInner::Package<V>>) {
                 auto package = std::any_cast<SolvableInner::Package<V>>(arg);
-                fprintf(stderr, "package solvable\n");
                 return std::make_optional(package.solvable);
             } else {
                 return std::nullopt;

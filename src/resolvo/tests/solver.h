@@ -87,7 +87,7 @@ struct Pack {
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Pack &pack) {
-        os << "Pack(" << pack.version << ")";
+        os << pack.version;
         return os;
     }
 };
@@ -318,11 +318,12 @@ private:
 
 
 // Create a string from a [`Transaction`]
-std::string transaction_to_string(BundleBoxProvider &provider, const std::vector<SolvableId> &solvables) {
+template <typename VS>
+std::string transaction_to_string(const std::shared_ptr<Pool<VS>>& pool, const std::vector<SolvableId> &solvables) {
     std::stringstream output;
     for (const auto &solvable: solvables) {
-        auto display_solvable = DisplaySolvable(provider.pool,
-                                                provider.pool->resolve_internal_solvable(solvable));
+        auto display_solvable = DisplaySolvable(pool,
+                                                pool->resolve_internal_solvable(solvable));
         output << display_solvable << "\n";
     }
     return output.str();
@@ -362,8 +363,7 @@ std::string solve_snapshot(BundleBoxProvider &provider, const std::vector<std::s
         output << "UNSOLVABLE:\n";
         return output.str();
     } else {
-        auto reason = provider.should_cancel_with_value();
-        return reason.value();
+        return transaction_to_string(pool, steps);
     }
 }
 
