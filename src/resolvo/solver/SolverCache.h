@@ -203,7 +203,7 @@ public:
     // Returns true if the dependencies for the given solvable are "cheaply" available. This means
     // either the dependency provider indicated that the dependencies for a solvable are available
     // or the dependencies have already been requested.
-    bool are_dependencies_available_for(SolvableId solvable) {
+    bool are_dependencies_available_for(const SolvableId& solvable) {
         auto dependencies_id = solvable_to_dependencies.get_copy(solvable);
         if (dependencies_id.has_value()) {
             return true;

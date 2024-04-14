@@ -141,9 +141,8 @@ public:
 
         // Mark the initial seen solvables as seen
         std::vector<SolvableId> pending_solvables;
-        auto clauses_added_for_solvable = clauses_added_for_solvable_;
         for (auto &solvable_id: solvable_ids) {
-            if (clauses_added_for_solvable_.find(solvable_id) == clauses_added_for_solvable_.end()) {
+            if (clauses_added_for_solvable_.insert(solvable_id).second) {
                 pending_solvables.push_back(solvable_id);
             }
         }
@@ -502,6 +501,8 @@ fprintf(stderr, "add_clauses_output\n");
             // Propagate decisions from assignments above
             auto propagate_result = propagate(level);
 
+            fprintf(stderr, "run_sat: level=%d propagate_result.has_value(): %d\n", level, propagate_result.has_value());
+
             if (propagate_result.has_value()) {
                 fprintf(stderr, "handle propagation errors\n");
                 // Handle propagation errors
@@ -546,12 +547,15 @@ fprintf(stderr, "add_clauses_output\n");
             // We have a partial solution. E.g. there is a solution that satisfies all the clauses
             // that have been added so far.
 
+            fprintf(stderr, "run_sat: level=%d partial solution\n", level);
+
             // Determine which solvables are part of the solution for which we did not yet get any
             // dependencies. If we find any such solvable it means we did not arrive at the full
             // solution yet.
 
             std::vector<std::tuple<SolvableId, ClauseId>> new_solvables;
             for (auto &d: decision_tracker_.get_stack()) {
+                fprintf(stderr, "decision_tracker_.get_stack(): d=%d d.value=%d\n", d.solvable_id.to_usize(), d.value);
                 if (d.value && clauses_added_for_solvable_.find(d.solvable_id) == clauses_added_for_solvable_.end()) {
                     // Filter only decisions that led to a positive assignment
                     // Select solvables for which we do not yet have dependencies
@@ -559,6 +563,12 @@ fprintf(stderr, "add_clauses_output\n");
                 }
             }
 
+            fprintf(stderr, "new_solvables.size(): %zd\n", new_solvables.size());
+
+            if (new_solvables.empty()) {
+                // If no new literals were selected this solution is complete and we can return.
+                return std::nullopt;
+            }
             // tracing::debug!(
             //                "====\n==Found newly selected solvables\n- {}\n====",
             //                new_solvables
@@ -636,6 +646,7 @@ fprintf(stderr, "add_clauses_output\n");
     // the favored version if it was provided by the user, and set its value to true.
 
     std::pair<uint32_t, std::optional<UnsolvableOrCancelledVariant>> resolve_dependencies(uint32_t level) {
+                fprintf(stderr, "resolve_dependencies: level=%d\n", level);
         while (true) {
             // Make a decision. If no decision could be made it means the problem is satisfyable.
             auto decision = decide();
@@ -759,6 +770,7 @@ fprintf(stderr, "add_clauses_output\n");
     std::pair<uint32_t, std::optional<UnsolvableOrCancelledVariant>> propagate_and_learn(uint32_t level) {
         while (true) {
             auto propagate_result = propagate(level);
+            fprintf(stderr, "propagate_result.has_value(): %d\n", propagate_result.has_value());
             if (!propagate_result.has_value()) {
                 // Propagation completed
                 tracing::debug("╘══ Propagation completed");
@@ -866,8 +878,9 @@ fprintf(stderr, "add_clauses_output\n");
     //fn propagate(&mut self, level: u32) -> Result<(), PropagationError> {
 
     std::optional<PropagationErrorVariant> propagate(uint32_t level) {
-        fprintf(stderr, "propagate level: %d\n", level);
+        fprintf(stderr, "propagate: propagate level: %d\n", level);
         auto optional_value = cache.provider.should_cancel_with_value();
+        fprintf(stderr, "propagate: optional_value.has_value(): %d\n", optional_value.has_value() ? 1 : 0);
         if (optional_value.has_value()) {
             return std::optional(PropagationError::Cancelled{optional_value.value()});
         }
@@ -878,16 +891,20 @@ fprintf(stderr, "add_clauses_output\n");
             bool value = false;
             auto decided = decision_tracker_.try_add_decision(Decision(solvable_id, value, clause_id), level);
             if (!decided.has_value()) {
-                fprintf(stderr, "decided has no value\n");
+                fprintf(stderr, "propagate: decided has no value\n");
                 return std::optional(PropagationError::Conflict{solvable_id, value, clause_id});
             }
 
+            fprintf(stderr, "├─ Propagate assertion %d = %d\n", solvable_id.to_usize(), value);
+
             tracing::trace(
-                        "├─ Propagate assertion {} = %d\n",
+                        "├─ Propagate assertion %lu = %d\n",
 //                                    solvable_id.to_usize(),
                                     value
                         );
         }
+
+        fprintf(stderr, "propagate: learnt_clause_ids_.size(): %zd\n", learnt_clause_ids_.size());
 
         // Assertions derived from learnt rules
         for (auto &learn_clause_id: learnt_clause_ids_) {
@@ -922,10 +939,13 @@ fprintf(stderr, "add_clauses_output\n");
                         );
         }
 
+        fprintf(stderr, "propagate: watched solvables\n");
+
         // Watched solvables
         while (true) {
             auto decision = decision_tracker_.next_unpropagated();
             if (!decision.has_value()) {
+                fprintf(stderr, "propagate: no decision\n");
                 break;
             }
 
