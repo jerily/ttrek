@@ -594,15 +594,15 @@ public:
             // in c++ it should be:
 
             tracing::debug("====\n==Found newly selected solvables\n");
-//            for (auto &[solvable_id, derived_from]: new_solvables) {
-//                auto display_solvable = DisplaySolvable(*pool_ptr, solvable_id);
-//                auto display_clause = DisplayClause(*pool, clauses_[derived_from]);
-//                tracing::debug(
-//                                    "- %s (derived from %s)\n",
-//                                    display_solvable.to_string().c_str(),
-//                                    display_clause.to_string().c_str()
-//                                );
-//            }
+            for (auto &[solvable_id, derived_from]: new_solvables) {
+                auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable_id));
+                auto display_clause = DisplayClause(pool, clauses_[derived_from]);
+                tracing::debug(
+                                    "- %s (derived from %s)\n",
+                                    display_solvable.to_string().c_str(),
+                                    display_clause.to_string().c_str()
+                                );
+            }
 
             // Concurrently get the solvable's clauses
             auto new_solvable_ids = std::vector<SolvableId>();
@@ -700,6 +700,8 @@ public:
             // Consider only clauses in which no candidates have been installed
             auto optional_candidates = cache.version_set_to_sorted_candidates.get(deps);
 
+            // Either find the first assignable candidate or determine that one of the candidates is
+            // already assigned in which case the clause has already been satisfied.
             std::optional<SolvableId> first_selectable_candidate;
             int selectable_candidates = 0;
             for (auto &candidate: optional_candidates.value()) {
@@ -707,16 +709,24 @@ public:
                 fprintf(stderr, ">>>>>>>>>>>>>> decide: candidate: %s\n", display_solvable.to_string().c_str());
                 auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
                 if (optional_assigned_value.has_value()) {
+                    fprintf(stderr, "optional_assigned_value has value: %d\n", optional_assigned_value.value());
                     if (optional_assigned_value.value()) {
                         break;
                     }
+                    continue;
                 } else {
-                    first_selectable_candidate = candidate;
+                    if (!first_selectable_candidate.has_value()) {
+                        first_selectable_candidate = candidate;
+                    }
                     selectable_candidates++;
                 }
             }
 
             if (first_selectable_candidate.has_value()) {
+
+                auto display_selectable = DisplaySolvable(pool, pool->resolve_internal_solvable(first_selectable_candidate.value()));
+                fprintf(stderr, ">>>>>>>>>>>>>> decide: selectable: %s\n", display_selectable.to_string().c_str());
+
                 auto possible_decision = std::make_tuple(first_selectable_candidate.value(), solvable_id, clause_id);
                 if (!best_decision.second.has_value() || selectable_candidates < best_decision.first) {
                     best_decision = std::make_pair(selectable_candidates, possible_decision);
@@ -727,14 +737,14 @@ public:
         auto [count, the_decision] = best_decision;
         if (the_decision.has_value()) {
             auto [candidate, _solvable_id, clause_id] = the_decision.value();
-            tracing::info("deciding to assign: candidate=%zd solvable_id=%zd clause_id=%zd\n", candidate.to_usize(),
-                          _solvable_id.to_usize(), clause_id.to_usize());
-            // tracing::info!(
-            //                "deciding to assign {}, ({:?}, {} possible candidates)",
-            //                candidate.display(&self.pool),
-            //                self.clauses.borrow()[clause_id].debug(&self.pool),
-            //                count,
-            //            );
+            auto display_candidate = DisplaySolvable(pool, pool->resolve_internal_solvable(candidate));
+            auto display_clause = DisplayClause(pool, clauses_[clause_id]);
+             tracing::info(
+                            "deciding to assign %s, (%s, %d possible candidates)\n",
+                            display_candidate.to_string().c_str(),
+                            display_clause.to_string().c_str(),
+                            count
+                        );
 
             return the_decision;
         }

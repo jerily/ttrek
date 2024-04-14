@@ -148,7 +148,7 @@ struct Spec {
             }
         };
 
-        std::cout << spec_name << std::endl;
+//        std::cout << spec_name << std::endl;
 
         auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
         return Spec{spec_name, spec_versions};
