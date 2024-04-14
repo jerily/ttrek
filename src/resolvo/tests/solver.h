@@ -59,9 +59,8 @@ struct Pack {
 //        return Pack(version, unknown_deps, true);
 //    }
 
-    Pack offset(uint32_t offset) {
-        version = version + offset;
-        return *this;
+    Pack offset(uint32_t offset) const {
+        return Pack(version + offset);
     }
 
     bool operator==(const Pack &other) const {
@@ -133,11 +132,15 @@ struct Spec {
                 }
                 Pack startPack(std::stoi(start));
                 Pack endPack = !end.empty() ? Pack(std::stoi(end)) : startPack.offset(1);
+                std::cout << "startPack: " << startPack.version << std::endl;
+                std::cout << "endPack: " << endPack.version << std::endl;
                 return Range<Pack>::between(startPack, endPack);
             } else {
                 return Range<Pack>::full();
             }
         };
+
+        std::cout << spec_name << std::endl;
 
         auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
         return Spec{spec_name, spec_versions};
