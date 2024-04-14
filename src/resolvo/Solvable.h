@@ -57,7 +57,7 @@ public:
 
     static InternalSolvable new_root() {
         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> new_root\n");
-        return InternalSolvable(SolvableInner::Root{});
+            return InternalSolvable(SolvableInner::Root{});
     }
 
     // new_solvable

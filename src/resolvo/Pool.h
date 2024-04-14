@@ -126,7 +126,7 @@ public:
     // Returns the solvable associated to the provided id
     //
     // Panics if the solvable is not found in the pool
-    InternalSolvable<typename VS::ValueType> resolve_internal_solvable(const SolvableId& id) const {
+    const InternalSolvable<typename VS::ValueType>& resolve_internal_solvable(const SolvableId& id) const {
         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> resolve_internal_solvable: solvable_id=%lu\n", id.to_usize());
         return solvables[id];
     }
