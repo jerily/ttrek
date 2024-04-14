@@ -93,12 +93,25 @@ void test_resolve_with_concurrent_metadata_fetching() {
     fprintf(stdout, "success\n");
 }
 
+// In case of a conflict the version should not be selected with the conflict
+void test_resolve_with_conflict() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 4, std::vector<std::string>{"conflicting 1"}},
+                                                      {{"asdf"}, 3, std::vector<std::string>{"conflicting 0"}},
+                                                      {{"efgh"}, 7, std::vector<std::string>{"conflicting 0"}},
+                                                      {{"efgh"}, 6, std::vector<std::string>{"conflicting 0"}},
+                                                      {{"conflicting"}, 1, std::vector<std::string>()},
+                                                      {{"conflicting"}, 0, std::vector<std::string>()}});
+    auto result = solve_snapshot(provider, {"asdf", "efgh"});
+    assert_snapshot(result);
+
+}
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     test_unit_propagation_1();
     test_unit_propagation_nested();
     test_resolve_multiple();
     test_resolve_with_concurrent_metadata_fetching();
+    test_resolve_with_conflict();
 
     return TCL_OK;
 }

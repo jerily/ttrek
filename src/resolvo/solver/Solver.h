@@ -117,13 +117,12 @@ public:
             return std::make_pair(steps, err);
         }
 
-        for (auto &d: decision_tracker_.get_stack()) {
+        for (const auto &d: decision_tracker_.get_stack()) {
             if (d.value && d.solvable_id != SolvableId::root()) {
                 steps.push_back(d.solvable_id);
             }
             // Ignore things that are set to false
         }
-
         return std::make_pair(steps, err);
     }
 
@@ -519,7 +518,7 @@ fprintf(stderr, "add_clauses_output\n");
                         } else {
                             // The conflict was caused because new clauses have been added dynamically.
                             // We need to start over.
-                            tracing::debug("├─ added clause {clause:?} introduces a conflict which invalidates the partial solution");
+                            tracing::debug("├─ added clause {clause:?} introduces a conflict which invalidates the partial solution\n");
                             level = 0;
                             decision_tracker_.clear();
                             return std::nullopt;  // continue
@@ -556,7 +555,7 @@ fprintf(stderr, "add_clauses_output\n");
             // solution yet.
 
             std::vector<std::tuple<SolvableId, ClauseId>> new_solvables;
-            for (auto &d: decision_tracker_.get_stack()) {
+            for (const auto &d: decision_tracker_.get_stack()) {
                 fprintf(stderr, "decision_tracker_.get_stack(): d=%d d.value=%d\n", d.solvable_id.to_usize(), d.value);
                 if (d.value && clauses_added_for_solvable_.find(d.solvable_id) == clauses_added_for_solvable_.end()) {
                     // Filter only decisions that led to a positive assignment
@@ -569,6 +568,7 @@ fprintf(stderr, "add_clauses_output\n");
 
             if (new_solvables.empty()) {
                 // If no new literals were selected this solution is complete and we can return.
+                fprintf(stderr, "run_sat: level=%d complete solution\n", level);
                 return std::nullopt;
             }
             // tracing::debug!(
