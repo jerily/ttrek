@@ -580,18 +580,6 @@ public:
                 fprintf(stderr, "run_sat: level=%d complete solution\n", level);
                 return std::nullopt;
             }
-            // tracing::debug!(
-            //                "====\n==Found newly selected solvables\n- {}\n====",
-            //                new_solvables
-            //                    .iter()
-            //                    .copied()
-            //                    .format_with("\n- ", |(id, derived_from), f| f(&format_args!(
-            //                        "{} (derived from {:?})",
-            //                        id.display(&self.pool),
-            //                        self.clauses.borrow()[derived_from].debug(&self.pool),
-            //                    )))
-            //            );
-            // in c++ it should be:
 
             tracing::debug("====\n==Found newly selected solvables\n");
             for (auto &[solvable_id, derived_from]: new_solvables) {
@@ -613,10 +601,9 @@ public:
 
             // Serially process the outputs, to reduce the need for synchronization
             for (auto &clause_id: output.conflicting_clauses) {
-                tracing::debug("├─ added clause %lu introduces a conflict which invalidates the partial solution\n",
-//                        clause=self.clauses.borrow()[clause_id].debug(&self.pool)
-//                               "clauses[clause_id]"
-                               clause_id.to_usize()
+                auto display_clause = DisplayClause(pool, clauses_[clause_id]);
+                tracing::debug("├─ added clause %s introduces a conflict which invalidates the partial solution\n",
+                                 display_clause.to_string().c_str()
                 );
             }
 
