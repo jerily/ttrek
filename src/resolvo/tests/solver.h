@@ -247,7 +247,6 @@ public:
 
         for (const auto &[pack, _]: package) {
             auto solvable_id = pool->intern_solvable(name_id, pack);
-            fprintf(stderr, "^^^^ solvable_id: %d\n", solvable_id.to_usize());
             package_candidates.candidates.push_back(solvable_id);
             if (favored_pack.has_value() && favored_pack.value() == pack) {
                 package_candidates.favored = std::optional(solvable_id);
