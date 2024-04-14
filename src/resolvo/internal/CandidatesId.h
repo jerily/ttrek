@@ -10,6 +10,15 @@ private:
 public:
     explicit CandidatesId(std::uint32_t value) : value(value) {}
 
+    // assignment constructor
+    CandidatesId& operator=(const CandidatesId& other) {
+        value = other.value;
+        return *this;
+    }
+
+    // copy constructor
+    CandidatesId(const CandidatesId& other) : value(other.value) {}
+
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value);
     }

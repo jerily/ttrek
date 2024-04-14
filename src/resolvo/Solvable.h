@@ -16,11 +16,11 @@ template<typename V>
 class Solvable {
 private:
     V inner;   // The record associated with this solvable
-    const NameId &name; // The interned name in the Pool
+    NameId name; // The interned name in the Pool
 
 public:
 // Constructor
-    Solvable(const V &record, const NameId &nameId) : inner(record), name(nameId) {}
+    Solvable(const V &record, NameId nameId) : inner(record), name(std::move(nameId)) {}
 
 // Accessor for the record
     V get_inner() const {
@@ -28,7 +28,7 @@ public:
     }
 
 // Accessor for the name ID
-    const NameId& get_name_id() const {
+    NameId get_name_id() const {
         return name;
     }
 };

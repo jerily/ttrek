@@ -244,7 +244,9 @@ public:
 
     DependenciesVariant get_dependencies(const SolvableId &solvable) {
         // TODO
-        auto candidate = pool->resolve_solvable(solvable);
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies solvable_id: %lu\n", solvable.to_usize());
+        auto &candidate = pool->resolve_solvable(solvable);
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: name_id=%lu\n", candidate.get_name_id().to_usize());
         auto package_name = pool->resolve_package_name(candidate.get_name_id());
         auto pack = candidate.get_inner();
 

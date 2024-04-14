@@ -13,6 +13,15 @@ public:
 
     explicit SolvableId(uint32_t id) : value_(id) {}
 
+    // assignment constructor
+    SolvableId& operator=(const SolvableId& other) {
+        value_ = other.value_;
+        return *this;
+    }
+
+    // copy constructor
+    SolvableId(const SolvableId& other) : value_(other.value_) {}
+
     static SolvableId root() {
         return SolvableId(0);
     }

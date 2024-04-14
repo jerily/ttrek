@@ -13,6 +13,15 @@ public:
 
     explicit ClauseId(std::uint32_t value) : value_(value) {}
 
+    // assignment constructor
+    ClauseId& operator=(const ClauseId& other) {
+        value_ = other.value_;
+        return *this;
+    }
+
+    // copy constructor
+    ClauseId(const ClauseId& other) : value_(other.value_) {}
+
 // There is a guarantee that ClauseId(0) will always be "Clause::InstallRoot". This assumption
 // is verified by the solver.
     static ClauseId install_root() {

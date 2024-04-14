@@ -11,6 +11,15 @@ public:
 
     explicit LearntClauseId(std::uint32_t value) : value(value) {}
 
+    // assignment constructor
+    LearntClauseId& operator=(const LearntClauseId& other) {
+        value = other.value;
+        return *this;
+    }
+
+    // copy constructor
+    LearntClauseId(const LearntClauseId& other) : value(other.value) {}
+
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value);
     }

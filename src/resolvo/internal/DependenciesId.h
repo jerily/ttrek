@@ -10,6 +10,15 @@ private:
 public:
     explicit DependenciesId(std::uint32_t value) : value(value) {}
 
+    // assignment constructor
+    DependenciesId& operator=(const DependenciesId& other) {
+        value = other.value;
+        return *this;
+    }
+
+    // copy constructor
+    DependenciesId(const DependenciesId& other) : value(other.value) {}
+
     std::size_t to_usize() const override {
         return static_cast<std::size_t>(value);
     }
