@@ -314,6 +314,12 @@ public:
                     fprintf(stderr, "forbid multiple, candidates.size=%zd\n", candidates.size());
                     for (int i = 0; i < candidates.size(); i++) {
                         for (int j = i + 1; j < candidates.size(); j++) {
+
+                            auto display_candidate = DisplaySolvable(pool, pool->resolve_internal_solvable(candidates[i]));
+                            auto display_forbidden = DisplaySolvable(pool, pool->resolve_internal_solvable(candidates[j]));
+                            fprintf(stderr, "forbid_multiple: candidate: %s forbids %s\n",
+                                    display_candidate.to_string().c_str(), display_forbidden.to_string().c_str());
+
                             auto clause_id = clauses_.alloc(ClauseState::forbid_multiple(candidates[i], candidates[j]));
                             assert(clauses_[clause_id].has_watches());
                             output.clauses_to_watch.push_back(clause_id);
@@ -1185,9 +1191,9 @@ public:
                                       if (decision_level == current_level) {
                                           causes_at_current_level++;
                                       } else if (current_level > 1) {
-                                          auto learnt_literal = Literal(literal.solvable_id,
+                                          auto learnt_literal = Literal{literal.solvable_id,
                                                                         !decision_tracker_.assigned_value(
-                                                                                literal.solvable_id).value());
+                                                                                literal.solvable_id).value()};
                                           learnt.push_back(learnt_literal);
                                           back_track_to = std::max(back_track_to, decision_level);
                                       } else {
@@ -1219,7 +1225,7 @@ public:
         }
 
 
-        auto last_literal = Literal(conflicting_solvable, s_value);
+        auto last_literal = Literal{conflicting_solvable, s_value};
         learnt.push_back(last_literal);
 
         auto learnt_clause_id = learnt_clauses_.alloc(learnt);

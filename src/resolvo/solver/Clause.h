@@ -32,7 +32,7 @@ public:
     SolvableId solvable_id;
     bool negate;
 
-    explicit Literal(SolvableId id, bool neg) : solvable_id(std::move(id)), negate(neg) {}
+//    explicit Literal{SolvableId id, bool neg) : solvable_id(id), negate(neg) {}
 
     // Returns the value that would make the literal evaluate to true if assigned to the literal's solvable
     bool satisfying_value() const {
@@ -356,21 +356,21 @@ public:
     std::array<Literal, 2> watched_literals(const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses) const {
         auto literals = [&](bool op1, bool op2) {
             return std::array<Literal, 2>{
-                    Literal(watched_literals_[0], !op1),
-                    Literal(watched_literals_[1], !op2)
+                    Literal{watched_literals_[0], !op1},
+                    Literal{watched_literals_[1], !op2}
             };
         };
 
-        return std::visit([&](auto &arg) {
+        return std::visit([&](auto &arg) -> std::array<Literal, 2> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
                 assert(false);
                 // unreachable
-                return std::array<Literal, 2>{Literal(SolvableId::null(), false), Literal(SolvableId::null(), false)};
+                return std::array<Literal, 2>{Literal{SolvableId::null(), false}, Literal{SolvableId::null(), false}};
             } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
                 assert(false);
                 // unreachable
-                return std::array<Literal, 2>{Literal(SolvableId::null(), false), Literal(SolvableId::null(), false)};
+                return std::array<Literal, 2>{Literal{SolvableId::null(), false}, Literal{SolvableId::null(), false}};
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
                 auto &learnt_literals = learnt_clauses[clause_variant.learnt_clause_id];
@@ -482,7 +482,7 @@ public:
                 // do nothing
             } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
                 auto clause_variant = std::any_cast<Clause::Excluded>(arg);
-                visit(Literal(clause_variant.candidate, true));
+                visit(Literal{clause_variant.candidate, true});
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
                 for (const Literal& literal: learnt_clauses[clause_variant.learnt_clause_id]) {
@@ -490,25 +490,25 @@ public:
                 }
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
                 auto clause_variant = std::any_cast<Clause::Requires>(arg);
-                visit(Literal(clause_variant.parent, true));
+                visit(Literal{clause_variant.parent, true});
                 auto optional_sorted_candidates = version_set_to_sorted_candidates.get(clause_variant.requirement);
                 if (optional_sorted_candidates.has_value()) {
                     for (const SolvableId &id: optional_sorted_candidates.value()) {
-                        visit(Literal(id, false));
+                        visit(Literal{id, false});
                     }
                 }
             } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
                 auto clause_variant = std::any_cast<Clause::Constrains>(arg);
-                visit(Literal(clause_variant.parent, true));
-                visit(Literal(clause_variant.forbidden_solvable, true));
+                visit(Literal{clause_variant.parent, true});
+                visit(Literal{clause_variant.forbidden_solvable, true});
             } else if constexpr (std::is_same_v<T, Clause::ForbidMultipleInstances>) {
                 auto clause_variant = std::any_cast<Clause::ForbidMultipleInstances>(arg);
-                visit(Literal(clause_variant.candidate, true));
-                visit(Literal(clause_variant.constrained_candidate, true));
+                visit(Literal{clause_variant.candidate, true});
+                visit(Literal{clause_variant.constrained_candidate, true});
             } else if constexpr (std::is_same_v<T, Clause::Lock>) {
                 auto clause_variant = std::any_cast<Clause::Lock>(arg);
-                visit(Literal(SolvableId::root(), true));
-                visit(Literal(clause_variant.other_candidate, true));
+                visit(Literal{SolvableId::root(), true});
+                visit(Literal{clause_variant.other_candidate, true});
             }
 
         }, kind_);

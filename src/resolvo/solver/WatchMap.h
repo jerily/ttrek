@@ -42,10 +42,10 @@ public:
     }
 
     ClauseId first_clause_watching_solvable(const SolvableId& watchedSolvable) {
-        return map.count(watchedSolvable) ? map.at(watchedSolvable) : ClauseId::null();
+        return map.find(watchedSolvable) != map.cend() ? map.at(watchedSolvable) : ClauseId::null();
     }
 
-    void watch_solvable(const SolvableId& watchedSolvable, ClauseId id) {
+    void watch_solvable(const SolvableId& watchedSolvable, const ClauseId& id) {
         map.insert(std::make_pair(watchedSolvable, id));
     }
 };
