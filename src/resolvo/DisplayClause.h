@@ -72,7 +72,7 @@ public:
                 auto s1 = forbid_multiple_instances.candidate;
                 auto name = pool->resolve_internal_solvable(s1).get_solvable_unchecked().get_name_id();
                 auto display_name = DisplayName<VS, N>(pool, name);
-                oss << "only one " << display_name.to_string() << " is allowd";
+                oss << "only one " << display_name.to_string() << " is allowed";
             }
         }, clause.get_kind());
         return oss.str();
