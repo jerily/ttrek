@@ -87,6 +87,7 @@ add_executable(${TARGET}
         src/resolvo/Common.h
         src/resolvo/Range.h
         src/resolvo/tests/solver.h
+        src/resolvo/DisplayClause.h
 )
 
 

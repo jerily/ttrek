@@ -83,6 +83,14 @@ struct Pack {
         return version >= other.version;
     }
 
+    friend std::string operator+(const std::string &lhs, const Pack &rhs) {
+        return lhs + std::to_string(rhs.version);
+    }
+
+    friend std::string operator+(const Pack &lhs, const std::string &rhs) {
+        return std::to_string(lhs.version) + rhs;
+    }
+
     friend std::ostream &operator<<(std::ostream &os, const Pack &pack) {
         os << pack.version;
         return os;
@@ -132,8 +140,8 @@ struct Spec {
                 }
                 Pack startPack(std::stoi(start));
                 Pack endPack = !end.empty() ? Pack(std::stoi(end)) : startPack.offset(1);
-                std::cout << "startPack: " << startPack.version << std::endl;
-                std::cout << "endPack: " << endPack.version << std::endl;
+//                std::cout << "startPack: " << startPack.version << std::endl;
+//                std::cout << "endPack: " << endPack.version << std::endl;
                 return Range<Pack>::between(startPack, endPack);
             } else {
                 return Range<Pack>::full();

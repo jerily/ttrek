@@ -11,6 +11,8 @@
 #include "../internal/Arena.h"
 #include "../Pool.h"
 #include "../Common.h"
+#include "../DisplayClause.h"
+#include "../DisplayVersionSet.h"
 #include "Clause.h"
 #include "WatchMap.h"
 #include "../Problem.h"
@@ -354,11 +356,11 @@ public:
 
                     auto version_set = pool->resolve_version_set(version_set_id);
 
+                    auto display_version_set = DisplayVersionSet(pool, version_set);
                     tracing::trace(
-                            "sorted candidates available for %s %d\n",
+                            "sorted candidates available for %s %s\n",
                             version_set_name.c_str(),
-                            candidates.size()
-//                                            version_set
+                            display_version_set.to_string().c_str()
                     );
 
                     // Queue requesting the dependencies of the candidates as well if they are cheaply
@@ -388,9 +390,6 @@ public:
                     //let &Clause::Requires(solvable_id, version_set_id) = &clause.kind else {
                     //                        unreachable!();
                     //                    };
-
-                    fprintf(stderr, "solvable_id: %lu\n", solvable_id.to_usize());
-                    fprintf(stderr, "clause_id: %lu\n", clause_id.to_usize());
 
                     if (clause.has_watches()) {
                         output.clauses_to_watch.push_back(clause_id);
@@ -442,8 +441,6 @@ public:
                 fprintf(stderr, "continue_p=true\n");
                 continue;
             }
-
-            fprintf(stderr, "here\n");
 
         }
 
@@ -509,9 +506,6 @@ public:
             // Propagate decisions from assignments above
             auto propagate_result = propagate(level);
 
-            fprintf(stderr, "run_sat: level=%d propagate_result.has_value(): %d\n", level,
-                    propagate_result.has_value());
-
             if (propagate_result.has_value()) {
                 fprintf(stderr, "handle propagation errors\n");
                 // Handle propagation errors
@@ -528,8 +522,10 @@ public:
                                 } else {
                                     // The conflict was caused because new clauses have been added dynamically.
                                     // We need to start over.
+                                    auto display_clause = DisplayClause(pool, clauses_[clause_id]);
                                     tracing::debug(
-                                            "├─ added clause {clause:?} introduces a conflict which invalidates the partial solution\n");
+                                            "├─ added clause %s introduces a conflict which invalidates the partial solution\n",
+                                            display_clause.to_string().c_str());
                                     level = 0;
                                     decision_tracker_.clear();
                                     return std::nullopt;  // continue
@@ -638,11 +634,9 @@ public:
             watches_.start_watching(clauses_[clause_id], clause_id);
         }
 
-        fprintf(stderr, "new_requires_clauses: %zd\n", output.new_requires_clauses.size());
         requires_clauses_.insert(requires_clauses_.end(), output.new_requires_clauses.begin(),
                                  output.new_requires_clauses.end());
 
-        fprintf(stderr, "negative_assertions: %zd\n", output.negative_assertions.size());
         negative_assertions_.insert(negative_assertions_.end(), output.negative_assertions.begin(),
                                     output.negative_assertions.end());
 
@@ -698,6 +692,7 @@ public:
         std::pair<uint32_t, std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>> best_decision;
         for (auto &[solvable_id, deps, clause_id]: requires_clauses_) {
             auto assigned_value = decision_tracker_.assigned_value(solvable_id);
+            // Consider only clauses in which we have decided to install the solvable
             if (!assigned_value.has_value() || !assigned_value.value()) {
                 continue;
             }
@@ -708,6 +703,8 @@ public:
             std::optional<SolvableId> first_selectable_candidate;
             int selectable_candidates = 0;
             for (auto &candidate: optional_candidates.value()) {
+                auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(candidate));
+                fprintf(stderr, ">>>>>>>>>>>>>> decide: candidate: %s\n", display_solvable.to_string().c_str());
                 auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
                 if (optional_assigned_value.has_value()) {
                     if (optional_assigned_value.value()) {
@@ -761,9 +758,6 @@ public:
     set_propagate_learn(uint32_t level, const SolvableId &solvable, const SolvableId &required_by,
                         const ClauseId &clause_id) {
         level += 1;
-
-        tracing::info("propagate_and_learn solvable=%lu required_by=%lu\n", solvable.to_usize(),
-                      required_by.to_usize());
 
         auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable));
         auto display_required_by = DisplaySolvable(pool, pool->resolve_internal_solvable(required_by));
@@ -820,6 +814,7 @@ public:
                     }, propagate_result.value());
 
             if (optional_err.has_value()) {
+                fprintf(stderr, "propagate_and_learn: optional_err\n");
                 return std::make_pair(output_level, optional_err);
             }
 
@@ -864,11 +859,15 @@ public:
                     continue;
                 }
 
-                //                tracing::info!(
-                //                    "* ({level}) {action} {}. Reason: {:?}",
-                //                    decision.solvable_id.display(&self.pool),
-                //                    clause.debug(&self.pool),
-                //                );
+                auto display_decision_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(decision.solvable_id));
+                auto display_clause = DisplayClause(pool, clause);
+                tracing::info(
+                    "* (%d) %s %s. Reason: %s\n",
+                    decision_level,
+                    decision_action,
+                    display_decision_solvable.to_string().c_str(),
+                    display_clause.to_string().c_str()
+                );
             }
             return {level, std::optional(analyze_unsolvable(conflicting_clause))};
         }
@@ -901,7 +900,6 @@ public:
     std::optional<PropagationErrorVariant> propagate(uint32_t level) {
         fprintf(stderr, "propagate: propagate level: %d\n", level);
         auto optional_value = cache.provider.should_cancel_with_value();
-        fprintf(stderr, "propagate: optional_value.has_value(): %d\n", optional_value.has_value() ? 1 : 0);
         if (optional_value.has_value()) {
             return std::optional(PropagationError::Cancelled{optional_value.value()});
         }
