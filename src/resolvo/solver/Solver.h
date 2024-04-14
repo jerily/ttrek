@@ -983,7 +983,6 @@ public:
         while (true) {
             auto decision = decision_tracker_.next_unpropagated();
             if (!decision.has_value()) {
-                fprintf(stderr, "propagate: no decision\n");
                 break;
             }
 
