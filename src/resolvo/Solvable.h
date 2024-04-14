@@ -16,11 +16,11 @@ template<typename V>
 class Solvable {
 private:
     V inner;   // The record associated with this solvable
-    NameId name; // The interned name in the Pool
+    const NameId &name; // The interned name in the Pool
 
 public:
 // Constructor
-    Solvable(const V &record, NameId nameId) : inner(record), name(std::move(nameId)) {}
+    Solvable(const V &record, const NameId &nameId) : inner(record), name(nameId) {}
 
 // Accessor for the record
     V get_inner() const {
@@ -28,7 +28,7 @@ public:
     }
 
 // Accessor for the name ID
-    NameId get_name_id() const {
+    const NameId& get_name_id() const {
         return name;
     }
 };
@@ -72,6 +72,7 @@ public:
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, SolvableInner::Package<V>>) {
                 auto package = std::any_cast<SolvableInner::Package<V>>(arg);
+                fprintf(stderr, "package solvable\n");
                 return std::make_optional(package.solvable);
             } else {
                 return std::nullopt;
@@ -80,7 +81,7 @@ public:
     }
 
     // Get the solvable if it's not root
-    Solvable<V> get_solvable_unchecked() const {
+    const Solvable<V>& get_solvable_unchecked() const {
         return get_solvable().value();
     }
 
