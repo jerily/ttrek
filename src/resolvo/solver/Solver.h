@@ -555,7 +555,8 @@ fprintf(stderr, "add_clauses_output\n");
 
             std::vector<std::tuple<SolvableId, ClauseId>> new_solvables;
             for (const auto &d: decision_tracker_.get_stack()) {
-                fprintf(stderr, "decision_tracker_.get_stack(): d=%d d.value=%d\n", d.solvable_id.to_usize(), d.value);
+                auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(d.solvable_id));
+                fprintf(stderr, "decision_tracker_.get_stack(): %s d.value=%d\n", display_solvable.to_string().c_str(), d.value);
                 if (d.value && clauses_added_for_solvable_.find(d.solvable_id) == clauses_added_for_solvable_.end()) {
                     // Filter only decisions that led to a positive assignment
                     // Select solvables for which we do not yet have dependencies
@@ -897,12 +898,12 @@ fprintf(stderr, "add_clauses_output\n");
                 return std::optional(PropagationError::Conflict{solvable_id, value, clause_id});
             }
 
-            fprintf(stderr, "├─ Propagate assertion %d = %d\n", solvable_id.to_usize(), value);
+            auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable_id));
 
             tracing::trace(
-                        "├─ Propagate assertion %lu = %d\n",
-//                                    solvable_id.to_usize(),
-                                    value
+                        "├─ Propagate assertion %s = %d\n",
+                            display_solvable.to_string().c_str(),
+                            value
                         );
         }
 
@@ -934,9 +935,10 @@ fprintf(stderr, "add_clauses_output\n");
                 return std::optional(PropagationError::Conflict{literal.solvable_id, decision, clause_id});
             }
 
+            auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(literal.solvable_id));
             tracing::trace(
-                        "├─ Propagate assertion {} = %d",
-//                                    literal.solvable_id.display(&self.pool),
+                        "├─ Propagate assertion %s = %d",
+                            display_solvable.to_string().c_str(),
                                     decision
                         );
         }

@@ -147,22 +147,17 @@ public:
             auto package_name = get_pool()->resolve_version_set_package_name(version_set_id);
             auto matching_candidates = get_or_cache_matching_candidates(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
-            fprintf(stderr, "->>> get_or_cache_sorted_candidates: matching_candidates.size() = %d\n", matching_candidates.size());
             std::vector<SolvableId> sorted_candidates;
             sorted_candidates.insert(sorted_candidates.end(), matching_candidates.begin(), matching_candidates.end());
             provider.sort_candidates(sorted_candidates);
             auto favored_id = package_candidates.favored;
             if (favored_id.has_value()) {
-                fprintf(stderr, "-> get_or_cache_sorted_candidates: favored_id = %d\n", favored_id.value().to_usize());
                 auto pos = std::find(sorted_candidates.begin(), sorted_candidates.end(), favored_id.value());
                 if (pos != sorted_candidates.end()) {
                     std::rotate(sorted_candidates.begin(), pos, pos + 1);
                 }
             }
 
-            for (auto p : sorted_candidates) {
-                fprintf(stderr, "-> get_or_cache_sorted_candidates: p = %d\n", p.to_usize());
-            }
             version_set_to_sorted_candidates.insert(version_set_id, sorted_candidates);
             return sorted_candidates;
         }

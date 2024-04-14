@@ -112,7 +112,6 @@ public:
     // Unlike some of the other interning functions this function does *not* deduplicate any of the
     // inserted elements. A unique Id will be returned everytime this function is called.
     SolvableId intern_solvable(NameId name_id, const typename VS::ValueType &record) {
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> intern_solvable\n");
         return solvables.alloc(InternalSolvable<typename VS::ValueType>::new_solvable(name_id, record));
     }
 

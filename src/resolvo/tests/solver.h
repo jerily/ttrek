@@ -120,20 +120,25 @@ struct Spec {
         auto split = split_string(s, " ");
         auto spec_name = split[0];
 
-        auto version_range = [](const std::optional<std::string> &s) -> Range<Pack> {
-            if (!s.has_value()) {
+        auto version_range = [](std::optional<std::string> s) -> Range<Pack> {
+            if (s.has_value()) {
+                std::string start, end;
+                size_t pos = s->find("..");
+                if (pos != std::string::npos) {
+                    start = s->substr(0, pos);
+                    end = s->substr(pos + 2);
+                } else {
+                    start = s.value();
+                    end = ""; // This will be handled later
+                }
+                Pack startPack(std::stoi(start));
+                Pack endPack = !end.empty() ? Pack(std::stoi(end)) : startPack.offset(1);
+                return Range<Pack>::between(startPack, endPack);
+            } else {
                 return Range<Pack>::full();
             }
-            auto split = split_string(s.value(), "..");
-            auto start = Pack(std::stoi(split[0]));
-            auto end = split.size() == 1 ? start.offset(1) : Pack(std::stoi(split[1]));
-            return Range<Pack>::between(start, end);
         };
 
-        // print all split
-        for (const auto &s0: split) {
-            std::cout << s0 << std::endl;
-        }
         auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
         return Spec{spec_name, spec_versions};
     }
@@ -224,7 +229,6 @@ public:
         assert(requested_candidates.insert(name_id).second);        //            "duplicate get_candidates request"
 
         auto package_name = pool->resolve_package_name(name_id);
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_candidates %s\n", package_name.c_str());
         if (packages.find(package_name) == packages.end()) {
             return std::nullopt;
         }
@@ -261,13 +265,10 @@ public:
 
     DependenciesVariant get_dependencies(SolvableId solvable) override {
         // TODO
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies solvable_id: %lu\n", solvable.to_usize());
         auto candidate = pool->resolve_solvable(solvable);
 //        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: name_id=%lu\n", candidate.get_name_id().to_usize());
         auto package_name = pool->resolve_package_name(candidate.get_name_id());
         auto pack = candidate.get_inner();
-
-        fprintf(stderr, "cancel_during_get_dependencies: version=%d %d vs %d\n", pack.version, pack.cancel_during_get_dependencies, candidate.get_inner().cancel_during_get_dependencies);
 
         if (pack.cancel_during_get_dependencies) {
             cancel_solving = true;
