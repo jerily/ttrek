@@ -24,7 +24,7 @@ public:
         }
     }
 
-    void update_watched(std::optional<ClauseState> &predecessorClause, ClauseState &clause, ClauseId clauseId, size_t watchIndex,
+    void update_watched(std::optional<ClauseState> &predecessorClause, ClauseState &clause, const ClauseId& clauseId, size_t watchIndex,
                         const SolvableId &previousWatch, const SolvableId &newWatch) {
         // Remove this clause from its current place in the linked list
         if (predecessorClause.has_value()) {

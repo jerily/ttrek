@@ -141,7 +141,8 @@ std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Cla
 ) {
     // It only makes sense to introduce a requires clause when the parent solvable is undecided
     // or going to be installed
-    assert(decision_tracker.assigned_value(parent) != false);
+    auto optional_assigned_value_parent = decision_tracker.assigned_value(parent);
+    assert(optional_assigned_value_parent != false);
 
     auto kind = Clause::Requires{parent, requirement};
     if (candidates.empty()) {
@@ -149,16 +150,22 @@ std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Cla
     }
 
     auto watched_candidate = std::find_if(candidates.begin(), candidates.end(), [&](const SolvableId &c) {
-        return decision_tracker.assigned_value(c) != false;
+        auto optional_assigned_value = decision_tracker.assigned_value(c);
+        return optional_assigned_value != false;
     });
 
     std::optional<std::array<SolvableId, 2>> watches;
 
     bool conflict;
     if (watched_candidate != candidates.end()) {
+        // Watch any candidate that is not assigned to false
         watches = {parent, *watched_candidate};
         conflict = false;
     } else {
+        // All candidates are assigned to false! Therefore the clause conflicts with the
+        // current decisions. There are no valid watches for it at the moment, but we will
+        // assign default ones nevertheless, because they will become valid after the solver
+        // restarts.
         watches = {parent, candidates[0]};
         conflict = true;
     }
@@ -332,10 +339,14 @@ public:
         assert(watched_literals_[0] == solvable_id || watched_literals_[1] == solvable_id);
 
         auto literals = watched_literals(learnt_clauses);
+        auto w1 = literals[0];
+        auto w2 = literals[1];
 
-        if (solvable_id == literals[0].solvable_id && !literals[0].eval(decision_map).value()) {
+        if (solvable_id == w1.solvable_id && w1.eval(decision_map) == false) {
+            fprintf(stderr, "w1 is false\n");
             return std::make_pair(literals, 0);
-        } else if (solvable_id == literals[1].solvable_id && !literals[1].eval(decision_map).value()) {
+        } else if (solvable_id == w2.solvable_id && w2.eval(decision_map) == false) {
+            fprintf(stderr, "w2 is false\n");
             return std::make_pair(literals, 1);
         } else {
             return std::nullopt;
@@ -373,11 +384,7 @@ public:
                 } else {
                     return literals(true, true);
                 }
-            } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
-                return literals(false, false);
-            } else if constexpr (std::is_same_v<T, Clause::ForbidMultipleInstances>) {
-                return literals(false, false);
-            } else if constexpr (std::is_same_v<T, Clause::Lock>) {
+            } else {
                 return literals(false, false);
             }
         }, kind_);
@@ -388,20 +395,23 @@ public:
             const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
             const DecisionMap &decision_map
     ) const {
+        // The next unwatched variable (if available), is a variable that is:
+        // * Not already being watched
+        // * Not yet decided, or decided in such a way that the literal yields true
         auto can_watch = [&](const Literal& solvable_lit) {
-            return std::find(watched_literals_.begin(), watched_literals_.end(), solvable_lit.solvable_id) ==
-                   watched_literals_.end()
+            return std::find(watched_literals_.cbegin(), watched_literals_.cend(), solvable_lit.solvable_id) ==
+                   watched_literals_.cend()
                    && solvable_lit.eval(decision_map).value_or(true);
         };
 
-         return std::visit([&](const auto &arg) {
+         return std::visit([&](const auto &arg) -> std::optional<SolvableId> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
                 assert(false);
-                return std::optional<SolvableId>(std::nullopt);
+                return std::nullopt;
             } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
                 assert(false);
-                return std::optional<SolvableId>(std::nullopt);
+                return std::nullopt;
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
                 auto &literals = learnt_clauses[clause_variant.learnt_clause_id];
@@ -409,38 +419,38 @@ public:
                 if (it != literals.end()) {
                     return std::optional<SolvableId>(it->solvable_id);
                 }
-                return std::optional<SolvableId>(std::nullopt);
+                return std::nullopt;
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
                 auto clause_variant = std::any_cast<Clause::Requires>(arg);
                 auto parent = clause_variant.parent;
                 auto version_set_id = clause_variant.requirement;
 
-                Literal parent_literal(parent, true);
+                // The solvable that added this clause
+                Literal parent_literal{parent, true};
+
                 if (can_watch(parent_literal)) {
                     return std::optional<SolvableId>(parent);
                 }
 
+                // The available candidates
                 auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
                 if (!optional_candidates.has_value()) {
-                    return std::optional<SolvableId>(std::nullopt);
+                    return std::nullopt;
                 }
 
                 auto &candidates = optional_candidates.value();
                 auto it = std::find_if(candidates.cbegin(), candidates.cend(), [&](const SolvableId &candidate) {
-                    return can_watch(Literal(candidate, false));
+                    return can_watch(Literal{candidate, false});
                 });
 
                 if (it != candidates.end()) {
                     return std::optional<SolvableId>(*it);
                 }
 
-                return std::optional<SolvableId>(std::nullopt);
-            } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
-                return std::optional<SolvableId>(std::nullopt);
-            } else if constexpr (std::is_same_v<T, Clause::ForbidMultipleInstances>) {
-                return std::optional<SolvableId>(std::nullopt);
-            } else if constexpr (std::is_same_v<T, Clause::Lock>) {
-                return std::optional<SolvableId>(std::nullopt);
+                // No solvable available to watch
+                return std::nullopt;
+            } else {
+                return std::nullopt;
             }
         }, kind_);
     }

@@ -277,7 +277,8 @@ public:
     DependenciesVariant get_dependencies(SolvableId solvable) override {
         // TODO
         auto candidate = pool->resolve_solvable(solvable);
-//        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: name_id=%lu\n", candidate.get_name_id().to_usize());
+        auto display_candidate = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable));
+        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies candidate: %s\n", display_candidate.to_string().c_str());
         auto package_name = pool->resolve_package_name(candidate.get_name_id());
         auto pack = candidate.get_inner();
 
@@ -301,6 +302,10 @@ public:
         for (const auto &req: deps.dependencies) {
             auto dep_name = pool->intern_package_name(req.name);
             auto dep_spec = pool->intern_version_set(dep_name, req.versions);
+
+            auto display_name = DisplayName(pool, dep_name);
+            auto display_vs = DisplayVersionSet(pool, pool->resolve_version_set(dep_spec));
+            fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies dep_spec: %s %s\n", display_name.to_string().c_str(), display_vs.to_string().c_str());
             result.requirements.push_back(dep_spec);
         }
 
