@@ -637,6 +637,7 @@ fprintf(stderr, "add_clauses_output\n");
 
     std::pair<uint32_t, std::optional<UnsolvableOrCancelledVariant>> resolve_dependencies(uint32_t level) {
         while (true) {
+            // Make a decision. If no decision could be made it means the problem is satisfyable.
             auto decision = decide();
             if (!decision.has_value()) {
                 break;
@@ -644,14 +645,17 @@ fprintf(stderr, "add_clauses_output\n");
 
             auto [candidate, required_by, clause_id] = decision.value();
 
+            // Propagate the decision
             auto [new_level, optional_unsolvable] = set_propagate_learn(level, candidate, required_by, clause_id);
             if (optional_unsolvable.has_value()) {
+                fprintf(stderr, "resolve_dependencies: set_propagate_learn->optional_unsolvable\n");
                 return {new_level, optional_unsolvable};
             }
 
             level = new_level;
         }
 
+        // We just went through all clauses and there are no choices left to be made
         return {level, std::nullopt};
     }
 
@@ -734,7 +738,7 @@ fprintf(stderr, "add_clauses_output\n");
         auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable));
         auto display_required_by = DisplaySolvable(pool, pool->resolve_internal_solvable(required_by));
         tracing::info(
-                "╤══ Install %s at level %d (required by %s)",
+                "╤══ Install %s at level %d (required by %s)\n",
                         display_solvable.to_string().c_str(),
                         level,
                         display_required_by.to_string().c_str()
@@ -742,7 +746,12 @@ fprintf(stderr, "add_clauses_output\n");
 
 
         // Add the decision to the tracker
-        decision_tracker_.try_add_decision(Decision(solvable, true, clause_id), level);
+        auto optional_decision = decision_tracker_.try_add_decision(Decision(solvable, true, clause_id), level);
+        if (!optional_decision.has_value()) {
+            // bug: solvable was already decided!
+            fprintf(stderr, "^^^^^^^^^^^^^^^^^^^^ bug: solvable was already decided!\n");
+            return std::make_pair(level, std::nullopt);
+        }
 
         return propagate_and_learn(level);
     }
