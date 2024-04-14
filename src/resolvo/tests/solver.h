@@ -34,8 +34,6 @@ struct Pack {
     explicit Pack(uint32_t p_version, bool p_unknown_deps = false, bool p_cancel_during_get_dependencies = false)
             : version(p_version), unknown_deps(p_unknown_deps),
               cancel_during_get_dependencies(p_cancel_during_get_dependencies) {
-
-        fprintf(stderr, "****************** cancel_during_get_dependencies: %d\n", p_cancel_during_get_dependencies);
     }
 
     // assignment operator

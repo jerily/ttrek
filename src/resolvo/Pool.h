@@ -127,7 +127,6 @@ public:
     //
     // Panics if the solvable is not found in the pool
     InternalSolvable<typename VS::ValueType> resolve_internal_solvable(const SolvableId& id) {
-        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> resolve_internal_solvable: solvable_id=%lu\n", id.to_usize());
         return solvables[id];
     }
 

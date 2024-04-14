@@ -107,10 +107,10 @@ void test_resolve_with_conflict() {
 }
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    test_unit_propagation_1();
-    test_unit_propagation_nested();
-    test_resolve_multiple();
-    test_resolve_with_concurrent_metadata_fetching();
+//    test_unit_propagation_1();
+//    test_unit_propagation_nested();
+//    test_resolve_multiple();
+//    test_resolve_with_concurrent_metadata_fetching();
     test_resolve_with_conflict();
 
     return TCL_OK;

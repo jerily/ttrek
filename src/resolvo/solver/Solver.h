@@ -393,7 +393,6 @@ public:
                     if (conflict) {
                         output.conflicting_clauses.push_back(clause_id);
                     } else if (no_candidates) {
-                        fprintf(stderr, "--->>> no candidates\n");
                         // Add assertions for unit clauses (i.e. those with no matching candidates)
                         output.negative_assertions.push_back({solvable_id, clause_id});
                     }
@@ -693,7 +692,6 @@ fprintf(stderr, "add_clauses_output\n");
             std::optional<SolvableId> first_selectable_candidate;
             int selectable_candidates = 0;
             for (auto &candidate: optional_candidates.value()) {
-                fprintf(stderr, "--->>> candidate: %d\n", candidate.to_usize());
                 auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
                 if (optional_assigned_value.has_value()) {
                     if (optional_assigned_value.value()) {

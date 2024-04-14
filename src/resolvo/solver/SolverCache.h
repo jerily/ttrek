@@ -41,10 +41,7 @@ public:
     const PackageCandidates& get_or_cache_candidates(NameId package_name) {
         // If we already have the candidates for this package cached we can simply return
         auto optional_candidates_id = package_name_to_candidates.get_copy(package_name);
-        fprintf(stderr, "get_or_cache_candidates: optional_candidates_id.has_value() = %d\n", optional_candidates_id.has_value());
         if (optional_candidates_id.has_value()) {
-            fprintf(stderr, "get_or_cache_candidates: optional_candidates_id.value() = %d\n", optional_candidates_id.value().to_usize());
-            fprintf(stderr, "get_or_cache_candidates: candidates[optional_candidates_id.value()].candidates.size() = %d\n", candidates[optional_candidates_id.value()].candidates.size());
             return candidates[optional_candidates_id.value()];
         } else {
             // Since getting the candidates from the provider is a potentially blocking
@@ -95,19 +92,15 @@ public:
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_matching_candidates(VersionSetId version_set_id) {
         auto temp_candidates = version_set_candidates.get(version_set_id);
-        fprintf(stderr, "get_or_cache_matching_candidates: temp_candidates.has_value() = %d\n", temp_candidates.has_value());
         if (temp_candidates.has_value()) {
             return temp_candidates.value();
         } else {
             auto package_name = get_pool()->resolve_version_set_package_name(version_set_id);
             auto version_set = get_pool()->resolve_version_set(version_set_id);
             auto package_candidates = get_or_cache_candidates(package_name);
-            fprintf(stderr, "get_or_cache_matching_candidates: package_candidates.candidates.size() = %d\n", package_candidates.candidates.size());
             std::vector<SolvableId> matching_candidates;
             for (auto p : package_candidates.candidates) {
-                fprintf(stderr, "get_or_cache_matching_candidates: p = %d\n", p.to_usize());
                 auto version = get_pool()->resolve_internal_solvable(p).get_solvable_unchecked().get_inner();
-                fprintf(stderr, "get_or_cache_matching_candidates: version = %d contains = %d\n", version.version, version_set.contains(version));
                 if (version_set.contains(version)) {
                     matching_candidates.push_back(p);
                 }
@@ -148,7 +141,6 @@ public:
     // will be returned as an `Err(...)`.
     std::vector<SolvableId> get_or_cache_sorted_candidates(VersionSetId version_set_id) {
         auto optional_candidates = version_set_to_sorted_candidates.get(version_set_id);
-        fprintf(stderr, "get_or_cache_sorted_candidates: optional_candidates.has_value() = %d\n", optional_candidates.has_value());
         if (optional_candidates.has_value()) {
             return optional_candidates.value();
         } else {
@@ -182,7 +174,6 @@ public:
     // If the provider has requested the solving process to be cancelled, the cancellation value
     // will be returned as an `Err(...)`.
     const DependenciesVariant& get_or_cache_dependencies(SolvableId solvable_id) {
-        fprintf(stderr, "get_or_cache_dependencies: solvable_id = %d\n", solvable_id.to_usize());
         auto optional_dependencies_id = solvable_to_dependencies.get_copy(solvable_id);
         if (optional_dependencies_id.has_value()) {
             return solvable_dependencies[optional_dependencies_id.value()];
