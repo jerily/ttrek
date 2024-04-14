@@ -995,8 +995,8 @@ public:
             );
 
             // Propagate, iterating through the linked list of clauses that watch this solvable
-            std::optional<ClauseId> old_predecessor_clause_id;
-            std::optional<ClauseId> predecessor_clause_id;
+            std::optional<ClauseId> old_predecessor_clause_id = std::nullopt;
+            std::optional<ClauseId> predecessor_clause_id = std::nullopt;
             auto clause_id = watches_.first_clause_watching_solvable(pkg);
             while (!clause_id.is_null()) {
                 if (predecessor_clause_id == clause_id) {
@@ -1016,6 +1016,9 @@ public:
                 auto this_clause_id = clause_id;
                 clause_id = clause.next_watched_clause(pkg);
 
+                if (clause_id.is_null()) {
+                    fprintf(stderr, "propagate: clause_id is null\n");
+                }
 
                 auto optional_payload = clause.watch_turned_false(pkg, decision_tracker_.get_map(),
                                                                   learnt_clauses_);

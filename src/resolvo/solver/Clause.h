@@ -398,13 +398,13 @@ public:
         // The next unwatched variable (if available), is a variable that is:
         // * Not already being watched
         // * Not yet decided, or decided in such a way that the literal yields true
-        auto can_watch = [&](const Literal& solvable_lit) {
+        auto can_watch = [&](const Literal &solvable_lit) {
             return std::find(watched_literals_.cbegin(), watched_literals_.cend(), solvable_lit.solvable_id) ==
                    watched_literals_.cend()
                    && solvable_lit.eval(decision_map).value_or(true);
         };
 
-         return std::visit([&](const auto &arg) -> std::optional<SolvableId> {
+        return std::visit([&](const auto &arg) -> std::optional<SolvableId> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
                 assert(false);
@@ -460,13 +460,12 @@ public:
     ClauseState &operator=(const ClauseState &) = default;
 
     bool has_watches() const {
-        return watched_literals_[0] != 0;
+        return !watched_literals_[0].is_null();
     }
 
     const ClauseVariant &get_kind() const {
         return kind_;
     }
-
 
 
     // Visit literals in the clause
@@ -485,7 +484,7 @@ public:
                 visit(Literal{clause_variant.candidate, true});
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
-                for (const Literal& literal: learnt_clauses[clause_variant.learnt_clause_id]) {
+                for (const Literal &literal: learnt_clauses[clause_variant.learnt_clause_id]) {
                     visit(literal);
                 }
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
@@ -521,16 +520,17 @@ private:
             const ClauseVariant &kind,
             const std::optional<std::array<SolvableId, 2>> &optional_watched_literals
     ) {
-        auto watched_literals = optional_watched_literals.has_value() ? optional_watched_literals.value()
-                                                                      : std::array<SolvableId, 2>{SolvableId::null(),
-                                                                                                  SolvableId::null()};
+        auto watched_literals = optional_watched_literals.value_or(std::array<SolvableId, 2>{SolvableId::null(),
+                                                                                             SolvableId::null()});
         ClauseState clause(
                 watched_literals,
                 std::array<ClauseId, 2>{ClauseId::null(), ClauseId::null()},
                 kind
         );
 
-        DBG(assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]));
+        fprintf(stderr, "ClauseState::from_kind_and_initial_watches: has_watches: %d\n", clause.has_watches());
+
+        assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]);
         return clause;
     }
 
