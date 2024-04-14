@@ -89,6 +89,7 @@ add_executable(${TARGET}
         src/resolvo/tests/solver.h
         src/resolvo/DisplayClause.h
         src/resolvo/DisplayName.h
+        src/resolvo/DisplayDecisionMap.h
 )
 
 

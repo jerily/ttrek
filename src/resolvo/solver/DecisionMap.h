@@ -44,14 +44,14 @@ class DecisionMap {
 public:
     DecisionMap() : map_() {}
 
-    void reset(SolvableId solvable_id) {
+    void reset(const SolvableId& solvable_id) {
         size_t index = solvable_id.to_usize();
         if (index < map_.size()) {
             map_[index] = DecisionAndLevel::undecided();
         }
     }
 
-    void set(SolvableId solvable_id, bool value, uint32_t level) {
+    void set(const SolvableId& solvable_id, bool value, uint32_t level) {
         size_t index = solvable_id.to_usize();
         if (index >= map_.size()) {
             map_.resize(index + 1, DecisionAndLevel::undecided());
@@ -67,15 +67,13 @@ public:
         return 0;
     }
 
-    std::optional<bool> value(SolvableId solvable_id) const {
+    std::optional<bool> value(const SolvableId& solvable_id) const {
         size_t index = solvable_id.to_usize();
         if (index < map_.size()) {
             return map_[index].value();
         }
         return std::nullopt;
     }
-
-    // Implementation of display method is omitted for brevity
 
 private:
     std::vector<DecisionAndLevel> map_;

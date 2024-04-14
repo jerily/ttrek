@@ -13,6 +13,7 @@
 #include "../Common.h"
 #include "../DisplayClause.h"
 #include "../DisplayVersionSet.h"
+#include "../DisplayDecisionMap.h"
 #include "Clause.h"
 #include "WatchMap.h"
 #include "../Problem.h"
@@ -578,8 +579,7 @@ public:
             std::vector<std::tuple<SolvableId, ClauseId>> new_solvables;
             for (const auto &d: decision_tracker_.get_stack()) {
                 auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(d.solvable_id));
-                fprintf(stderr, "decision_tracker_.get_stack(): %s d.value=%d\n", display_solvable.to_string().c_str(),
-                        d.value);
+//                fprintf(stderr, "decision_tracker_.get_stack(): %s d.value=%d\n", display_solvable.to_string().c_str(), d.value);
                 if (d.value && clauses_added_for_solvable_.find(d.solvable_id) == clauses_added_for_solvable_.end()) {
                     // Filter only decisions that led to a positive assignment
                     // Select solvables for which we do not yet have dependencies
@@ -665,6 +665,12 @@ public:
             // Make a decision. If no decision could be made it means the problem is satisfyable.
             auto decision = decide();
             if (!decision.has_value()) {
+
+                // todo: remove this
+                auto display_map = DisplayDecisionMap(pool, decision_tracker_.get_map());
+                std::cout << display_map.to_string().c_str() << std::endl;
+
+
                 break;
             }
 

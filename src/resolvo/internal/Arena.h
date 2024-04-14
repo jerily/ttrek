@@ -8,6 +8,9 @@
 const std::size_t CHUNK_SIZE = 128;
 
 template<typename TId, typename TValue>
+class ArenaIter;
+
+template<typename TId, typename TValue>
 class Arena {
 private:
     std::vector<std::vector<TValue>> chunks;
@@ -72,12 +75,43 @@ public:
         return chunks[chunk][offset];
     }
 
+    // Returns an iterator over the elements of the arena
+    ArenaIter<TId, TValue> iter() const {
+        return ArenaIter<TId, TValue>(*this, 0);
+    }
+
 private:
 // Helper function to calculate chunk and offset
     static std::pair<std::size_t, std::size_t> chunk_and_offset(std::size_t index) {
         std::size_t offset = index % CHUNK_SIZE;
         std::size_t chunk = index / CHUNK_SIZE;
         return {chunk, offset};
+    }
+};
+
+// An iterator over the elements of an [`Arena`].
+template<typename TId, typename TValue>
+class ArenaIter {
+private:
+    const Arena<TId, TValue> &arena;
+    std::size_t index;
+
+public:
+    ArenaIter(const Arena<TId, TValue> &arena, std::size_t index) : arena(arena), index(index) {}
+
+    std::optional<std::pair<TId, const TValue&>> next() {
+        if (index < arena.size()) {
+            auto id = TId::from_usize(index);
+            auto value = arena[id];
+            index++;
+            return std::make_pair(id, value);
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    bool has_next() const {
+        return index < arena.size();
     }
 };
 

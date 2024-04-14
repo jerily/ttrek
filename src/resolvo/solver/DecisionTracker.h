@@ -62,11 +62,11 @@ public:
         if (!optional_assigned_value.has_value()) {
             map.set(decision.solvable_id, decision.value, level);
             stack.push_back(decision);
-            return {true};
+            return true;
         } else if (optional_assigned_value.value() == decision.value) {
-            return {false};
+            return false;
         } else {
-            fprintf(stderr, "conflict HERE: assigned=%b vs decision=%b\n", optional_assigned_value.value(), decision.value);
+            fprintf(stderr, "conflict HERE: assigned=%d vs decision=%d\n", optional_assigned_value.value(), decision.value);
             return std::nullopt;
         }
     }
