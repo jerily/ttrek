@@ -147,7 +147,7 @@ struct BundleBoxPackageDependencies {
 
 };
 
-class BundleBoxProvider {
+class BundleBoxProvider : public DependencyProvider<Range<Pack>, std::string> {
 public:
 
     std::shared_ptr<Pool<Range<Pack>>> pool = std::make_shared<Pool<Range<Pack>>>(Pool<Range<Pack>>());
@@ -212,7 +212,7 @@ public:
         packages[package_name].insert(std::make_pair(package_version, BundleBoxPackageDependencies{deps, cons}));
     }
 
-    void sort_candidates(std::vector<SolvableId> &solvables) {
+    void sort_candidates(std::vector<SolvableId> &solvables) override {
         std::sort(solvables.begin(), solvables.end(), [this](const SolvableId &a, const SolvableId &b) {
             auto a_pack = pool->resolve_solvable(a).get_inner();
             auto b_pack = pool->resolve_solvable(b).get_inner();
@@ -220,7 +220,7 @@ public:
         });
     }
 
-    std::optional<PackageCandidates> get_candidates(const NameId &name_id) {
+    std::optional<PackageCandidates> get_candidates(NameId name_id) override {
         // TODO
 
         assert(requested_candidates.insert(name_id).second);        //            "duplicate get_candidates request"
@@ -261,7 +261,7 @@ public:
         return package_candidates;
     }
 
-    DependenciesVariant get_dependencies(const SolvableId &solvable) {
+    DependenciesVariant get_dependencies(SolvableId solvable) override {
         // TODO
         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>> get_dependencies solvable_id: %lu\n", solvable.to_usize());
         auto candidate = pool->resolve_solvable(solvable);
@@ -303,7 +303,7 @@ public:
         return Dependencies::Known{result};
     }
 
-    std::optional<std::string> should_cancel_with_value() {
+    std::optional<std::string> should_cancel_with_value() override {
         if (cancel_solving) {
             return std::optional("cancelled!");
         } else {

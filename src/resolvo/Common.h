@@ -94,7 +94,8 @@ template<typename VS, typename N = std::string>
 class DependencyProvider {
 public:
     // Returns the `Pool` that is used to allocate the Ids returned from this instance
-    virtual const Pool<VS, N>& get_pool() = 0;
+    std::shared_ptr<Pool<VS, N>> pool;
+//    virtual const Pool<VS, N>& get_pool() = 0;
 
     // Sort the specified solvables based on which solvable to try first. The solver will
     // iteratively try to select the highest version. If a conflict is found with the highest
