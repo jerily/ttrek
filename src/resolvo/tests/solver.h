@@ -43,7 +43,6 @@ struct Pack {
         version = other.version;
         unknown_deps = other.unknown_deps;
         cancel_during_get_dependencies = other.cancel_during_get_dependencies;
-        fprintf(stderr, "****************** assignment: cancel_during_get_dependencies: %d\n", other.cancel_during_get_dependencies);
         return *this;
     }
 
@@ -52,7 +51,6 @@ struct Pack {
         version = other.version;
         unknown_deps = other.unknown_deps;
         cancel_during_get_dependencies = other.cancel_during_get_dependencies;
-        fprintf(stderr, "****************** copy: cancel_during_get_dependencies: %d\n", other.cancel_during_get_dependencies);
     }
 
 //    Pack with_unknown_deps() const {
