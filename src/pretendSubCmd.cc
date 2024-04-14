@@ -23,6 +23,7 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     auto solvable = pool_ptr->resolve_solvable(solved[0]);
     assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "asdf");
     assert(solvable.get_inner().version == 1);
+    fprintf(stdout, "success\n");
 
     return TCL_OK;
 }

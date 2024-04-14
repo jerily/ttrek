@@ -11,7 +11,7 @@ template<typename VS, typename N>
 class DisplaySolvable {
 private:
     std::shared_ptr<Pool<VS, N>> pool;
-    const InternalSolvable<typename VS::ValueType> &solvable;
+    InternalSolvable<typename VS::ValueType> solvable;
 
 public:
 // Constructor
