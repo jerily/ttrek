@@ -222,6 +222,7 @@ public:
         std::sort(solvables.begin(), solvables.end(), [this](const SolvableId &a, const SolvableId &b) {
             auto a_pack = pool->resolve_solvable(a).get_inner();
             auto b_pack = pool->resolve_solvable(b).get_inner();
+            // We want to sort with highest version on top
             return b_pack.version - a_pack.version;
         });
     }
