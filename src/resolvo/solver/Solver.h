@@ -1007,70 +1007,46 @@ public:
         fprintf(stderr, "propagate: watched solvables\n");
 
         // Watched solvables
-        while (true) {
-            auto decision = decision_tracker_.next_unpropagated();
-            if (!decision.has_value()) {
-                break;
-            }
-
-            auto pkg = decision.value().solvable_id;
-
-            auto display_pkg = DisplaySolvable(pool, pool->resolve_internal_solvable(pkg));
-            tracing::trace(
-                    "├─ Propagate %s at level %d\n",
-                    display_pkg.to_string().c_str(), level
-            );
+        std::optional<Decision> decision;
+        while ((decision = decision_tracker_.next_unpropagated()).has_value()) {
+            SolvableId pkg = decision.value().solvable_id;
 
             // Propagate, iterating through the linked list of clauses that watch this solvable
             std::optional<ClauseId> old_predecessor_clause_id;
-            std::optional<ClauseId> predecessor_clause_id = std::nullopt;
-            auto clause_id = watches_.first_clause_watching_solvable(pkg);
+            std::optional<ClauseId> predecessor_clause_id;
+            ClauseId clause_id = watches_.first_clause_watching_solvable(pkg);
             while (!clause_id.is_null()) {
-                if (predecessor_clause_id == clause_id) {
+                if (predecessor_clause_id.has_value() && predecessor_clause_id.value() == clause_id) {
                     throw std::runtime_error("Linked list is circular!");
                 }
 
                 // Get mutable access to both clauses.
-                auto predecessor_clause = predecessor_clause_id.has_value() ? std::optional<ClauseState>(
-                        clauses_[predecessor_clause_id.value()]) : std::nullopt;
-                auto &clause = clauses_[clause_id];
-
-                auto display_clause = DisplayClause(pool, clause);
-                tracing::trace(
-                        "├─ ^^^^ Propagate clause %s\n",
-                        display_clause.to_string().c_str()
-                );
+                std::optional<ClauseState> predecessor_clause;
+                ClauseState& clause = clauses_[clause_id];
 
                 // Update the prev_clause_id for the next run
                 old_predecessor_clause_id = predecessor_clause_id;
                 predecessor_clause_id = std::optional<ClauseId>(clause_id);
 
                 // Configure the next clause to visit
-                auto this_clause_id = clause_id;
+                ClauseId this_clause_id = clause_id;
                 clause_id = clause.next_watched_clause(pkg);
-
-                if (clause_id.is_null()) {
-                    fprintf(stderr, "propagate: next clause_id is null\n");
-                }
 
                 auto optional_payload = clause.watch_turned_false(pkg, decision_tracker_.get_map(),
                                                                   learnt_clauses_);
-
-                fprintf(stderr, "propagate: optional_payload.has_value(): %d\n", optional_payload.has_value());
                 if (optional_payload.has_value()) {
-                    // One of the watched literals is now false
                     auto [watched_literals, watch_index] = optional_payload.value();
 
-                    auto optional_variable = clause.next_unwatched_variable(learnt_clauses_,
-                                                                            cache.version_set_to_sorted_candidates,
-                                                                            decision_tracker_.get_map());
-                    fprintf(stderr, "propagate: optional_variable.has_value(): %d\n", optional_variable.has_value());
-                    if (optional_variable.has_value()) {
-                        assert(std::find(clause.watched_literals_.cbegin(), clause.watched_literals_.cend(),
-                                         optional_variable.value()) == clause.watched_literals_.cend());
+                    // One of the watched literals is now false
+                    auto optional_variable = clause.next_unwatched_variable(
+                            learnt_clauses_,
+                            cache.version_set_to_sorted_candidates,
+                            decision_tracker_.get_map()
+                    );
 
+                    if (optional_variable.has_value()) {
                         watches_.update_watched(predecessor_clause, clause, this_clause_id, watch_index, pkg,
-                                                optional_variable.value());
+                                               optional_variable.value());
 
                         // Make sure the right predecessor is kept for the next iteration (i.e. the
                         // current clause is no longer a predecessor of the next one; the current
@@ -1079,31 +1055,25 @@ public:
                     } else {
                         // We could not find another literal to watch, which means the remaining
                         // watched literal can be set to true
-                        auto remaining_watch_index = watch_index == 0 ? 1 : 0;
+                        int remaining_watch_index = (watch_index == 0) ? 1 : 0;
 
-                        auto &remaining_watch = watched_literals[remaining_watch_index];
+                        Literal remaining_watch = watched_literals[remaining_watch_index];
+                        bool satisfying_value = remaining_watch.satisfying_value();
 
-                        fprintf(stderr, "propagate: remaining_watch.solvable_id: %zd\n",
-                                remaining_watch.solvable_id.to_usize());
+                        auto decided = decision_tracker_.try_add_decision(
+                                Decision(remaining_watch.solvable_id, satisfying_value, this_clause_id), level
+                        );
 
-                        auto decided = decision_tracker_
-                                .try_add_decision(Decision(remaining_watch.solvable_id,
-                                                           remaining_watch.satisfying_value(),
-                                                           this_clause_id), level);
-
-                        fprintf(stderr, "propagate: decided: %d\n", decided.has_value());
                         if (!decided.has_value()) {
-                            return PropagationError::Conflict{remaining_watch.solvable_id, true, this_clause_id};
+                            return {PropagationError::Conflict{remaining_watch.solvable_id, true, this_clause_id}};
                         }
 
-                        // Skip logging for ForbidMultipleInstances, which is so noisy
-                        if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.get_kind())) {
-                            tracing::debug(
-                                    "├─ Propagate {} = {}. {:?} <<<<<<<<<<<<<<<<<< HERE\n"
-//                                    remaining_watch.solvable_id.display(&self.cache.pool()),
-//                                    remaining_watch.satisfying_value(),
-//                                    clause.debug(&self.cache.pool()),
-                            );
+                        if (decided.value()) {
+                            // Skip logging for ForbidMultipleInstances, which is so noisy
+                            if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.get_kind())) {
+                                auto display_clause = DisplayClause(pool, clause);
+                                std::cout << "Propagate " << remaining_watch.solvable_id.to_usize() << " = " << satisfying_value << ". " << display_clause.to_string() << std::endl;
+                            }
                         }
                     }
                 }
