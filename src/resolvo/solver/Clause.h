@@ -25,7 +25,13 @@
 #include "DecisionTracker.h"
 #include "DecisionMap.h"
 #include "../internal/FrozenMap.h"
+#include <stdexcept>
 
+void debug_assert(bool condition, const std::string& message = "") {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
 
 struct Literal {
 public:
@@ -142,7 +148,7 @@ std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Cla
     // It only makes sense to introduce a requires clause when the parent solvable is undecided
     // or going to be installed
     auto optional_assigned_value_parent = decision_tracker.assigned_value(parent);
-    assert(optional_assigned_value_parent != false);
+    debug_assert(optional_assigned_value_parent != false);
 
     auto kind = Clause::Requires{parent, requirement};
     if (candidates.empty()) {
@@ -180,7 +186,7 @@ std::tuple<Clause::Constrains, std::optional<std::array<SolvableId, 2>>, bool> C
         const VersionSetId &via,
         const DecisionTracker &decision_tracker
 ) {
-    assert(decision_tracker.assigned_value(parent) != false);
+    debug_assert(decision_tracker.assigned_value(parent) != false);
 
     bool conflict = decision_tracker.assigned_value(forbidden_solvable) == true;
     auto kind = Clause::Constrains{parent, forbidden_solvable, via};
@@ -224,7 +230,7 @@ std::pair<Clause::Learnt, std::optional<std::array<SolvableId, 2>>> Clause::lear
         const LearntClauseId &learnt_clause_id,
         const std::vector<Literal> &literals
 ) {
-    assert(!literals.empty());
+    debug_assert(!literals.empty());
 
     auto kind = Clause::Learnt{learnt_clause_id};
 
@@ -245,7 +251,7 @@ public:
             std::array<SolvableId, 2> watched_literals,
             std::array<ClauseId, 2> next_watches,
             ClauseVariant kind
-    ) : watched_literals_(std::move(watched_literals)), next_watches_(std::move(next_watches)), kind_(std::move(kind)) {}
+    ) : watched_literals_(watched_literals), next_watches_(next_watches), kind_(std::move(kind)) {}
 
     static ClauseState root() {
         auto [kind, watched_literals] = Clause::root();
@@ -309,6 +315,7 @@ public:
     }
 
     void link_to_clause(size_t watch_index, const ClauseId &clause_id) {
+        fprintf(stderr, "link_to_clause: watch_index=%zd, clause_id=%zd\n", watch_index, clause_id.to_usize());
         next_watches_[watch_index] = clause_id;
     }
 
@@ -317,12 +324,12 @@ public:
     }
 
     void
-    unlink_clause(const ClauseState *linked_clause, const SolvableId& watched_solvable, size_t linked_clause_watch_index) {
+    unlink_clause(const ClauseState &linked_clause, const SolvableId& watched_solvable, size_t linked_clause_watch_index) {
         if (watched_literals_[0] == watched_solvable) {
-            next_watches_[0] = linked_clause->next_watches_[linked_clause_watch_index];
+            next_watches_[0] = linked_clause.next_watches_[linked_clause_watch_index];
         } else {
-            assert(watched_literals_[1] == watched_solvable);
-            next_watches_[1] = linked_clause->next_watches_[linked_clause_watch_index];
+            debug_assert(watched_literals_[1] == watched_solvable);
+            next_watches_[1] = linked_clause.next_watches_[linked_clause_watch_index];
         }
     }
 
@@ -330,7 +337,7 @@ public:
         if (solvable_id == watched_literals_[0]) {
             return next_watches_[0];
         } else {
-            assert(watched_literals_[1] == solvable_id);
+            debug_assert(watched_literals_[1] == solvable_id);
             return next_watches_[1];
         }
     }
@@ -340,7 +347,7 @@ public:
             const DecisionMap &decision_map,
             const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses
     ) const {
-        assert(watched_literals_[0] == solvable_id || watched_literals_[1] == solvable_id);
+        debug_assert(watched_literals_[0] == solvable_id || watched_literals_[1] == solvable_id);
 
         auto literals = watched_literals(learnt_clauses);
         auto w1 = literals[0];
@@ -370,11 +377,11 @@ public:
         return std::visit([&](auto &arg) -> std::array<Literal, 2> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
-                assert(false);
+                debug_assert(false);
                 // unreachable
                 return std::array<Literal, 2>{Literal{SolvableId::null(), false}, Literal{SolvableId::null(), false}};
             } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
-                assert(false);
+                debug_assert(false);
                 // unreachable
                 return std::array<Literal, 2>{Literal{SolvableId::null(), false}, Literal{SolvableId::null(), false}};
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
@@ -404,19 +411,19 @@ public:
         // The next unwatched variable (if available), is a variable that is:
         // * Not already being watched
         // * Not yet decided, or decided in such a way that the literal yields true
-        auto can_watch = [&](const Literal &solvable_lit) {
-            return std::find(watched_literals_.cbegin(), watched_literals_.cend(), solvable_lit.solvable_id) ==
-                   watched_literals_.cend()
+        auto can_watch = [this, &decision_map](const Literal &solvable_lit) {
+            return std::find(watched_literals_.begin(), watched_literals_.end(), solvable_lit.solvable_id) ==
+                   watched_literals_.end()
                    && solvable_lit.eval(decision_map).value_or(true);
         };
 
-        return std::visit([&](const auto &arg) -> std::optional<SolvableId> {
+        return std::visit([&](auto &&arg) -> std::optional<SolvableId> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
-                assert(false);
+                debug_assert(false);
                 return std::nullopt;
             } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
-                assert(false);
+                debug_assert(false);
                 return std::nullopt;
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
@@ -521,6 +528,7 @@ public:
 
 
     std::array<SolvableId, 2> watched_literals_;
+    std::array<ClauseId, 2> next_watches_;
 private:
     static ClauseState from_kind_and_initial_watches(
             const ClauseVariant &kind,
@@ -534,13 +542,10 @@ private:
                 kind
         );
 
-        fprintf(stderr, "ClauseState::from_kind_and_initial_watches: has_watches: %d\n", clause.has_watches());
-
-        assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]);
+        debug_assert(!clause.has_watches() || watched_literals[0] != watched_literals[1]);
         return clause;
     }
 
-    std::array<ClauseId, 2> next_watches_;
     ClauseVariant kind_;
 };
 

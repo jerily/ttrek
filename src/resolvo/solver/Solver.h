@@ -342,9 +342,9 @@ public:
                             fprintf(stderr, "forbid_multiple: candidate: %s forbids %s\n",
                                     display_candidate.to_string().c_str(), display_forbidden.to_string().c_str());
 
-                            auto clause_id = clauses_.alloc(ClauseState::forbid_multiple(candidates[i], candidates[j]));
-                            assert(clauses_[clause_id].has_watches());
-                            output.clauses_to_watch.push_back(clause_id);
+                            auto forbid_clause_id = clauses_.alloc(ClauseState::forbid_multiple(candidates[i], candidates[j]));
+                            assert(clauses_[forbid_clause_id].has_watches());
+                            output.clauses_to_watch.push_back(forbid_clause_id);
                         }
                     }
 
@@ -424,7 +424,7 @@ public:
                     );
 
                     auto clause_id = clauses_.alloc(requires_clause);
-                    auto clause = clauses_[clause_id];
+                    auto &clause = clauses_[clause_id];
 
                     if (!std::holds_alternative<Clause::Requires>(clause.get_kind())) {
                         throw std::runtime_error("unreachable");
@@ -654,6 +654,11 @@ public:
     std::optional<ClauseId> process_add_clause_output(AddClauseOutput<SolvableId, VersionSetId, ClauseId> output) {
         for (const auto &clause_id: output.clauses_to_watch) {
             assert(clauses_[clause_id].has_watches());
+
+
+            auto display_clause = DisplayClause(pool, clauses_[clause_id]);
+            fprintf(stderr, "process_add_clause_output: !@#$^^&: adding clause to watch: %s\n", display_clause.to_string().c_str());
+
             watches_.start_watching(clauses_[clause_id], clause_id);
         }
 
@@ -731,36 +736,36 @@ public:
 
             // Either find the first assignable candidate or determine that one of the candidates is
             // already assigned in which case the clause has already been satisfied.
-            std::optional<SolvableId> first_selectable_candidate;
-            int selectable_candidates = 0;
-            for (auto &candidate: optional_candidates.value()) {
-                auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(candidate));
-                fprintf(stderr, "> decide: candidate: %s\n", display_solvable.to_string().c_str());
-                auto optional_assigned_value = decision_tracker_.assigned_value(candidate);
+            std::pair<std::optional<SolvableId>, uint32_t> candidate = {std::nullopt, 0};
+            bool breakFlag = false;
+
+            for (const auto& candidateValue : optional_candidates.value()) {
+                auto optional_assigned_value = decision_tracker_.assigned_value(candidateValue);
                 if (optional_assigned_value.has_value()) {
-                    if (optional_assigned_value.value()) {
+                    if (optional_assigned_value.value() == true) {
+                        breakFlag = true;
                         break;
                     }
-                    continue;
                 } else {
-                    if (!first_selectable_candidate.has_value()) {
-                        first_selectable_candidate = candidate;
+                    if (!candidate.first.has_value()) {
+                        candidate.first = std::optional(candidateValue);
                     }
-                    selectable_candidates++;
+                    candidate.second++;
                 }
             }
 
-            if (first_selectable_candidate.has_value()) {
-
-                auto display_selectable = DisplaySolvable(pool, pool->resolve_internal_solvable(
-                        first_selectable_candidate.value()));
-                fprintf(stderr, "> decide: selectable: %s\n", display_selectable.to_string().c_str());
-
-                auto possible_decision = std::make_tuple(first_selectable_candidate.value(), solvable_id, clause_id);
-                if (!best_decision.second.has_value() || selectable_candidates < best_decision.first) {
-                    best_decision = std::make_pair(selectable_candidates, possible_decision);
+            if (breakFlag) {
+                continue;
+            } else if (!candidate.first.has_value()) {
+                throw std::runtime_error("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well.");
+            } else {
+                auto possible_decision = std::make_tuple(candidate.first.value(), solvable_id, clause_id);
+                if (!best_decision.second.has_value() || candidate.second < best_decision.first) {
+                    best_decision.first = candidate.second;
+                    best_decision.second = std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>(possible_decision);
                 }
             }
+
         }
 
         auto [count, the_decision] = best_decision;
@@ -1094,7 +1099,7 @@ public:
                         // Skip logging for ForbidMultipleInstances, which is so noisy
                         if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.get_kind())) {
                             tracing::debug(
-                                    "├─ Propagate {} = {}. {:?}"
+                                    "├─ Propagate {} = {}. {:?} <<<<<<<<<<<<<<<<<< HERE\n"
 //                                    remaining_watch.solvable_id.display(&self.cache.pool()),
 //                                    remaining_watch.satisfying_value(),
 //                                    clause.debug(&self.cache.pool()),
@@ -1275,6 +1280,10 @@ public:
 
         auto &clause = clauses_[new_clause_id];
         if (clause.has_watches()) {
+
+            auto display_clause = DisplayClause(pool, clause);
+            fprintf(stderr, "analyze: !@#$^^&: adding clause to watch: %s\n", display_clause.to_string().c_str());
+
             watches_.start_watching(clause, new_clause_id);
         }
 

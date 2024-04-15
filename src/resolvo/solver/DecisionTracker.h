@@ -29,7 +29,7 @@ public:
         return map.value(solvable_id);
     }
 
-    const DecisionMap& get_map() const {
+    DecisionMap& get_map() {
         return map;
     }
 
