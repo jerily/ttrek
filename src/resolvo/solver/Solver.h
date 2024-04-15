@@ -151,14 +151,24 @@ public:
         }
 
 
-        std::unordered_set<SolvableId> seen(pending_solvables.cbegin(), pending_solvables.cend());
+        std::unordered_set<SolvableId> seen(pending_solvables.begin(), pending_solvables.end());
         std::vector<TaskResultVariant> pending_futures;
         while (true) {
             // Iterate over all pending solvables and request their dependencies.
-            auto drained_solvables = pending_solvables;
-            pending_solvables.clear();
+//            auto drained_solvables = pending_solvables;
+//            pending_solvables.clear();
 
-            for (SolvableId solvable_id: drained_solvables) {
+            while (!pending_solvables.empty()) {
+                // pop the first element
+                auto solvable_id = pending_solvables.front();
+                pending_solvables.erase(pending_solvables.begin());
+
+                auto display_pending = DisplaySolvable(pool, pool->resolve_internal_solvable(solvable_id));
+                tracing::trace(
+                        "┝━ processing pending %s\n",
+                        display_pending.to_string().c_str()
+                );
+
                 // Get the solvable information and request its requirements and constraints
                 auto solvable = pool->resolve_internal_solvable(solvable_id);
 
@@ -270,6 +280,15 @@ public:
                                     auto sorted_candidates = cache.get_or_cache_sorted_candidates(version_set_id);
                                     fprintf(stderr, "add_clauses_for_solvables: sorted_candidates size: %zd\n",
                                             sorted_candidates.size());
+
+                                    // display sorted candidates
+                                    for (auto &candidate: sorted_candidates) {
+                                        auto display_candidate = DisplaySolvable(pool, pool->resolve_internal_solvable(
+                                                candidate));
+                                        fprintf(stderr, "sorted_candidates: candidate: %s\n",
+                                                display_candidate.to_string().c_str());
+                                    }
+
                                     pending_futures.emplace_back(
                                             TaskResult::SortedCandidates{solvable_id, version_set_id,
                                                                          sorted_candidates});
@@ -316,8 +335,10 @@ public:
                     for (int i = 0; i < candidates.size(); i++) {
                         for (int j = i + 1; j < candidates.size(); j++) {
 
-                            auto display_candidate = DisplaySolvable(pool, pool->resolve_internal_solvable(candidates[i]));
-                            auto display_forbidden = DisplaySolvable(pool, pool->resolve_internal_solvable(candidates[j]));
+                            auto display_candidate = DisplaySolvable(pool,
+                                                                     pool->resolve_internal_solvable(candidates[i]));
+                            auto display_forbidden = DisplaySolvable(pool,
+                                                                     pool->resolve_internal_solvable(candidates[j]));
                             fprintf(stderr, "forbid_multiple: candidate: %s forbids %s\n",
                                     display_candidate.to_string().c_str(), display_forbidden.to_string().c_str());
 
@@ -367,7 +388,7 @@ public:
 
                     auto display_version_set = DisplayVersionSet(pool, version_set);
                     tracing::trace(
-                            "sorted candidates available for %s %s\n",
+                            "--- sorted candidates available for %s %s\n",
                             version_set_name.c_str(),
                             display_version_set.to_string().c_str()
                     );
@@ -376,12 +397,13 @@ public:
                     // available from the dependency provider.
 
                     for (auto &candidate: candidates) {
-                        auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(candidate));
-                        fprintf(stderr, "add_clauses_for_solvables: candidate: %s\n",
-                                display_solvable.to_string().c_str());
                         if (seen.insert(candidate).second && cache.are_dependencies_available_for(candidate) &&
                             clauses_added_for_solvable_.insert(candidate).second) {
                             pending_solvables.emplace_back(candidate);
+
+                            auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(candidate));
+                            fprintf(stderr, "pending_solvables: added candidate: %s\n",
+                                    display_solvable.to_string().c_str());
                         }
                     }
 
@@ -579,7 +601,7 @@ public:
             std::vector<std::tuple<SolvableId, ClauseId>> new_solvables;
             for (const auto &d: decision_tracker_.get_stack()) {
                 auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(d.solvable_id));
-//                fprintf(stderr, "decision_tracker_.get_stack(): %s d.value=%d\n", display_solvable.to_string().c_str(), d.value);
+                fprintf(stderr, "decision_tracker_.get_stack(): %s d.value=%d\n", display_solvable.to_string().c_str(), d.value);
                 if (d.value && clauses_added_for_solvable_.find(d.solvable_id) == clauses_added_for_solvable_.end()) {
                     // Filter only decisions that led to a positive assignment
                     // Select solvables for which we do not yet have dependencies
@@ -847,7 +869,7 @@ public:
 
         auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(conflicting_solvable));
         tracing::info(
-                "├─ Propagation conflicted: could not set %s to %d",
+                "├─ Propagation conflicted: could not set %s to %d\n",
                 display_solvable.to_string().c_str(),
                 attempted_value
         );
@@ -990,12 +1012,12 @@ public:
 
             auto display_pkg = DisplaySolvable(pool, pool->resolve_internal_solvable(pkg));
             tracing::trace(
-                    "├─ Propagate %s\n",
-                    display_pkg.to_string().c_str()
+                    "├─ Propagate %s at level %d\n",
+                    display_pkg.to_string().c_str(), level
             );
 
             // Propagate, iterating through the linked list of clauses that watch this solvable
-            std::optional<ClauseId> old_predecessor_clause_id = std::nullopt;
+            std::optional<ClauseId> old_predecessor_clause_id;
             std::optional<ClauseId> predecessor_clause_id = std::nullopt;
             auto clause_id = watches_.first_clause_watching_solvable(pkg);
             while (!clause_id.is_null()) {
@@ -1008,6 +1030,12 @@ public:
                         clauses_[predecessor_clause_id.value()]) : std::nullopt;
                 auto &clause = clauses_[clause_id];
 
+                auto display_clause = DisplayClause(pool, clause);
+                tracing::trace(
+                        "├─ ^^^^ Propagate clause %s\n",
+                        display_clause.to_string().c_str()
+                );
+
                 // Update the prev_clause_id for the next run
                 old_predecessor_clause_id = predecessor_clause_id;
                 predecessor_clause_id = std::optional<ClauseId>(clause_id);
@@ -1017,7 +1045,7 @@ public:
                 clause_id = clause.next_watched_clause(pkg);
 
                 if (clause_id.is_null()) {
-                    fprintf(stderr, "propagate: clause_id is null\n");
+                    fprintf(stderr, "propagate: next clause_id is null\n");
                 }
 
                 auto optional_payload = clause.watch_turned_false(pkg, decision_tracker_.get_map(),
@@ -1048,7 +1076,10 @@ public:
                         // watched literal can be set to true
                         auto remaining_watch_index = watch_index == 0 ? 1 : 0;
 
-                        auto remaining_watch = watched_literals[remaining_watch_index];
+                        auto &remaining_watch = watched_literals[remaining_watch_index];
+
+                        fprintf(stderr, "propagate: remaining_watch.solvable_id: %zd\n",
+                                remaining_watch.solvable_id.to_usize());
 
                         auto decided = decision_tracker_
                                 .try_add_decision(Decision(remaining_watch.solvable_id,

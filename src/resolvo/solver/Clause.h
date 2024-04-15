@@ -242,10 +242,10 @@ std::pair<Clause::Learnt, std::optional<std::array<SolvableId, 2>>> Clause::lear
 class ClauseState {
 public:
     ClauseState(
-            const std::array<SolvableId, 2> &watched_literals,
-            const std::array<ClauseId, 2> &next_watches,
+            std::array<SolvableId, 2> watched_literals,
+            std::array<ClauseId, 2> next_watches,
             ClauseVariant kind
-    ) : watched_literals_(watched_literals), next_watches_(next_watches), kind_(std::move(kind)) {}
+    ) : watched_literals_(std::move(watched_literals)), next_watches_(std::move(next_watches)), kind_(std::move(kind)) {}
 
     static ClauseState root() {
         auto [kind, watched_literals] = Clause::root();
@@ -265,6 +265,8 @@ public:
                 decision_tracker
         );
 
+        fprintf(stderr, "============================ requires conflict: %d\n", conflict);
+
         return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
     }
 
@@ -280,6 +282,8 @@ public:
                 requirement,
                 decision_tracker
         );
+
+        fprintf(stderr, "============================ constrains conflict: %d\n", conflict);
 
         return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
     }
@@ -313,7 +317,7 @@ public:
     }
 
     void
-    unlink_clause(const ClauseState *linked_clause, SolvableId watched_solvable, size_t linked_clause_watch_index) {
+    unlink_clause(const ClauseState *linked_clause, const SolvableId& watched_solvable, size_t linked_clause_watch_index) {
         if (watched_literals_[0] == watched_solvable) {
             next_watches_[0] = linked_clause->next_watches_[linked_clause_watch_index];
         } else {
@@ -341,6 +345,8 @@ public:
         auto literals = watched_literals(learnt_clauses);
         auto w1 = literals[0];
         auto w2 = literals[1];
+
+        fprintf(stderr, "solvable_id=%zd w1.solvable_id=%zd, w2.solvable_id=%zd\n", solvable_id.to_usize(), w1.solvable_id.to_usize(), w2.solvable_id.to_usize());
 
         if (solvable_id == w1.solvable_id && w1.eval(decision_map) == false) {
             fprintf(stderr, "w1 is false\n");
