@@ -489,15 +489,11 @@ public:
         return !watched_literals_[0].is_null();
     }
 
-    const ClauseVariant &get_kind() const {
-        return kind_;
-    }
-
+    // The ids of the solvables this clause is watching
     std::array<SolvableId, 2> watched_literals_;
+    // The ids of the next clause in each linked list that this clause is part of
     std::array<ClauseId, 2> next_watches_;
-//    SolvableId something_[2] = {SolvableId::null(), SolvableId::null()}; // for debugging purposes
-private:
-
+    // The clause itself
     ClauseVariant kind_;
 };
 

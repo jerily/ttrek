@@ -74,7 +74,7 @@ public:
                 auto display_name = DisplayName<VS, N>(pool, name);
                 oss << "only one " << display_name.to_string() << " is allowed";
             }
-        }, clause.get_kind());
+        }, clause.kind_);
         return oss.str();
     }
 

@@ -14,7 +14,6 @@
 #include "../DisplayClause.h"
 #include "../DisplayVersionSet.h"
 #include "../DisplayDecisionMap.h"
-#include "../DisplayWatches.h"
 #include "Clause.h"
 #include "WatchMap.h"
 #include "../Problem.h"
@@ -428,7 +427,7 @@ public:
                     auto requires_clause_id = clauses_.alloc(requires_clause);
                     auto &clause = clauses_[requires_clause_id];
 
-                    if (!std::holds_alternative<Clause::Requires>(clause.get_kind())) {
+                    if (!std::holds_alternative<Clause::Requires>(clause.kind_)) {
                         throw std::runtime_error("unreachable");
                     }
 
@@ -763,9 +762,6 @@ public:
                         display_solvable.to_string().c_str()
                 );
 
-                auto display_watches = DisplayWatches(pool, watches_, clauses_);
-                std::cout << display_watches.to_string().c_str() << std::endl;
-
                 throw std::runtime_error("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well.");
             } else {
                 auto possible_decision = std::make_tuple(candidate.first.value(), solvable_id, clause_id);
@@ -915,7 +911,7 @@ public:
                 auto decision_level = decision_tracker_.get_level(decision.solvable_id);
                 auto decision_action = decision.value ? "install" : "forbid";
 
-                if (std::holds_alternative<Clause::ForbidMultipleInstances>(clause.get_kind())) {
+                if (std::holds_alternative<Clause::ForbidMultipleInstances>(clause.kind_)) {
                     // Skip forbids clauses, to reduce noise
                     continue;
                 }
@@ -994,12 +990,12 @@ public:
             auto clause_id = learn_clause_id;
             auto clause = clauses_[clause_id];
 
-            if (!std::holds_alternative<Clause::Learnt>(clause.get_kind())) {
+            if (!std::holds_alternative<Clause::Learnt>(clause.kind_)) {
                 // unreachable
                 throw std::runtime_error("Expected a learnt clause");
             }
 
-            auto learnt_index = std::get<Clause::Learnt>(clause.get_kind()).learnt_clause_id;
+            auto learnt_index = std::get<Clause::Learnt>(clause.kind_).learnt_clause_id;
             auto literals = learnt_clauses_[learnt_index];
             if (literals.size() > 1) {
                 continue;
@@ -1097,7 +1093,7 @@ public:
 
                         if (decided.value()) {
                             // Skip logging for ForbidMultipleInstances, which is so noisy
-                            if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.get_kind())) {
+                            if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.kind_)) {
                                 auto display_clause = DisplayClause(pool, clause);
                                 std::cout << "Propagate " << remaining_watch.solvable_id.to_usize() << " = " << satisfying_value << ". " << display_clause.to_string() << std::endl;
                             }
@@ -1137,7 +1133,7 @@ public:
             } else {
                 problem.add_clause(clause_id);
             }
-        }, clause.get_kind());
+        }, clause.kind_);
     }
 
     // Create a [`Problem`] based on the id of the clause that triggered an unrecoverable conflict
@@ -1150,7 +1146,7 @@ public:
 
         std::unordered_set<SolvableId> involved;
         auto &clause = clauses_[clause_id];
-        Clause::visit_literals(clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
+        Clause::visit_literals(clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
                               [&involved](const Literal &literal) {
                                   involved.insert(literal.solvable_id);
                               });
@@ -1177,7 +1173,7 @@ public:
 
             auto &why_clause = clauses_[why];
 
-            Clause::visit_literals(why_clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
+            Clause::visit_literals(why_clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
                                       [&decision, this, &involved](const Literal &literal) {
                                           if (literal.eval(decision_tracker_.get_map()) == true) {
                                               assert(literal.solvable_id == decision.solvable_id);
@@ -1216,7 +1212,7 @@ public:
             learnt_why.push_back(clause_id);
 
             auto &clause = clauses_[clause_id];
-            Clause::visit_literals(clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
+            Clause::visit_literals(clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
                                   [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
                                           &learnt, this](const Literal &literal) {
                                       if (!first_iteration && literal.solvable_id == conflicting_solvable) {
