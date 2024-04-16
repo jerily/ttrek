@@ -322,7 +322,8 @@ public:
                             auto display_forbidden = DisplaySolvable(pool,
                                                                      pool->resolve_internal_solvable(candidates[j]));
 
-                            auto forbid_clause_id = clauses_.alloc(Clause::forbid_multiple(candidates[i], candidates[j]));
+                            auto forbid_clause_id = clauses_.alloc(
+                                    Clause::forbid_multiple(candidates[i], candidates[j]));
                             assert(clauses_[forbid_clause_id].has_watches());
                             output.clauses_to_watch.push_back(forbid_clause_id);
 
@@ -432,7 +433,7 @@ public:
                     for (auto &forbidden_candidate: non_matching_candidates) {
                         auto [constrains_clause, conflict] =
                                 Clause::constrains(solvable_id, forbidden_candidate, version_set_id,
-                                                        decision_tracker_);
+                                                   decision_tracker_);
                         auto constrains_clause_id = clauses_.alloc(constrains_clause);
                         output.clauses_to_watch.push_back(constrains_clause_id);
 
@@ -691,7 +692,7 @@ public:
             std::pair<std::optional<SolvableId>, uint32_t> candidate = {std::nullopt, 0};
             bool breakFlag = false;
 
-            for (const auto& candidate_value : optional_candidates.value()) {
+            for (const auto &candidate_value: optional_candidates.value()) {
                 auto optional_assigned_value = decision_tracker_.assigned_value(candidate_value);
                 if (optional_assigned_value.has_value()) {
                     if (optional_assigned_value.value() == true) {
@@ -715,12 +716,14 @@ public:
                         display_solvable.to_string().c_str()
                 );
 
-                throw std::runtime_error("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well.");
+                throw std::runtime_error(
+                        "when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well.");
             } else {
                 auto possible_decision = std::make_tuple(candidate.first.value(), solvable_id, clause_id);
                 if (!best_decision.second.has_value() || candidate.second < best_decision.first) {
                     best_decision.first = candidate.second;
-                    best_decision.second = std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>(possible_decision);
+                    best_decision.second = std::optional<std::tuple<SolvableId, SolvableId, ClauseId>>(
+                            possible_decision);
                 }
             }
 
@@ -832,8 +835,6 @@ public:
     learn_from_conflict(uint32_t level, const SolvableId &conflicting_solvable,
                         bool attempted_value, const ClauseId &conflicting_clause) {
 
-        tracing::info("learn_from_conflict\n");
-
         auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(conflicting_solvable));
         tracing::info(
                 "├─ Propagation conflicted: could not set %s to %d\n",
@@ -893,8 +894,8 @@ public:
         auto display_literal_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(literal.solvable_id));
         tracing::debug(
                 "├─ Propagate after learn: %s = %d\n",
-                    display_literal_solvable.to_string().c_str(),
-                    decision
+                display_literal_solvable.to_string().c_str(),
+                decision
         );
         return std::make_pair(level, std::nullopt);
     };
@@ -984,7 +985,7 @@ public:
 
                 // Get mutable access to both clauses.
                 std::optional<ClauseState> predecessor_clause;
-                ClauseState& clause = clauses_[clause_id];
+                ClauseState &clause = clauses_[clause_id];
 
                 // Update the prev_clause_id for the next run
                 old_predecessor_clause_id = predecessor_clause_id;
@@ -1009,7 +1010,7 @@ public:
                     if (optional_variable.has_value()) {
 
                         watches_.update_watched(predecessor_clause, clause, this_clause_id, watch_index, pkg,
-                                               optional_variable.value());
+                                                optional_variable.value());
 
                         // Make sure the right predecessor is kept for the next iteration (i.e. the
                         // current clause is no longer a predecessor of the next one; the current
@@ -1024,7 +1025,8 @@ public:
                         bool satisfying_value = remaining_watch.satisfying_value();
 
                         auto display_remaining_watch = DisplaySolvable(pool,
-                                                                      pool->resolve_internal_solvable(remaining_watch.solvable_id));
+                                                                       pool->resolve_internal_solvable(
+                                                                               remaining_watch.solvable_id));
                         std::cout << display_remaining_watch.to_string() << std::endl;
 
                         auto decided = decision_tracker_.try_add_decision(
@@ -1039,13 +1041,14 @@ public:
                             // Skip logging for ForbidMultipleInstances, which is so noisy
                             if (!std::holds_alternative<Clause::ForbidMultipleInstances>(clause.kind_)) {
                                 auto display_solvable = DisplaySolvable(pool,
-                                                                      pool->resolve_internal_solvable(remaining_watch.solvable_id));
+                                                                        pool->resolve_internal_solvable(
+                                                                                remaining_watch.solvable_id));
                                 auto display_clause = DisplayClause(pool, clause);
                                 tracing::debug(
                                         "├─ Propagate %s = %d. %s",
-                                                display_solvable.to_string().c_str(),
-                                                remaining_watch.satisfying_value(),
-                                                display_clause.to_string().c_str()
+                                        display_solvable.to_string().c_str(),
+                                        remaining_watch.satisfying_value(),
+                                        display_clause.to_string().c_str()
                                 );
                             }
                         }
@@ -1097,9 +1100,9 @@ public:
         std::unordered_set<SolvableId> involved;
         auto &clause = clauses_[clause_id];
         Clause::visit_literals(clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
-                              [&involved](const Literal &literal) {
-                                  involved.insert(literal.solvable_id);
-                              });
+                               [&involved](const Literal &literal) {
+                                   involved.insert(literal.solvable_id);
+                               });
 
         std::unordered_set<ClauseId> seen;
         analyze_unsolvable_clause(clauses_, learnt_why_, clause_id, problem, seen);
@@ -1124,14 +1127,24 @@ public:
             auto &why_clause = clauses_[why];
 
             Clause::visit_literals(why_clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
-                                      [&decision, this, &involved](const Literal &literal) {
-                                          if (literal.eval(decision_tracker_.get_map()) == true) {
-                                              fprintf(stderr, "analyze_unsolvable: !@#$^^&: literal.solvable_id=%d vs decision.solvable_id=%zd\n", literal.solvable_id.to_usize(), decision.solvable_id.to_usize());
-                                              assert(literal.solvable_id == decision.solvable_id);
-                                          } else {
-                                              involved.insert(literal.solvable_id);
-                                          }
-                                      });
+                                   [&decision, this, &involved](const Literal &literal) {
+                                       if (literal.eval(decision_tracker_.get_map()) == true) {
+
+                                           auto display_decision_solvable = DisplaySolvable(pool,
+                                                                                            pool->resolve_internal_solvable(
+                                                                                                    decision.solvable_id));
+                                           auto display_literal_solvable = DisplaySolvable(pool,
+                                                                                           pool->resolve_internal_solvable(
+                                                                                                   literal.solvable_id));
+                                           fprintf(stderr, "analyze_unsolvable: !@#$^^&: literal=%s vs decision=%s\n",
+                                                   display_literal_solvable.to_string().c_str(),
+                                                   display_decision_solvable.to_string().c_str());
+
+                                           assert(literal.solvable_id == decision.solvable_id);
+                                       } else {
+                                           involved.insert(literal.solvable_id);
+                                       }
+                                   });
         }
 
         return problem;
@@ -1156,40 +1169,40 @@ public:
         std::vector<Literal> learnt;
         uint32_t back_track_to = 0;
 
-        bool s_value;
         std::vector<ClauseId> learnt_why;
         bool first_iteration = true;
+        bool s_value;
         while (true) {
             learnt_why.push_back(clause_id);
 
             auto &clause = clauses_[clause_id];
             Clause::visit_literals(clause.kind_, learnt_clauses_, cache.version_set_to_sorted_candidates,
-                                  [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
-                                          &learnt, this](const Literal &literal) {
-                                      if (!first_iteration && literal.solvable_id == conflicting_solvable) {
-                                          // We are only interested in the causes of the conflict, so we ignore the
-                                          // solvable whose value was propagated
-                                          return;
-                                      }
+                                   [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
+                                           &learnt, this](const Literal &literal) {
+                                       if (!first_iteration && literal.solvable_id == conflicting_solvable) {
+                                           // We are only interested in the causes of the conflict, so we ignore the
+                                           // solvable whose value was propagated
+                                           return;
+                                       }
 
-                                      if (!seen.insert(literal.solvable_id).second) {
-                                          // Skip literals we have already seen
-                                          return;
-                                      }
+                                       if (!seen.insert(literal.solvable_id).second) {
+                                           // Skip literals we have already seen
+                                           return;
+                                       }
 
-                                      auto decision_level = decision_tracker_.get_level(literal.solvable_id);
-                                      if (decision_level == current_level) {
-                                          causes_at_current_level++;
-                                      } else if (current_level > 1) {
-                                          auto learnt_literal = Literal{literal.solvable_id,
-                                                                        !decision_tracker_.assigned_value(
-                                                                                literal.solvable_id).value()};
-                                          learnt.push_back(learnt_literal);
-                                          back_track_to = std::max(back_track_to, decision_level);
-                                      } else {
-                                          throw std::runtime_error("Unreachable");
-                                      }
-                                  });
+                                       auto decision_level = decision_tracker_.get_level(literal.solvable_id);
+                                       if (decision_level == current_level) {
+                                           causes_at_current_level++;
+                                       } else if (current_level > 1) {
+                                           auto learnt_literal = Literal(literal.solvable_id,
+                                                                         !decision_tracker_.assigned_value(
+                                                                                 literal.solvable_id).value());
+                                           learnt.push_back(learnt_literal);
+                                           back_track_to = std::max(back_track_to, decision_level);
+                                       } else {
+                                           throw std::runtime_error("Unreachable");
+                                       }
+                                   });
 
             first_iteration = false;
 
@@ -1217,10 +1230,11 @@ public:
         }
 
 
-        auto last_literal = Literal{conflicting_solvable, s_value};
+        auto last_literal = Literal(conflicting_solvable, s_value);
         learnt.push_back(last_literal);
 
-        auto learnt_clause_id = learnt_clauses_.alloc(learnt);
+        // Add the clause
+        auto learnt_clause_id = learnt_clauses_.alloc(std::vector(learnt.begin(), learnt.end()));
         learnt_why_.insert(learnt_clause_id, learnt_why);
 
         auto new_clause_id = clauses_.alloc(Clause::learnt(learnt_clause_id, learnt));
@@ -1240,8 +1254,8 @@ public:
             auto display_lit_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(lit.solvable_id));
             tracing::debug(
                     "│  - %s%s\n",
-                        lit.negate ? "NOT " : "",
-                        display_lit_solvable.to_string().c_str()
+                    lit.negate ? "NOT " : "",
+                    display_lit_solvable.to_string().c_str()
             );
         }
 
