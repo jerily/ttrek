@@ -51,13 +51,13 @@ struct Pack {
         cancel_during_get_dependencies = other.cancel_during_get_dependencies;
     }
 
-//    Pack with_unknown_deps() const {
-//        return Pack(version, true, cancel_during_get_dependencies);
-//    }
-//
-//    Pack with_cancel_during_get_dependencies() const {
-//        return Pack(version, unknown_deps, true);
-//    }
+    Pack with_unknown_deps() const {
+        return Pack(version, true, cancel_during_get_dependencies);
+    }
+
+    Pack with_cancel_during_get_dependencies() const {
+        return Pack(version, unknown_deps, true);
+    }
 
     Pack offset(uint32_t offset) const {
         return Pack(version + offset);

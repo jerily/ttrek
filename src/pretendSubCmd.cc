@@ -316,6 +316,220 @@ void test_clause_size() {
     assert(sizeof(ClauseState) == 32);
 }
 
+void test_resolve_with_nonexisting() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 4, std::vector<std::string>{"b"}},
+                                                      {{"asdf"}, 3, std::vector<std::string>()},
+                                                      {{"b"}, 1, std::vector<std::string>{"idontexist"}}});
+    auto root_requirements = provider.requirements({"asdf"});
+    auto pool_ptr = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(root_requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 1);
+
+    auto solvable = pool_ptr->resolve_solvable(solved[0]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "asdf");
+    assert(solvable.get_inner().version == 3);
+    fprintf(stdout, "success\n");
+}
+
+
+void test_resolve_with_nested_deps() {
+    auto provider = BundleBoxProvider::from_packages({{{"apache-airflow"}, 3, std::vector<std::string>{"opentelemetry-api 2..4", "opentelemetry-exporter-otlp"}},
+                                                      {{"apache-airflow"}, 2, std::vector<std::string>{"opentelemetry-api 2..4", "opentelemetry-exporter-otlp"}},
+                                                      {{"apache-airflow"}, 1, std::vector<std::string>()},
+                                                      {{"opentelemetry-api"}, 3, std::vector<std::string>{"opentelemetry-sdk"}},
+                                                      {{"opentelemetry-api"}, 2, std::vector<std::string>()},
+                                                      {{"opentelemetry-api"}, 1, std::vector<std::string>()},
+                                                      {{"opentelemetry-exporter-otlp"}, 1, std::vector<std::string>{"opentelemetry-grpc"}},
+                                                      {{"opentelemetry-grpc"}, 1, std::vector<std::string>{"opentelemetry-api 1"}}});
+    auto root_requirements = provider.requirements({"apache-airflow"});
+    auto pool_ptr = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(root_requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 1);
+
+    auto solvable = pool_ptr->resolve_solvable(solved[0]);
+    assert(pool_ptr->resolve_package_name(solvable.get_name_id()) == "apache-airflow");
+    assert(solvable.get_inner().version == 1);
+    fprintf(stdout, "success\n");
+}
+
+void test_resolve_with_unknown_deps() {
+    auto provider = BundleBoxProvider();
+    provider.add_package(
+        "opentelemetry-api",
+        Pack(3).with_unknown_deps(),
+        {},
+        {}
+    );
+    provider.add_package("opentelemetry-api", Pack(2), {}, {});
+    auto requirements = provider.requirements({"opentelemetry-api"});
+    auto pool = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(requirements);
+
+    assert(!err.has_value());
+
+    assert(solved.size() == 1);
+
+    auto solvable = pool->resolve_solvable(solved[0]);
+
+    assert(pool->resolve_package_name(solvable.get_name_id()) == "opentelemetry-api");
+
+    assert(solvable.get_inner().version == 2);
+}
+
+void test_resolve_and_cancel() {
+    auto provider = BundleBoxProvider();
+    provider.add_package(
+        "opentelemetry-api",
+        Pack(3).with_unknown_deps(),
+        {},
+        {}
+    );
+    provider.add_package(
+        "opentelemetry-api",
+        Pack(2).with_cancel_during_get_dependencies(),
+        {},
+        {}
+    );
+    auto error = solve_unsat(provider, {"opentelemetry-api"});
+
+    assert_snapshot(error);
+}
+
+// Locking a specific package version in this case a lower version namely `3` should result
+// in the higher package not being considered
+void test_resolve_locked_and_top_level() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 4, std::vector<std::string>()},
+                                                      {{"asdf"}, 3, std::vector<std::string>()}});
+    provider.set_locked("asdf", 3);
+
+    auto requirements = provider.requirements({"asdf"});
+
+    auto pool = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 1);
+    auto solvable_id = solved[0];
+    assert(pool->resolve_solvable(solvable_id).get_inner().version == 3);
+}
+
+// Should ignore lock when it is not a top level package and a newer version exists without it
+void test_resolve_ignored_locked_top_level() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 4, std::vector<std::string>()},
+                                                      {{"asdf"}, 3, std::vector<std::string>{"fgh"}},
+                                                      {{"fgh"}, 1, std::vector<std::string>()}});
+    provider.set_locked("fgh", 1);
+
+    auto requirements = provider.requirements({"asdf"});
+    auto pool = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(requirements);
+
+    assert(!err.has_value());
+    assert(solved.size() == 1);
+
+    auto solvable = pool->resolve_solvable(solved[0]);
+    assert(pool->resolve_package_name(solvable.get_name_id()) == "asdf");
+    assert(solvable.get_inner().version == 4);
+}
+
+// Test checks if favoring without a conflict results in a package upgrade
+//    insta::assert_snapshot!(result, @r###"
+//        a=1
+//        b=2
+//        "###);
+void test_resolve_favor_without_conflict() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>()},
+                                                      {{"a"}, 2, std::vector<std::string>()},
+                                                      {{"b"}, 1, std::vector<std::string>()},
+                                                      {{"b"}, 2, std::vector<std::string>()}});
+    provider.set_favored("a", 1);
+    provider.set_favored("b", 1);
+
+    auto result = solve_snapshot(provider, {"a", "b 2"});
+    assert_snapshot(result);
+
+}
+
+//    insta::assert_snapshot!(result, @r###"
+//        a=2
+//        b=2
+//        c=2
+//        "###);
+void test_resolve_favor_with_conflict() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>{"c 1"}},
+                                                      {{"a"}, 2, std::vector<std::string>()},
+                                                      {{"b"}, 1, std::vector<std::string>{"c 1"}},
+                                                      {{"b"}, 2, std::vector<std::string>{"c 2"}},
+                                                      {{"c"}, 1, std::vector<std::string>()},
+                                                      {{"c"}, 2, std::vector<std::string>()}});
+    provider.set_favored("a", 1);
+    provider.set_favored("b", 1);
+    provider.set_favored("c", 1);
+
+    auto result = solve_snapshot(provider, {"a", "b 2"});
+    assert_snapshot(result);
+}
+
+//    insta::assert_snapshot!(result, @r###"
+//        a=2
+//        b=5
+//        "###);
+void test_resolve_cyclic() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 2, std::vector<std::string>{"b 0..10"}},
+                                                      {{"b"}, 5, std::vector<std::string>{"a 2..4"}}});
+    auto requirements = provider.requirements({"a 0..100"});
+    auto pool = provider.pool;
+    auto solver = Solver<Range<Pack>, std::string, BundleBoxProvider>(provider);
+    auto [solved, err] = solver.solve(requirements);
+
+    auto result = transaction_to_string(pool, solved);
+    assert_snapshot(result);
+}
+
+void test_unsat_locked_and_excluded() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>{"c 2"}},
+                                                      {{"c"}, 2, std::vector<std::string>()},
+                                                      {{"c"}, 1, std::vector<std::string>()}});
+    provider.set_locked("c", 1);
+    auto result = solve_snapshot(provider, {"asdf"});
+    assert_snapshot(result);
+}
+
+void test_unsat_no_candidates_for_child_1() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>{"c 2"}},
+                                                      {{"c"}, 1, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"asdf"});
+    assert_snapshot(error);
+}
+
+void test_unsat_no_candidates_for_child_2() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 41, std::vector<std::string>{"b 0..20"}}});
+    auto error = solve_unsat(provider, {"a 0..1000"});
+    assert_snapshot(error);
+}
+
+void test_unsat_missing_top_level_dep_1() {
+    auto provider = BundleBoxProvider::from_packages({{{"asdf"}, 1, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"fghj"});
+    assert_snapshot(error);
+}
+
+void test_unsat_missing_top_level_dep_2() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 41, std::vector<std::string>{"b 15"}},
+                                                      {{"b"}, 15, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"a 41", "b 14"});
+    assert_snapshot(error);
+}
+
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
 //    test_literal_satisfying_value();
@@ -330,7 +544,22 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 //    test_unit_propagation_nested();
 //    test_resolve_multiple();
 //    test_resolve_with_concurrent_metadata_fetching();
-    test_resolve_with_conflict();
+//    test_resolve_with_conflict();
+//    test_resolve_with_nonexisting();
+//    test_resolve_with_nested_deps();
+//    test_resolve_with_unknown_deps();
+//    test_resolve_and_cancel();
+//    test_resolve_locked_and_top_level();
+//    test_resolve_ignored_locked_top_level();
+//    test_resolve_favor_without_conflict();
+//    test_resolve_favor_with_conflict();
+//    test_resolve_cyclic();
+//    test_unsat_locked_and_excluded();
+    test_unsat_no_candidates_for_child_1();
+    test_unsat_no_candidates_for_child_2();
+    test_unsat_missing_top_level_dep_1();
+    test_unsat_missing_top_level_dep_2();
+
 
     return TCL_OK;
 }

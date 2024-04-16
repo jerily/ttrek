@@ -56,7 +56,7 @@ public:
 
 private:
     bool eval_inner(bool solvable_value) const {
-        return negate == !solvable_value;
+        return negate ? !solvable_value : solvable_value;
     }
 };
 
@@ -342,6 +342,7 @@ public:
         }
     }
 
+    // Returns the index of the watch that turned false, if any
     std::optional<std::pair<std::array<Literal, 2>, size_t>> watch_turned_false(
             const SolvableId &solvable_id,
             const DecisionMap &decision_map,
@@ -353,7 +354,7 @@ public:
         auto w1 = literals[0];
         auto w2 = literals[1];
 
-        fprintf(stderr, "solvable_id=%zd w1.solvable_id=%zd, w2.solvable_id=%zd\n", solvable_id.to_usize(), w1.solvable_id.to_usize(), w2.solvable_id.to_usize());
+        fprintf(stderr, "watch_turned_false: solvable_id=%zd w1.solvable_id=%zd, w2.solvable_id=%zd\n", solvable_id.to_usize(), w1.solvable_id.to_usize(), w2.solvable_id.to_usize());
 
         if (solvable_id == w1.solvable_id && w1.eval(decision_map) == false) {
             fprintf(stderr, "w1 is false\n");
@@ -374,7 +375,7 @@ public:
             };
         };
 
-        return std::visit([&](auto &arg) -> std::array<Literal, 2> {
+        return std::visit([&](auto &&arg) -> std::array<Literal, 2> {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
                 debug_assert(false);
@@ -386,10 +387,24 @@ public:
                 return std::array<Literal, 2>{Literal{SolvableId::null(), false}, Literal{SolvableId::null(), false}};
             } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
                 auto clause_variant = std::any_cast<Clause::Learnt>(arg);
-                auto &learnt_literals = learnt_clauses[clause_variant.learnt_clause_id];
-                return std::array<Literal, 2>{learnt_literals[0], learnt_literals[1]};
+                auto learnt_literals = learnt_clauses[clause_variant.learnt_clause_id];
+
+                auto it1 = std::find_if(learnt_literals.begin(), learnt_literals.end(),
+                                        [this](const Literal& l) { return l.solvable_id == this->watched_literals_[0]; });
+                auto it2 = std::find_if(learnt_literals.begin(), learnt_literals.end(),
+                                        [this](const Literal& l) { return l.solvable_id == this->watched_literals_[1]; });
+
+                assert(it1 != learnt_literals.end());
+                assert(it2 != learnt_literals.end());
+
+                Literal w1 = *it1;
+                Literal w2 = *it2;
+
+                fprintf(stderr, "here-learnt\n");
+                return std::array<Literal, 2>{w1, w2};
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
                 auto clause_variant = std::any_cast<Clause::Requires>(arg);
+                fprintf(stderr, "here-requires\n");
                 if (watched_literals_[0] == clause_variant.parent) {
                     return literals(false, true);
                 } else if (watched_literals_[1] == clause_variant.parent) {
@@ -398,6 +413,7 @@ public:
                     return literals(true, true);
                 }
             } else {
+                fprintf(stderr, "here-else\n");
                 return literals(false, false);
             }
         }, kind_);
@@ -407,13 +423,15 @@ public:
             const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
             const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
             const DecisionMap &decision_map
-    ) const {
+    ) {
         // The next unwatched variable (if available), is a variable that is:
         // * Not already being watched
         // * Not yet decided, or decided in such a way that the literal yields true
         auto can_watch = [this, &decision_map](const Literal &solvable_lit) {
-            return std::find(watched_literals_.begin(), watched_literals_.end(), solvable_lit.solvable_id) ==
-                   watched_literals_.end()
+
+            fprintf(stderr, "can_watch: solvable_id=%zd\n", solvable_lit.solvable_id.to_usize());
+
+            return watched_literals_[0] != solvable_lit.solvable_id && watched_literals_[1] != solvable_lit.solvable_id
                    && solvable_lit.eval(decision_map).value_or(true);
         };
 
@@ -452,7 +470,7 @@ public:
                 }
 
                 auto &candidates = optional_candidates.value();
-                auto it = std::find_if(candidates.cbegin(), candidates.cend(), [&](const SolvableId &candidate) {
+                auto it = std::find_if(candidates.begin(), candidates.end(), [&](const SolvableId &candidate) {
                     return can_watch(Literal{candidate, false});
                 });
 

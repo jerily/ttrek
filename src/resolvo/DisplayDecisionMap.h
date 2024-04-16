@@ -38,7 +38,7 @@ public:
                 oss << (optional_value.value() ? "true " : "false");
                 oss << " (level: " << map.level(id) << ")" << std::endl;
             } else {
-                oss << "undecided";
+                oss << "undecided" << std::endl;
             }
         }
         return oss.str();
