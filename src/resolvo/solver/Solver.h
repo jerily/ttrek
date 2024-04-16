@@ -1195,7 +1195,7 @@ public:
                                            causes_at_current_level++;
                                        } else if (current_level > 1) {
                                            auto learnt_literal = Literal(literal.solvable_id,
-                                                                         !decision_tracker_.assigned_value(
+                                                                         decision_tracker_.assigned_value(
                                                                                  literal.solvable_id).value());
                                            learnt.push_back(learnt_literal);
                                            back_track_to = std::max(back_track_to, decision_level);
