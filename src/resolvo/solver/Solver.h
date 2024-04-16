@@ -963,7 +963,7 @@ public:
 
             auto display_solvable = DisplaySolvable(pool, pool->resolve_internal_solvable(literal.solvable_id));
             tracing::trace(
-                    "├─ Propagate assertion %s = %d",
+                    "├─ Propagate assertion %s = %d\n",
                     display_solvable.to_string().c_str(),
                     decision
             );
@@ -1045,7 +1045,7 @@ public:
                                                                                 remaining_watch.solvable_id));
                                 auto display_clause = DisplayClause(pool, clause);
                                 tracing::debug(
-                                        "├─ Propagate %s = %d. %s",
+                                        "├─ Propagate %s = %d. %s\n",
                                         display_solvable.to_string().c_str(),
                                         remaining_watch.satisfying_value(),
                                         display_clause.to_string().c_str()
