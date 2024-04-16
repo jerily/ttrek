@@ -35,17 +35,14 @@ public:
         // Remove this clause from its current place in the linked list, because we
         // are no longer watching what brought us here
         if (predecessor_clause.has_value()) {
-            fprintf(stderr, "unlink the clause\n");
             // Unlink the clause
             predecessor_clause.value().unlink_clause(clause, previous_watch, watch_index);
         } else {
-            fprintf(stderr, "first clause in the chain\n");
             // This was the first clause in the chain
             map.insert(previous_watch, clause.get_linked_clause(watch_index));
         }
 
         // Set the new watch
-        fprintf(stderr, "set the new watch: %zd previous_watch: %zd\n", new_watch.to_usize(), previous_watch.to_usize());
         clause.watched_literals_[watch_index] = new_watch;
         auto optional_new_watch_clause_id = map.get(new_watch);
         if (!optional_new_watch_clause_id.has_value()) {
