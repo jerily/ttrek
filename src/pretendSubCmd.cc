@@ -572,9 +572,9 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 //    test_unsat_missing_top_level_dep_1();
 //    test_unsat_missing_top_level_dep_2();
 
-//    test_unsat_after_backtracking();
+    test_unsat_after_backtracking();
 
-    test_clause_size();
+//    test_clause_size();
 
     return TCL_OK;
 }

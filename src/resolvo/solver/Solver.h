@@ -656,13 +656,6 @@ public:
 
         for (const auto &clause_id: output.clauses_to_watch) {
             assert(clauses_[clause_id].has_watches());
-
-            auto display_clause = DisplayClause(pool, clauses_[clause_id]);
-            fprintf(stderr, "@@@@@ adding clause to watch: %s\n", display_clause.to_string().c_str());
-            auto display_s1 = DisplaySolvable(pool, pool->resolve_internal_solvable(clauses_[clause_id].watched_literals_[0]));
-            auto display_s2 = DisplaySolvable(pool, pool->resolve_internal_solvable(clauses_[clause_id].watched_literals_[1]));
-            fprintf(stderr, "@@@@@ watched_literals_[0]: %s, watched_literals_[1]: %s\n", display_s1.to_string().c_str(), display_s2.to_string().c_str());
-
             watches_.start_watching(clauses_[clause_id], clause_id);
         }
 
@@ -958,7 +951,6 @@ public:
     //fn propagate(&mut self, level: u32) -> Result<(), PropagationError> {
 
     std::optional<PropagationErrorVariant> propagate(uint32_t level) {
-        fprintf(stderr, "propagate: propagate level: %d\n", level);
         auto optional_value = cache.provider.should_cancel_with_value();
         if (optional_value.has_value()) {
             return std::optional(PropagationError::Cancelled{optional_value.value()});
@@ -970,7 +962,6 @@ public:
             bool value = false;
             auto decided = decision_tracker_.try_add_decision(Decision(solvable_id, value, clause_id), level);
             if (!decided.has_value()) {
-                fprintf(stderr, "propagate: decided has no value\n");
                 return std::optional(PropagationError::Conflict{solvable_id, value, clause_id});
             }
 
@@ -1018,8 +1009,6 @@ public:
             );
         }
 
-        fprintf(stderr, "propagate: watched solvables\n");
-
         // Watched solvables
         std::optional<Decision> decision;
         while ((decision = decision_tracker_.next_unpropagated()).has_value()) {
@@ -1045,10 +1034,6 @@ public:
                 // Configure the next clause to visit
                 ClauseId this_clause_id = clause_id;
                 clause_id = clause.next_watched_clause(pkg);
-
-                if (clause_id.is_null()) {
-                    fprintf(stderr, "propagate: next clause_id is null\n");
-                }
 
                 auto optional_payload = clause.watch_turned_false(pkg, decision_tracker_.get_map(),
                                                                   learnt_clauses_);

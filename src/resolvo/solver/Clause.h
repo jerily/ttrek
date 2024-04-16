@@ -349,13 +349,9 @@ public:
         auto w1 = literals[0];
         auto w2 = literals[1];
 
-        fprintf(stderr, "watch_turned_false: solvable_id=%zd w1.solvable_id=%zd, w2.solvable_id=%zd\n", solvable_id.to_usize(), w1.solvable_id.to_usize(), w2.solvable_id.to_usize());
-
         if (solvable_id == w1.solvable_id && w1.eval(decision_map) == false) {
-            fprintf(stderr, "w1 is false\n");
             return std::make_pair(literals, 0);
         } else if (solvable_id == w2.solvable_id && w2.eval(decision_map) == false) {
-            fprintf(stderr, "w2 is false\n");
             return std::make_pair(literals, 1);
         } else {
             return std::nullopt;
@@ -395,11 +391,9 @@ public:
                 Literal w1 = *it1;
                 Literal w2 = *it2;
 
-                fprintf(stderr, "here-learnt\n");
                 return std::array<Literal, 2>{w1, w2};
             } else if constexpr (std::is_same_v<T, Clause::Requires>) {
                 auto clause_variant = std::any_cast<Clause::Requires>(arg);
-                fprintf(stderr, "here-requires\n");
                 if (watched_literals_[0] == clause_variant.parent) {
                     return literals(false, true);
                 } else if (watched_literals_[1] == clause_variant.parent) {
@@ -408,7 +402,6 @@ public:
                     return literals(true, true);
                 }
             } else {
-                fprintf(stderr, "here-else\n");
                 return literals(false, false);
             }
         }, kind_);
@@ -423,9 +416,6 @@ public:
         // * Not already being watched
         // * Not yet decided, or decided in such a way that the literal yields true
         auto can_watch = [this, &decision_map](const Literal &solvable_lit) {
-
-            fprintf(stderr, "can_watch: solvable_id=%zd\n", solvable_lit.solvable_id.to_usize());
-
             return watched_literals_[0] != solvable_lit.solvable_id && watched_literals_[1] != solvable_lit.solvable_id
                    && solvable_lit.eval(decision_map).value_or(true);
         };
