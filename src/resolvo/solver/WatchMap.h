@@ -24,7 +24,6 @@ public:
         for (size_t watch_index = 0; watch_index < clause.watched_literals_.size(); ++watch_index) {
             SolvableId watched_solvable = clause.watched_literals_[watch_index];
             ClauseId already_watching = first_clause_watching_solvable(watched_solvable);
-            fprintf(stderr, "already_watching for watch_index=%zd is_null: %d\n", watch_index, already_watching.is_null());
             clause.link_to_clause(watch_index, already_watching);
             watch_solvable(watched_solvable, clauseId);
         }

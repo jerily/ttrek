@@ -310,7 +310,6 @@ public:
     ) : watched_literals_(watched_literals), next_watches_(next_watches), kind_(std::move(kind)) {}
 
     void link_to_clause(size_t watch_index, const ClauseId &clause_id) {
-        fprintf(stderr, "link_to_clause: watch_index=%zd, clause_id=%zd\n", watch_index, clause_id.to_usize());
         next_watches_[watch_index] = clause_id;
     }
 
