@@ -112,7 +112,7 @@ public:
 
         // The first clause will always be the install root clause. Here we verify that this is
         // indeed the case.
-        auto root_clause = clauses_.alloc(ClauseState::root());
+        auto root_clause = clauses_.alloc(Clause::root());
         assert(root_clause == ClauseId::install_root());
 
         // Run SAT
@@ -241,7 +241,7 @@ public:
 
                                     // There is no information about the solvable's dependencies, so we add
                                     // an exclusion clause for it
-                                    auto clause_id = clauses_.alloc(ClauseState::exclude(solvable_id, reason));
+                                    auto clause_id = clauses_.alloc(Clause::exclude(solvable_id, reason));
 
                                     // Exclusions are negative assertions, tracked outside of the watcher system
                                     output.negative_assertions.emplace_back(solvable_id, clause_id);
@@ -343,7 +343,7 @@ public:
                             fprintf(stderr, "forbid_multiple: candidate: %s forbids %s\n",
                                     display_candidate.to_string().c_str(), display_forbidden.to_string().c_str());
 
-                            auto forbid_clause_id = clauses_.alloc(ClauseState::forbid_multiple(candidates[i], candidates[j]));
+                            auto forbid_clause_id = clauses_.alloc(Clause::forbid_multiple(candidates[i], candidates[j]));
                             assert(clauses_[forbid_clause_id].has_watches());
                             output.clauses_to_watch.push_back(forbid_clause_id);
 
@@ -356,7 +356,7 @@ public:
                         for (auto &other_candidate: candidates) {
                             if (other_candidate != locked_solvable_id.value()) {
                                 auto locked_clause_id = clauses_.alloc(
-                                        ClauseState::lock(locked_solvable_id.value(), other_candidate));
+                                        Clause::lock(locked_solvable_id.value(), other_candidate));
                                 assert(clauses_[locked_clause_id].has_watches());
                                 output.clauses_to_watch.push_back(locked_clause_id);
                             }
@@ -366,7 +366,7 @@ public:
                     // Add a clause for solvables that are externally excluded.
 
                     for (auto &[excluded_solvable, reason]: package_candidates.excluded) {
-                        auto clause_id = clauses_.alloc(ClauseState::exclude(excluded_solvable, reason));
+                        auto clause_id = clauses_.alloc(Clause::exclude(excluded_solvable, reason));
 
                         fprintf(stderr, "excluded solvable: %d\n", excluded_solvable.to_usize());
 
@@ -418,7 +418,7 @@ public:
                     fprintf(stderr, "adding requires clause for %s %s\n", display_solvable.to_string().c_str(),
                             display_vs.to_string().c_str());
 
-                    auto [requires_clause, conflict] = ClauseState::requires(
+                    auto [requires_clause, conflict] = Clause::requires(
                             solvable_id,
                             version_set_id,
                             candidates,
@@ -464,7 +464,7 @@ public:
                     // Add forbidden clauses for the candidates
                     for (auto &forbidden_candidate: non_matching_candidates) {
                         auto [constrains_clause, conflict] =
-                                ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id,
+                                Clause::constrains(solvable_id, forbidden_candidate, version_set_id,
                                                         decision_tracker_);
                         auto constrains_clause_id = clauses_.alloc(constrains_clause);
                         output.clauses_to_watch.push_back(constrains_clause_id);
@@ -902,13 +902,13 @@ public:
         auto display_clause_for_assignment = DisplayClause(pool, clauses_[decision_tracker_.find_clause_for_assignment(
                 conflicting_solvable).value()]);
         tracing::info(
-                "│  Previously decided value: %d. Derived from: %s",
+                "│  Previously decided value: %d. Derived from: %s\n",
                 !attempted_value,
                 display_clause_for_assignment.to_string().c_str()
         );
 
         if (level == 1) {
-            tracing::info("╘══ UNSOLVABLE");
+            tracing::info("╘══ UNSOLVABLE\n");
 
             for (const auto &decision: decision_tracker_.get_stack()) {
                 auto clause = clauses_[decision.derived_from];
@@ -1150,7 +1150,7 @@ public:
 
         std::unordered_set<SolvableId> involved;
         auto &clause = clauses_[clause_id];
-        clause.visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+        Clause::visit_literals(clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
                               [&involved](const Literal &literal) {
                                   involved.insert(literal.solvable_id);
                               });
@@ -1177,10 +1177,9 @@ public:
 
             auto &why_clause = clauses_[why];
 
-            why_clause.visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+            Clause::visit_literals(why_clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
                                       [&decision, this, &involved](const Literal &literal) {
-                                          if (literal.eval(decision_tracker_.get_map()) ==
-                                              std::optional<bool>(true)) {
+                                          if (literal.eval(decision_tracker_.get_map()) == true) {
                                               assert(literal.solvable_id == decision.solvable_id);
                                           } else {
                                               involved.insert(literal.solvable_id);
@@ -1217,7 +1216,7 @@ public:
             learnt_why.push_back(clause_id);
 
             auto &clause = clauses_[clause_id];
-            clause.visit_literals(learnt_clauses_, cache.version_set_to_sorted_candidates,
+            Clause::visit_literals(clause.get_kind(), learnt_clauses_, cache.version_set_to_sorted_candidates,
                                   [&first_iteration, &seen, &current_level, &causes_at_current_level, &back_track_to, &conflicting_solvable,
                                           &learnt, this](const Literal &literal) {
                                       if (!first_iteration && literal.solvable_id == conflicting_solvable) {
@@ -1277,7 +1276,7 @@ public:
         auto learnt_clause_id = learnt_clauses_.alloc(learnt);
         learnt_why_.insert(learnt_clause_id, learnt_why);
 
-        auto new_clause_id = clauses_.alloc(ClauseState::learnt(learnt_clause_id, learnt));
+        auto new_clause_id = clauses_.alloc(Clause::learnt(learnt_clause_id, learnt));
         learnt_clause_ids_.push_back(new_clause_id);
 
         auto &clause = clauses_[new_clause_id];

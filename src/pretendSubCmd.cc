@@ -231,7 +231,7 @@ void test_requires_with_and_without_conflict() {
     auto candidate2 = SolvableId::from_usize(3);
 
     // No conflict, all candidates available
-    auto [clause, conflict] = ClauseState::requires(
+    auto [clause, conflict] = Clause::requires(
         parent,
         VersionSetId::from_usize(0),
         {candidate1, candidate2},
@@ -243,7 +243,7 @@ void test_requires_with_and_without_conflict() {
 
     // No conflict, still one candidate available
     decisions.get_map().set(candidate1, false, 1);
-    auto [clause2, conflict2] = ClauseState::requires(
+    auto [clause2, conflict2] = Clause::requires(
         parent,
         VersionSetId::from_usize(0),
         {candidate1, candidate2},
@@ -255,7 +255,7 @@ void test_requires_with_and_without_conflict() {
 
     // Conflict, no candidates available
     decisions.get_map().set(candidate2, false, 1);
-    auto [clause3, conflict3] = ClauseState::requires(
+    auto [clause3, conflict3] = Clause::requires(
         parent,
         VersionSetId::from_usize(0),
         {candidate1, candidate2},
@@ -269,7 +269,7 @@ void test_requires_with_and_without_conflict() {
     decisions.get_map().set(parent, false, 1);
     bool panicked = false;
     try {
-        ClauseState::requires(
+        Clause::requires(
             parent,
             VersionSetId::from_usize(0),
             {candidate1, candidate2},
@@ -288,14 +288,14 @@ void test_constrains_with_and_without_conflict() {
     auto forbidden = SolvableId::from_usize(2);
 
     // No conflict, forbidden package not installed
-    auto [clause, conflict] = ClauseState::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
+    auto [clause, conflict] = Clause::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
     assert(!conflict);
     assert(clause.watched_literals_[0] == parent);
     assert(clause.watched_literals_[1] == forbidden);
 
     // Conflict, forbidden package installed
     decisions.try_add_decision(Decision{forbidden, true, ClauseId::null()}, 1);
-    auto [clause2, conflict2] = ClauseState::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
+    auto [clause2, conflict2] = Clause::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
     assert(conflict2);
     assert(clause2.watched_literals_[0] == parent);
     assert(clause2.watched_literals_[1] == forbidden);
@@ -304,7 +304,7 @@ void test_constrains_with_and_without_conflict() {
     decisions.try_add_decision(Decision{parent, false, ClauseId::null()}, 1);
     bool panicked = false;
     try {
-        ClauseState::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
+        Clause::constrains(parent, forbidden, VersionSetId::from_usize(0), decisions);
     } catch (const std::exception& e) {
         panicked = true;
     }
@@ -312,7 +312,7 @@ void test_constrains_with_and_without_conflict() {
 }
 
 void test_clause_size() {
-    fprintf(stderr, "size: %lu\n", sizeof(ClauseState));
+    fprintf(stderr, "ClauseState size: %lu - ClauseVariant size: %lu\n", sizeof(ClauseState), sizeof(ClauseVariant));
     assert(sizeof(ClauseState) == 32);
 }
 
@@ -530,6 +530,19 @@ void test_unsat_missing_top_level_dep_2() {
     assert_snapshot(error);
 }
 
+void test_unsat_after_backtracking() {
+    auto provider = BundleBoxProvider::from_packages({{{"b"}, 7, std::vector<std::string>{"d 1"}},
+                                                      {{"b"}, 6, std::vector<std::string>{"d 1"}},
+                                                      {{"c"}, 1, std::vector<std::string>{"d 2"}},
+                                                      {{"c"}, 2, std::vector<std::string>{"d 2"}},
+                                                      {{"d"}, 2, std::vector<std::string>()},
+                                                      {{"d"}, 1, std::vector<std::string>()},
+                                                      {{"e"}, 1, std::vector<std::string>()},
+                                                      {{"e"}, 2, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"b", "c", "e"});
+    assert_snapshot(error);
+}
+
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
 //    test_literal_satisfying_value();
@@ -538,7 +551,6 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 //    test_unlink_clause_same();
 //    test_requires_with_and_without_conflict();
 //    test_constrains_with_and_without_conflict();
-//    test_clause_size();
 
 //    test_unit_propagation_1();
 //    test_unit_propagation_nested();
@@ -555,11 +567,14 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 //    test_resolve_favor_with_conflict();
 //    test_resolve_cyclic();
 //    test_unsat_locked_and_excluded();
-    test_unsat_no_candidates_for_child_1();
-    test_unsat_no_candidates_for_child_2();
-    test_unsat_missing_top_level_dep_1();
-    test_unsat_missing_top_level_dep_2();
+//    test_unsat_no_candidates_for_child_1();
+//    test_unsat_no_candidates_for_child_2();
+//    test_unsat_missing_top_level_dep_1();
+//    test_unsat_missing_top_level_dep_2();
 
+//    test_unsat_after_backtracking();
+
+    test_clause_size();
 
     return TCL_OK;
 }

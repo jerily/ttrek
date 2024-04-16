@@ -96,50 +96,59 @@ namespace Clause {
         SolvableId candidate;
         StringId reason;
     };
+}
+
+using ClauseVariant = std::variant<Clause::InstallRoot, Clause::Requires, Clause::ForbidMultipleInstances, Clause::Constrains, Clause::Lock, Clause::Learnt, Clause::Excluded>;
+
+namespace Clause {
 
     // Factory methods for creating different kinds of clauses
 
-    static std::tuple<Requires, std::optional<std::array<SolvableId, 2>>, bool> requires(
+    static std::tuple<Requires, std::optional<std::array<SolvableId, 2>>, bool> create_requires(
             const SolvableId &parent,
             const VersionSetId &requirement,
             const std::vector<SolvableId> &candidates,
             const DecisionTracker &decision_tracker
     );
 
-    static std::tuple<Constrains, std::optional<std::array<SolvableId, 2>>, bool> constrains(
+    static std::tuple<Constrains, std::optional<std::array<SolvableId, 2>>, bool> create_constrains(
             const SolvableId &parent,
             const SolvableId &forbidden_solvable,
             const VersionSetId &via,
             const DecisionTracker &decision_tracker
     );
 
-    static std::pair<ForbidMultipleInstances, std::optional<std::array<SolvableId, 2>>> forbid_multiple(
+    static std::pair<ForbidMultipleInstances, std::optional<std::array<SolvableId, 2>>> create_forbid_multiple(
             const SolvableId &candidate,
             const SolvableId &constrained_candidate
     );
 
-    static std::pair<InstallRoot, std::optional<std::array<SolvableId, 2>>> root();
+    static std::pair<InstallRoot, std::optional<std::array<SolvableId, 2>>> create_root();
 
-    static std::pair<Excluded, std::optional<std::array<SolvableId, 2>>> exclude(
+    static std::pair<Excluded, std::optional<std::array<SolvableId, 2>>> create_exclude(
             const SolvableId &candidate,
             const StringId &reason
     );
 
-    static std::pair<Lock, std::optional<std::array<SolvableId, 2>>> lock(
+    static std::pair<Lock, std::optional<std::array<SolvableId, 2>>> create_lock(
             const SolvableId &locked_candidate,
             const SolvableId &other_candidate
     );
 
-    static std::pair<Learnt, std::optional<std::array<SolvableId, 2>>> learnt(
+    static std::pair<Learnt, std::optional<std::array<SolvableId, 2>>> create_learnt(
             const LearntClauseId &learnt_clause_id,
             const std::vector<Literal> &literals
     );
 
-};
+    static void visit_literals(
+            const ClauseVariant &kind,
+            const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
+            const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
+            const VisitFunction &visit
+    );
+}
 
-using ClauseVariant = std::variant<Clause::InstallRoot, Clause::Requires, Clause::ForbidMultipleInstances, Clause::Constrains, Clause::Lock, Clause::Learnt, Clause::Excluded>;
-
-std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Clause::requires(
+std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Clause::create_requires(
         const SolvableId &parent,
         const VersionSetId &requirement,
         const std::vector<SolvableId> &candidates,
@@ -180,7 +189,7 @@ std::tuple<Clause::Requires, std::optional<std::array<SolvableId, 2>>, bool> Cla
 }
 
 
-std::tuple<Clause::Constrains, std::optional<std::array<SolvableId, 2>>, bool> Clause::constrains(
+std::tuple<Clause::Constrains, std::optional<std::array<SolvableId, 2>>, bool> Clause::create_constrains(
         const SolvableId &parent,
         const SolvableId &forbidden_solvable,
         const VersionSetId &via,
@@ -196,7 +205,7 @@ std::tuple<Clause::Constrains, std::optional<std::array<SolvableId, 2>>, bool> C
 }
 
 
-std::pair<Clause::ForbidMultipleInstances, std::optional<std::array<SolvableId, 2>>> Clause::forbid_multiple(
+std::pair<Clause::ForbidMultipleInstances, std::optional<std::array<SolvableId, 2>>> Clause::create_forbid_multiple(
         const SolvableId &candidate,
         const SolvableId &constrained_candidate
 ) {
@@ -204,13 +213,13 @@ std::pair<Clause::ForbidMultipleInstances, std::optional<std::array<SolvableId, 
     return std::make_pair(kind, std::array<SolvableId, 2>{candidate, constrained_candidate});
 }
 
-std::pair<Clause::InstallRoot, std::optional<std::array<SolvableId, 2>>> Clause::root() {
+std::pair<Clause::InstallRoot, std::optional<std::array<SolvableId, 2>>> Clause::create_root() {
     auto kind = Clause::InstallRoot{};
     return std::make_pair(kind, std::nullopt);
 }
 
 
-std::pair<Clause::Excluded, std::optional<std::array<SolvableId, 2>>> Clause::exclude(
+std::pair<Clause::Excluded, std::optional<std::array<SolvableId, 2>>> Clause::create_exclude(
         const SolvableId &candidate,
         const StringId &reason
 ) {
@@ -218,7 +227,7 @@ std::pair<Clause::Excluded, std::optional<std::array<SolvableId, 2>>> Clause::ex
     return std::make_pair(kind, std::nullopt);
 }
 
-std::pair<Clause::Lock, std::optional<std::array<SolvableId, 2>>> Clause::lock(
+std::pair<Clause::Lock, std::optional<std::array<SolvableId, 2>>> Clause::create_lock(
         const SolvableId &locked_candidate,
         const SolvableId &other_candidate
 ) {
@@ -226,7 +235,7 @@ std::pair<Clause::Lock, std::optional<std::array<SolvableId, 2>>> Clause::lock(
     return std::make_pair(kind, std::array<SolvableId, 2>{SolvableId::root(), other_candidate});
 }
 
-std::pair<Clause::Learnt, std::optional<std::array<SolvableId, 2>>> Clause::learnt(
+std::pair<Clause::Learnt, std::optional<std::array<SolvableId, 2>>> Clause::create_learnt(
         const LearntClauseId &learnt_clause_id,
         const std::vector<Literal> &literals
 ) {
@@ -245,6 +254,53 @@ std::pair<Clause::Learnt, std::optional<std::array<SolvableId, 2>>> Clause::lear
     return std::make_pair(kind, watches);
 }
 
+
+// Visit literals in the clause
+void Clause::visit_literals(
+        const ClauseVariant &kind,
+        const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
+        const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
+        const VisitFunction &visit
+) {
+    std::visit([&visit, &learnt_clauses, &version_set_to_sorted_candidates](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+
+        if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
+            // do nothing
+        } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
+            auto clause_variant = std::any_cast<Clause::Excluded>(arg);
+            visit(Literal{clause_variant.candidate, true});
+        } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
+            auto clause_variant = std::any_cast<Clause::Learnt>(arg);
+            for (const Literal &literal: learnt_clauses[clause_variant.learnt_clause_id]) {
+                visit(literal);
+            }
+        } else if constexpr (std::is_same_v<T, Clause::Requires>) {
+            auto clause_variant = std::any_cast<Clause::Requires>(arg);
+            visit(Literal{clause_variant.parent, true});
+            auto optional_sorted_candidates = version_set_to_sorted_candidates.get(clause_variant.requirement);
+            if (optional_sorted_candidates.has_value()) {
+                for (const SolvableId &id: optional_sorted_candidates.value()) {
+                    visit(Literal{id, false});
+                }
+            }
+        } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
+            auto clause_variant = std::any_cast<Clause::Constrains>(arg);
+            visit(Literal{clause_variant.parent, true});
+            visit(Literal{clause_variant.forbidden_solvable, true});
+        } else if constexpr (std::is_same_v<T, Clause::ForbidMultipleInstances>) {
+            auto clause_variant = std::any_cast<Clause::ForbidMultipleInstances>(arg);
+            visit(Literal{clause_variant.candidate, true});
+            visit(Literal{clause_variant.constrained_candidate, true});
+        } else if constexpr (std::is_same_v<T, Clause::Lock>) {
+            auto clause_variant = std::any_cast<Clause::Lock>(arg);
+            visit(Literal{SolvableId::root(), true});
+            visit(Literal{clause_variant.other_candidate, true});
+        }
+
+    }, kind);
+}
+
 class ClauseState {
 public:
     ClauseState(
@@ -252,67 +308,6 @@ public:
             std::array<ClauseId, 2> next_watches,
             ClauseVariant kind
     ) : watched_literals_(watched_literals), next_watches_(next_watches), kind_(std::move(kind)) {}
-
-    static ClauseState root() {
-        auto [kind, watched_literals] = Clause::root();
-        return from_kind_and_initial_watches(kind, watched_literals);
-    }
-
-    static std::pair<ClauseState, bool> requires(
-            const SolvableId &candidate,
-            const VersionSetId &requirement,
-            const std::vector<SolvableId> &matching_candidates,
-            const DecisionTracker &decision_tracker
-    ) {
-        auto [kind, watched_literals, conflict] = Clause::requires(
-                candidate,
-                requirement,
-                matching_candidates,
-                decision_tracker
-        );
-
-        fprintf(stderr, "============================ requires conflict: %d\n", conflict);
-
-        return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
-    }
-
-    static std::pair<ClauseState, bool> constrains(
-            const SolvableId &candidate,
-            const SolvableId &constrained_package,
-            const VersionSetId &requirement,
-            const DecisionTracker &decision_tracker
-    ) {
-        auto [kind, watched_literals, conflict] = Clause::constrains(
-                candidate,
-                constrained_package,
-                requirement,
-                decision_tracker
-        );
-
-        fprintf(stderr, "============================ constrains conflict: %d\n", conflict);
-
-        return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
-    }
-
-    static ClauseState lock(const SolvableId &locked_candidate, const SolvableId &other_candidate) {
-        auto [kind, watched_literals] = Clause::lock(locked_candidate, other_candidate);
-        return from_kind_and_initial_watches(kind, watched_literals);
-    }
-
-    static ClauseState forbid_multiple(const SolvableId &candidate, const SolvableId &other_candidate) {
-        auto [kind, watched_literals] = Clause::forbid_multiple(candidate, other_candidate);
-        return from_kind_and_initial_watches(kind, watched_literals);
-    }
-
-    static ClauseState learnt(const LearntClauseId &learnt_clause_id, const std::vector<Literal> &literals) {
-        auto [kind, watched_literals] = Clause::learnt(learnt_clause_id, literals);
-        return from_kind_and_initial_watches(kind, watched_literals);
-    }
-
-    static ClauseState exclude(const SolvableId &candidate, const StringId &reason) {
-        auto [kind, watched_literals] = Clause::exclude(candidate, reason);
-        return from_kind_and_initial_watches(kind, watched_literals);
-    }
 
     void link_to_clause(size_t watch_index, const ClauseId &clause_id) {
         fprintf(stderr, "link_to_clause: watch_index=%zd, clause_id=%zd\n", watch_index, clause_id.to_usize());
@@ -498,56 +493,16 @@ public:
         return kind_;
     }
 
-
-    // Visit literals in the clause
-    void visit_literals(
-            const Arena<LearntClauseId, std::vector<Literal>> &learnt_clauses,
-            const FrozenMap<VersionSetId, std::vector<SolvableId>> &version_set_to_sorted_candidates,
-            const VisitFunction &visit
-    ) const {
-        std::visit([&visit, &learnt_clauses, &version_set_to_sorted_candidates](const auto &arg) {
-            using T = std::decay_t<decltype(arg)>;
-
-            if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
-                // do nothing
-            } else if constexpr (std::is_same_v<T, Clause::Excluded>) {
-                auto clause_variant = std::any_cast<Clause::Excluded>(arg);
-                visit(Literal{clause_variant.candidate, true});
-            } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
-                auto clause_variant = std::any_cast<Clause::Learnt>(arg);
-                for (const Literal &literal: learnt_clauses[clause_variant.learnt_clause_id]) {
-                    visit(literal);
-                }
-            } else if constexpr (std::is_same_v<T, Clause::Requires>) {
-                auto clause_variant = std::any_cast<Clause::Requires>(arg);
-                visit(Literal{clause_variant.parent, true});
-                auto optional_sorted_candidates = version_set_to_sorted_candidates.get(clause_variant.requirement);
-                if (optional_sorted_candidates.has_value()) {
-                    for (const SolvableId &id: optional_sorted_candidates.value()) {
-                        visit(Literal{id, false});
-                    }
-                }
-            } else if constexpr (std::is_same_v<T, Clause::Constrains>) {
-                auto clause_variant = std::any_cast<Clause::Constrains>(arg);
-                visit(Literal{clause_variant.parent, true});
-                visit(Literal{clause_variant.forbidden_solvable, true});
-            } else if constexpr (std::is_same_v<T, Clause::ForbidMultipleInstances>) {
-                auto clause_variant = std::any_cast<Clause::ForbidMultipleInstances>(arg);
-                visit(Literal{clause_variant.candidate, true});
-                visit(Literal{clause_variant.constrained_candidate, true});
-            } else if constexpr (std::is_same_v<T, Clause::Lock>) {
-                auto clause_variant = std::any_cast<Clause::Lock>(arg);
-                visit(Literal{SolvableId::root(), true});
-                visit(Literal{clause_variant.other_candidate, true});
-            }
-
-        }, kind_);
-    }
-
-
     std::array<SolvableId, 2> watched_literals_;
     std::array<ClauseId, 2> next_watches_;
+//    SolvableId something_[2] = {SolvableId::null(), SolvableId::null()}; // for debugging purposes
 private:
+
+    ClauseVariant kind_;
+};
+
+namespace Clause {
+
     static ClauseState from_kind_and_initial_watches(
             const ClauseVariant &kind,
             const std::optional<std::array<SolvableId, 2>> &optional_watched_literals
@@ -564,8 +519,66 @@ private:
         return clause;
     }
 
-    ClauseVariant kind_;
-};
+    static ClauseState root() {
+        auto [kind, watched_literals] = Clause::create_root();
+        return from_kind_and_initial_watches(kind, watched_literals);
+    }
 
+    static std::pair<ClauseState, bool> requires(
+            const SolvableId &candidate,
+            const VersionSetId &requirement,
+            const std::vector<SolvableId> &matching_candidates,
+            const DecisionTracker &decision_tracker
+    ) {
+        auto [kind, watched_literals, conflict] = Clause::create_requires(
+                candidate,
+                requirement,
+                matching_candidates,
+                decision_tracker
+        );
+
+        fprintf(stderr, "============================ requires conflict: %d\n", conflict);
+
+        return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
+    }
+
+    static std::pair<ClauseState, bool> constrains(
+            const SolvableId &candidate,
+            const SolvableId &constrained_package,
+            const VersionSetId &requirement,
+            const DecisionTracker &decision_tracker
+    ) {
+        auto [kind, watched_literals, conflict] = Clause::create_constrains(
+                candidate,
+                constrained_package,
+                requirement,
+                decision_tracker
+        );
+
+        fprintf(stderr, "============================ constrains conflict: %d\n", conflict);
+
+        return std::make_pair(from_kind_and_initial_watches(kind, watched_literals), conflict);
+    }
+
+    static ClauseState lock(const SolvableId &locked_candidate, const SolvableId &other_candidate) {
+        auto [kind, watched_literals] = Clause::create_lock(locked_candidate, other_candidate);
+        return from_kind_and_initial_watches(kind, watched_literals);
+    }
+
+    static ClauseState forbid_multiple(const SolvableId &candidate, const SolvableId &other_candidate) {
+        auto [kind, watched_literals] = Clause::create_forbid_multiple(candidate, other_candidate);
+        return from_kind_and_initial_watches(kind, watched_literals);
+    }
+
+    static ClauseState learnt(const LearntClauseId &learnt_clause_id, const std::vector<Literal> &literals) {
+        auto [kind, watched_literals] = Clause::create_learnt(learnt_clause_id, literals);
+        return from_kind_and_initial_watches(kind, watched_literals);
+    }
+
+    static ClauseState exclude(const SolvableId &candidate, const StringId &reason) {
+        auto [kind, watched_literals] = Clause::create_exclude(candidate, reason);
+        return from_kind_and_initial_watches(kind, watched_literals);
+    }
+}
 
 #endif // CLAUSE_H
