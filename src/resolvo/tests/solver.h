@@ -203,7 +203,7 @@ public:
     }
 
     void exclude(const std::string &package_name, uint32_t version, const std::string &reason) {
-        excluded.at(package_name).insert(std::make_pair(Pack(version), reason));
+        excluded[package_name].insert(std::make_pair(Pack(version), reason));
     }
 
     void set_locked(const std::string &package_name, uint32_t version) {
@@ -362,7 +362,7 @@ std::string solve_unsat(BundleBoxProvider &provider, const std::vector<std::stri
         return "error message";
     } else {
         auto reason = provider.should_cancel_with_value();
-        return reason.value();
+        return reason.value_or(transaction_to_string(pool, steps));
     }
 }
 

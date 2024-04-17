@@ -543,6 +543,147 @@ void test_unsat_after_backtracking() {
     assert_snapshot(error);
 }
 
+void test_unsat_incompatible_root_requirements() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 2, std::vector<std::string>()},
+                                                      {{"a"}, 5, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"a 0..4", "a 5..10"});
+    assert_snapshot(error);
+}
+
+void test_unsat_bluesky_conflict() {
+    auto provider = BundleBoxProvider::from_packages({{{"suitcase-utils"}, 54, std::vector<std::string>()},
+                                                      {{"suitcase-utils"}, 53, std::vector<std::string>()},
+                                                      {{"bluesky-widgets"}, 42, std::vector<std::string>{"bluesky-live 0..10", "numpy 0..10", "python 0..10", "suitcase-utils 0..54"}},
+                                                      {{"bluesky-live"}, 1, std::vector<std::string>()},
+                                                      {{"numpy"}, 1, std::vector<std::string>()},
+                                                      {{"python"}, 1, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"bluesky-widgets 0..100", "suitcase-utils 54..100"});
+    assert_snapshot(error);
+}
+
+void test_unsat_pubgrub_article() {
+    auto provider = BundleBoxProvider::from_packages({{{"menu"}, 15, std::vector<std::string>{"dropdown 2..3"}},
+                                                      {{"menu"}, 10, std::vector<std::string>{"dropdown 1..2"}},
+                                                      {{"dropdown"}, 2, std::vector<std::string>{"icons 2"}},
+                                                      {{"dropdown"}, 1, std::vector<std::string>{"intl 3"}},
+                                                      {{"icons"}, 2, std::vector<std::string>()},
+                                                      {{"icons"}, 1, std::vector<std::string>()},
+                                                      {{"intl"}, 5, std::vector<std::string>()},
+                                                      {{"intl"}, 3, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"menu", "icons 1", "intl 5"});
+    assert_snapshot(error);
+}
+
+void test_unsat_applies_graph_compression() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 10, std::vector<std::string>{"b"}},
+                                                      {{"a"}, 9, std::vector<std::string>{"b"}},
+                                                      {{"b"}, 100, std::vector<std::string>{"c 0..100"}},
+                                                      {{"b"}, 42, std::vector<std::string>{"c 0..100"}},
+                                                      {{"c"}, 103, std::vector<std::string>()},
+                                                      {{"c"}, 101, std::vector<std::string>()},
+                                                      {{"c"}, 100, std::vector<std::string>()},
+                                                      {{"c"}, 99, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"a", "c 101..104"});
+    assert_snapshot(error);
+}
+
+void test_unsat_constrains() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 10, std::vector<std::string>{"b 50..100"}},
+                                                      {{"a"}, 9, std::vector<std::string>{"b 50..100"}},
+                                                      {{"b"}, 50, std::vector<std::string>()},
+                                                      {{"b"}, 42, std::vector<std::string>()}});
+    provider.add_package("c", Pack(10), {}, {"b 0..50"});
+    provider.add_package("c", Pack(8), {}, {"b 0..50"});
+    auto error = solve_unsat(provider, {"a", "c"});
+    assert_snapshot(error);
+}
+
+void test_unsat_constrains_2() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>{"b"}},
+                                                      {{"a"}, 2, std::vector<std::string>{"b"}},
+                                                      {{"b"}, 1, std::vector<std::string>{"c 1"}},
+                                                      {{"b"}, 2, std::vector<std::string>{"c 2"}}});
+
+    provider.add_package("c", Pack(1), {}, {"a 3"});
+    provider.add_package("c", Pack(2), {}, {"a 3"});
+    auto error = solve_unsat(provider, {"a"});
+    assert_snapshot(error);
+}
+
+void test_missing_dep() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 2, std::vector<std::string>{"missing"}},
+                                                      {{"a"}, 1, std::vector<std::string>()}});
+    auto error = solve_unsat(provider, {"a"});
+    assert_snapshot(error);
+}
+
+void test_no_backtracking() {
+    auto provider = BundleBoxProvider::from_packages({{{"quetz-server"}, 2, std::vector<std::string>{"pydantic 10..20"}},
+                                                      {{"quetz-server"}, 1, std::vector<std::string>{"pydantic 0..10"}},
+                                                      {{"pydantic"}, 1, std::vector<std::string>()},
+                                                      {{"pydantic"}, 2, std::vector<std::string>()},
+                                                      {{"pydantic"}, 3, std::vector<std::string>()},
+                                                      {{"pydantic"}, 4, std::vector<std::string>()},
+                                                      {{"pydantic"}, 5, std::vector<std::string>()},
+                                                      {{"pydantic"}, 6, std::vector<std::string>()},
+                                                      {{"pydantic"}, 7, std::vector<std::string>()},
+                                                      {{"pydantic"}, 8, std::vector<std::string>()},
+                                                      {{"pydantic"}, 9, std::vector<std::string>()},
+                                                      {{"pydantic"}, 10, std::vector<std::string>()},
+                                                      {{"pydantic"}, 11, std::vector<std::string>()},
+                                                      {{"pydantic"}, 12, std::vector<std::string>()},
+                                                      {{"pydantic"}, 13, std::vector<std::string>()},
+                                                      {{"pydantic"}, 14, std::vector<std::string>()}});
+    auto result = solve_snapshot(provider, {"quetz-server", "pydantic 0..10"});
+    assert_snapshot(result);
+}
+
+void test_incremental_crash() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 3, std::vector<std::string>{"missing"}},
+                                                      {{"a"}, 2, std::vector<std::string>{"missing"}},
+                                                      {{"a"}, 1, std::vector<std::string>{"b"}},
+                                                      {{"b"}, 2, std::vector<std::string>{"a 2..4"}},
+                                                      {{"b"}, 1, std::vector<std::string>()}});
+    auto result = solve_snapshot(provider, {"a"});
+    assert_snapshot(result);
+}
+
+void test_excluded() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 2, std::vector<std::string>{"b"}},
+                                                      {{"a"}, 1, std::vector<std::string>{"c"}},
+                                                      {{"b"}, 1, std::vector<std::string>()},
+                                                      {{"c"}, 1, std::vector<std::string>()}});
+    provider.exclude("b", 1, "it is externally excluded");
+    provider.exclude("c", 1, "it is externally excluded");
+    auto result = solve_snapshot(provider, {"a"});
+    assert_snapshot(result);
+}
+
+void test_merge_excluded() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>()},
+                                                      {{"a"}, 2, std::vector<std::string>()}});
+    provider.exclude("a", 1, "it is externally excluded");
+    provider.exclude("a", 2, "it is externally excluded");
+    auto result = solve_snapshot(provider, {"a"});
+    assert_snapshot(result);
+}
+
+void test_merge_installable() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>()},
+                                                      {{"a"}, 2, std::vector<std::string>()},
+                                                      {{"a"}, 3, std::vector<std::string>()},
+                                                      {{"a"}, 4, std::vector<std::string>()}});
+    auto result = solve_snapshot(provider, {"a 0..3", "a 3..5"});
+    assert_snapshot(result);
+}
+
+void test_root_excluded() {
+    auto provider = BundleBoxProvider::from_packages({{{"a"}, 1, std::vector<std::string>()}});
+    provider.exclude("a", 1, "it is externally excluded");
+    auto result = solve_snapshot(provider, {"a"});
+    assert_snapshot(result);
+}
+
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
 //    test_literal_satisfying_value();
@@ -572,8 +713,23 @@ int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 //    test_unsat_missing_top_level_dep_1();
 //    test_unsat_missing_top_level_dep_2();
 
-    test_unsat_after_backtracking();
+//    test_unsat_after_backtracking();
+//    test_unsat_incompatible_root_requirements();
+//    test_unsat_bluesky_conflict();
+//    test_unsat_pubgrub_article();
 
+//    test_unsat_applies_graph_compression();
+//    test_unsat_constrains();
+//    test_unsat_constrains_2();
+//    test_missing_dep();
+//    test_no_backtracking();
+//    test_incremental_crash();
+//    test_merge_installable();
+
+
+    test_excluded();
+    test_merge_excluded();
+    test_root_excluded();
 //    test_clause_size();
 
     return TCL_OK;
