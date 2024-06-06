@@ -686,50 +686,51 @@ void test_root_excluded() {
 
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-//    test_literal_satisfying_value();
-//    test_literal_eval();
-//    test_unlink_clause_different();
-//    test_unlink_clause_same();
-//    test_requires_with_and_without_conflict();
-//    test_constrains_with_and_without_conflict();
+    test_literal_satisfying_value();
+    test_literal_eval();
+    test_unlink_clause_different();
+    test_unlink_clause_same();
+    test_requires_with_and_without_conflict();
+    test_constrains_with_and_without_conflict();
 
-//    test_unit_propagation_1();
-//    test_unit_propagation_nested();
-//    test_resolve_multiple();
-//    test_resolve_with_concurrent_metadata_fetching();
-//    test_resolve_with_conflict();
-//    test_resolve_with_nonexisting();
-//    test_resolve_with_nested_deps();
-//    test_resolve_with_unknown_deps();
-//    test_resolve_and_cancel();
-//    test_resolve_locked_and_top_level();
-//    test_resolve_ignored_locked_top_level();
-//    test_resolve_favor_without_conflict();
-//    test_resolve_favor_with_conflict();
-//    test_resolve_cyclic();
-//    test_unsat_locked_and_excluded();
-//    test_unsat_no_candidates_for_child_1();
-//    test_unsat_no_candidates_for_child_2();
-//    test_unsat_missing_top_level_dep_1();
-//    test_unsat_missing_top_level_dep_2();
+    test_unit_propagation_1();
+    test_unit_propagation_nested();
+    test_resolve_with_concurrent_metadata_fetching();
+    test_resolve_with_conflict();
+    test_resolve_with_nonexisting();
+    test_resolve_with_nested_deps();
+    test_resolve_with_unknown_deps();
+    test_resolve_and_cancel();
+    test_resolve_locked_and_top_level();
+    test_resolve_ignored_locked_top_level();
+    test_resolve_favor_without_conflict();
+    test_resolve_favor_with_conflict();
+    test_resolve_cyclic();
+    test_unsat_locked_and_excluded();
+    test_unsat_no_candidates_for_child_1();
+    test_unsat_no_candidates_for_child_2();
+    test_unsat_missing_top_level_dep_1();
+    test_unsat_missing_top_level_dep_2();
 
-//    test_unsat_after_backtracking();
-//    test_unsat_incompatible_root_requirements();
-//    test_unsat_bluesky_conflict();
-//    test_unsat_pubgrub_article();
+    test_unsat_after_backtracking();
+    test_unsat_incompatible_root_requirements();
+    test_unsat_bluesky_conflict();
+    test_unsat_pubgrub_article();
 
-//    test_unsat_applies_graph_compression();
-//    test_unsat_constrains();
-//    test_unsat_constrains_2();
-//    test_missing_dep();
-//    test_no_backtracking();
-//    test_incremental_crash();
-//    test_merge_installable();
+    test_unsat_applies_graph_compression();
+    test_unsat_constrains();
+    test_unsat_constrains_2();
+    test_missing_dep();
+    test_no_backtracking();
+    test_incremental_crash();
+    test_merge_installable();
 
 
     test_excluded();
     test_merge_excluded();
     test_root_excluded();
+
+    test_resolve_multiple();
 //    test_clause_size();
 
     return TCL_OK;
