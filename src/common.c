@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#include <tcl.h>
+#include "common.h"
 #include <unistd.h>
 #include <sys/wait.h>
-#include "common.h"
 #include "cjson/cJSON.h"
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {

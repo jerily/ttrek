@@ -34,6 +34,41 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
 
+add_executable(test_resolvo
+        src/resolvo/tests/test_resolvo.cc
+        src/resolvo/internal/Arena.h
+        src/resolvo/internal/ArenaId.h
+        src/resolvo/internal/NameId.h
+        src/resolvo/internal/SolvableId.h
+        src/resolvo/internal/StringId.h
+        src/resolvo/internal/VersionSetId.h
+        src/resolvo/Pool.h
+        src/resolvo/Solvable.h
+        src/resolvo/internal/ClauseId.h
+        src/resolvo/solver/Solver.h
+        src/resolvo/internal/LearntClauseId.h
+        src/resolvo/internal/CandidatesId.h
+        src/resolvo/internal/DependenciesId.h
+        src/resolvo/solver/Clause.h
+        src/resolvo/Problem.h
+        src/resolvo/solver/WatchMap.h
+        src/resolvo/solver/DecisionTracker.h
+        src/resolvo/solver/Decision.h
+        src/resolvo/solver/DecisionMap.h
+        src/resolvo/solver/PropagationError.h
+        src/resolvo/solver/UnsolvableOrCancelled.h
+        src/resolvo/internal/FrozenCopyMap.h
+        src/resolvo/solver/SolverCache.h
+        src/resolvo/Common.h
+        src/resolvo/Range.h
+        src/resolvo/tests/solver.h
+        src/resolvo/DisplayClause.h
+        src/resolvo/DisplayName.h
+        src/resolvo/DisplayDecisionMap.h
+        src/resolvo/internal/Mapping.h
+)
+
+
 add_executable(${TARGET}
         src/base64/cdecode.c
         src/base64/cencode.c
@@ -49,6 +84,7 @@ add_executable(${TARGET}
         src/pretendSubCmd.cc
         src/ttrek.c
         src/common.c
+        src/common.h
         src/minisat/Solver.h
         src/minisat/mtl/Alg.h
         src/minisat/mtl/Alloc.h

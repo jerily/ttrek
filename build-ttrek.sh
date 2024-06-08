@@ -44,9 +44,9 @@ make install
 
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
-curl -L -O https://sourceforge.net/projects/tcl/files/Tcl/8.6.13/tcl8.6.13-src.tar.gz
-tar -xzvf tcl8.6.13-src.tar.gz
-cd tcl8.6.13/unix
+curl -L -O https://sourceforge.net/projects/tcl/files/Tcl/8.6.14/tcl8.6.14-src.tar.gz
+tar -xzvf tcl8.6.14-src.tar.gz
+cd tcl8.6.14/unix
 ./configure --prefix=$INSTALL_DIR --disable-shared
 make
 make install
@@ -66,4 +66,4 @@ make
 
 # sudo apt install musl-tools
 # export CC=musl-gcc
-# cmake -DCMAKE_TOOLCHAIN_FILE=$(pwd)/../toolchain/alpine.cmake -DTCL_LIBRARY=$BUILD_DIR/static-tcl8.6.13/lib/libtcl8.6.a   -DTCL_INCLUDE_DIR=$BUILD_DIR/static-tcl8.6.13/include   -DCJSON_LIBRARY=$BUILD_DIR/static-cjson-1.7.17/lib/libcjson.a   -DCJSON_INCLUDE_DIR=$BUILD_DIR/static-cjson-1.7.17/include   -DZLIB_LIBRARY=$BUILD_DIR/static-zlib-1.3.1/lib/libz.a -DZLIB_INCLUDE_DIR=$BUILD_DIR/static-zlib-1.3.1/include ..
+# cmake -DCMAKE_TOOLCHAIN_FILE=$(pwd)/../toolchain/alpine.cmake -DTCL_LIBRARY=$BUILD_DIR/static-tcl8.6.14/lib/libtcl8.6.a   -DTCL_INCLUDE_DIR=$BUILD_DIR/static-tcl8.6.14/include   -DCJSON_LIBRARY=$BUILD_DIR/static-cjson-1.7.17/lib/libcjson.a   -DCJSON_INCLUDE_DIR=$BUILD_DIR/static-cjson-1.7.17/include   -DZLIB_LIBRARY=$BUILD_DIR/static-zlib-1.3.1/lib/libz.a -DZLIB_INCLUDE_DIR=$BUILD_DIR/static-zlib-1.3.1/include ..
