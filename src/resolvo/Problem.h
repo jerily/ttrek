@@ -217,6 +217,51 @@ private:
 public:
     ProblemGraph(DiGraph<ProblemNodeVariant, ProblemEdgeVariant> graph, NodeIndex root_node, std::optional<NodeIndex> unresolved_node) : graph(std::move(graph)), root_node(root_node), unresolved_node(unresolved_node) {}
 
+    // Simplifies and collapses nodes so that these can be considered the same candidate
+    template<typename VS, typename N>
+    std::unordered_map<SolvableId, MergedProblemNode> simplify(Pool<VS, N> pool) {
+
+        // Gather information about nodes that can be merged
+        std::unordered_map<NameId, std::pair<std::vector<NodeIndex>, std::vector<NodeIndex>>> maybe_merge;
+        for (auto& node : graph.nodes) {
+            if (std::holds_alternative<ProblemNode::UnresolvedDependency>(node.get_payload()) || std::holds_alternative<ProblemNode::Excluded>(node.get_payload())) {
+                continue;
+            }
+            auto solvable_id = std::get<ProblemNode::Solvable>(node.get_payload()).solvable;
+            if (solvable_id.is_root()) {
+                continue;
+            }
+            auto predecessors = graph.incoming_edges(node.get_id());
+            auto successors = graph.outgoing_edges(node.get_id());
+            auto name = pool->resolve_solvable(solvable_id).name;
+            auto key = std::make_tuple(name, predecessors, successors);
+            auto entry = maybe_merge.find(key);
+            if (entry == maybe_merge.end()) {
+                maybe_merge.insert(std::pair(key, std::vector<NodeIndex>()));
+                entry = maybe_merge.find(key);
+            }
+            entry->second.push_back(node.get_id());
+        }
+        std::unordered_map<SolvableId, MergedProblemNode> merged_candidates;
+        for (const auto& [key, value] : maybe_merge) {
+            auto [predecessors, successors] = value;
+            auto m = MergedProblemNode();
+            m.ids = std::vector<SolvableId>();
+            for (auto& node_index : predecessors) {
+                auto solvable_id = std::get<ProblemNode::Solvable>(graph.nodes[node_index].get_payload()).solvable;
+                m.ids.push_back(solvable_id);
+            }
+            for (auto& node_index : successors) {
+                auto solvable_id = std::get<ProblemNode::Solvable>(graph.nodes[node_index].get_payload()).solvable;
+                m.ids.push_back(solvable_id);
+            }
+            for (const auto& id: m.ids) {
+                merged_candidates.insert(std::pair(id, m));
+            }
+        }
+        return merged_candidates;
+    }
+
     std::unordered_set<NodeIndex> get_installable_set() {
         std::unordered_set<NodeIndex> installable;
         DfsPostOrder<ProblemNodeVariant, ProblemEdgeVariant> dfs(graph, root_node);
