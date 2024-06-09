@@ -33,4 +33,14 @@ public:
     }
 };
 
+
+namespace std {
+    template<>
+    struct hash<StringId> {
+        std::size_t operator()(const StringId& string_id) const {
+            return std::hash<std::uint32_t>()(string_id.to_usize());
+        }
+    };
+}
+
 #endif // STRING_ID_H

@@ -6,6 +6,7 @@
 #include <memory>
 #include <any>
 #include <set>
+#include <queue>
 #include "../internal/SolvableId.h"
 #include "../internal/NameId.h"
 #include "../internal/VersionSetId.h"
@@ -1268,15 +1269,15 @@ public:
 
     std::optional<ProblemGraph> graph(Problem problem) {
         auto graph = DiGraph<ProblemNodeVariant, ProblemEdgeVariant>();
-        std::unordered_map<SolvableId, Node<ProblemNodeVariant>> nodes;
-        std::unordered_map<StringId, Node<ProblemNodeVariant>> excluded_nodes;
+        std::unordered_map<SolvableId, NodeIndex> nodes;
+        std::unordered_map<StringId, NodeIndex> excluded_nodes;
 
         auto root_node = problem.add_node(graph, nodes, SolvableId::root());
-        auto unresolved_node = problem.add_node(graph, nodes, ProblemNode::UnresolvedDependency{});
+        auto unresolved_node = graph.add_node(ProblemNode::UnresolvedDependency{});
 
-        for (auto clause_id: problem.clauses) {
+        for (const auto& clause_id: problem.clauses) {
             auto &clause = clauses_[clause_id];
-            std::visit([this, &problem, &graph, &nodes, &excluded_nodes](auto &&arg) {
+            std::visit([this, &problem, &graph, &nodes, &excluded_nodes, &root_node, &unresolved_node](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
 
                 if constexpr (std::is_same_v<T, Clause::InstallRoot>) {
@@ -1286,7 +1287,7 @@ public:
                     auto package_node = problem.add_node(graph, nodes, clause_variant.candidate);
                     auto excluded_node = excluded_nodes.find(clause_variant.candidate);
                     if (excluded_node == excluded_nodes.end()) {
-                        excluded_nodes[clause_variant.package] = graph.add_node(Node<ProblemNodeVariant>(ProblemNode::Excluded{clause_variant.package}));
+                        excluded_nodes[clause_variant.package] = graph.add_node(ProblemNode::Excluded{clause_variant.package});
                     }
                     graph.add_edge(package_node, excluded_node, ProblemEdge::Conflict{ConflictCause::Excluded{}});
                 } else if constexpr (std::is_same_v<T, Clause::Learnt>) {
@@ -1346,6 +1347,25 @@ public:
             }, clause.kind_);
 
         }
+
+        std::optional<NodeIndex> final_unresolved_node;
+        if (graph.incoming_edges(unresolved_node).empty()) {
+            graph.remove_node(unresolved_node);
+            final_unresolved_node = std::nullopt;
+        } else {
+            final_unresolved_node = std::optional(unresolved_node);
+        }
+
+        // Sanity check: all nodes are reachable from root
+        std::unordered_set<NodeIndex> visited_nodes;
+        auto bfs = Bfs(graph, root_node);
+        while (const auto& optional_node_index = bfs.next()) {
+            visited_nodes.insert(optional_node_index.value());
+        }
+
+
+        assert(graph.node_count() == visited_nodes.size());
+        return ProblemGraph(graph, root_node, unresolved_node);
     }
 
 };
