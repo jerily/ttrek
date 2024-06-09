@@ -1365,7 +1365,7 @@ public:
 
 
         assert(graph.node_count() == visited_nodes.size());
-        return ProblemGraph(graph, root_node, unresolved_node);
+        return ProblemGraph(graph, root_node, final_unresolved_node);
     }
 
 };
