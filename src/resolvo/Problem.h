@@ -170,6 +170,15 @@ public:
             return edge.node_from.get_id() == node_index || edge.node_to.get_id() == node_index;
         }), edges.end());
     }
+
+    Node<P> get_node(NodeIndex node_index) const {
+        for (auto& node : nodes) {
+            if (node.get_id() == node_index) {
+                return node;
+            }
+        }
+        throw std::runtime_error("Node not found");
+    }
 };
 
 template<typename N, typename E>
@@ -228,11 +237,11 @@ public:
 // included in the graph, only those that are directly or indirectly involved in the conflict. See
 // [`ProblemNode`] and [`ProblemEdge`] for the kinds of nodes and edges that make up the graph.
 class ProblemGraph {
-private:
+public:
     DiGraph<ProblemNodeVariant, ProblemEdgeVariant> graph;
     NodeIndex root_node;
     std::optional<NodeIndex> unresolved_node;
-public:
+
     ProblemGraph(DiGraph<ProblemNodeVariant, ProblemEdgeVariant> graph, NodeIndex root_node, std::optional<NodeIndex> unresolved_node) : graph(std::move(graph)), root_node(root_node), unresolved_node(unresolved_node) {}
 
     // Simplifies and collapses nodes so that these can be considered the same candidate
