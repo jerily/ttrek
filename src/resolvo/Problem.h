@@ -14,6 +14,7 @@
 #include "internal/SolvableId.h"
 
 typedef uint32_t NodeIndex;
+typedef uint32_t EdgeIndex;
 
 namespace ProblemNode {
     struct Solvable {
@@ -50,7 +51,7 @@ using ConflictCauseVariant = std::variant<ConflictCause::Locked, ConflictCause::
 namespace ProblemEdge {
     // The target node is a candidate for the dependency specified by the version set
     struct Requires {
-        VersionSetId version;
+        VersionSetId version_set_id;
     };
     // The target node is involved in a conflict, caused by `conflict_cause`
     struct Conflict {
@@ -70,14 +71,6 @@ using ProblemEdgeVariant = std::variant<ProblemEdge::Requires, ProblemEdge::Conf
 // - They all have the same successor nodes
 struct MergedProblemNode {
     std::vector<SolvableId> ids;
-};
-
-template<typename N, typename W>
-class Edge {
-public:
-    N node_from;
-    N node_to;
-    W weight;
 };
 
 static uint32_t node_count = 0;
@@ -103,11 +96,36 @@ public:
 namespace std {
     template<typename P>
     struct hash<Node<P>> {
-    std::size_t operator()(const Node<P>& node) const {
-        return std::hash<uint32_t>{}(node.get_id());
+        std::size_t operator()(const Node<P>& node) const {
+            return std::hash<uint32_t>{}(node.get_id());
+        }
+    };
+}
+
+static uint32_t edge_count = 0;
+
+template<typename P, typename W>
+class Edge {
+private:
+    EdgeIndex id;
+    Node<P> node_from;
+    Node<P> node_to;
+    W weight;
+public:
+    Edge(Node<P> node_from, Node<P> node_to, W weight) : node_from(node_from), node_to(node_to), weight(weight), id(edge_count++) {}
+    Node<P> get_node_from() {
+        return node_from;
+    }
+    Node<P> get_node_to() {
+        return node_to;
+    }
+    W get_weight() {
+        return weight;
+    }
+    bool operator==(const Edge& other) const {
+        return id == other.id;
     }
 };
-}
 
 template<typename P, typename W>
 class DiGraph {
@@ -128,7 +146,7 @@ public:
     std::vector<Edge<Node<P>, W>> incoming_edges(NodeIndex nodeIndex) {
         std::vector<Edge<Node<P>, W>> incoming;
         for (auto& edge : edges) {
-            if (edge.node_to.get_id() == nodeIndex) {
+            if (edge.get_node_to().get_id() == nodeIndex) {
                 incoming.push_back(edge);
             }
         }
@@ -137,7 +155,7 @@ public:
     std::vector<Edge<Node<P>, W>> outgoing_edges(NodeIndex nodeIndex) {
         std::vector<Edge<Node<P>, W>> outgoing;
         for (auto& edge : edges) {
-            if (edge.node_from.get_id() == nodeIndex) {
+            if (edge.get_node_from().get_id() == nodeIndex) {
                 outgoing.push_back(edge);
             }
         }
@@ -273,9 +291,9 @@ public:
             auto node_index = optional_node_index.value();
             bool excluding_edges = false;
             for (auto& edge : graph.incoming_edges(node_index)) {
-                if (std::holds_alternative<ProblemEdge::Conflict>(edge.weight)) {
+                if (std::holds_alternative<ProblemEdge::Conflict>(edge.get_weight())) {
                     // check if ConflictCause::Excluded
-                    auto conflict_cause = std::get<ProblemEdge::Conflict>(edge.weight).conflict_cause;
+                    auto conflict_cause = std::get<ProblemEdge::Conflict>(edge.get_weight()).conflict_cause;
                     if (std::holds_alternative<ConflictCause::Excluded>(conflict_cause)) {
                         excluding_edges = true;
                         break;
@@ -288,7 +306,7 @@ public:
             }
             bool outgoing_conflicts = false;
             for (auto& edge : graph.outgoing_edges(node_index)) {
-                if (std::holds_alternative<ProblemEdge::Conflict>(edge.weight)) {
+                if (std::holds_alternative<ProblemEdge::Conflict>(edge.get_weight())) {
                     outgoing_conflicts = true;
                     break;
                 }
@@ -298,9 +316,9 @@ public:
             }
             std::unordered_map<VersionSetId, NodeIndex> dependencies;
             for (auto& edge : graph.outgoing_edges(node_index)) {
-                if (std::holds_alternative<ProblemEdge::Requires>(edge.weight)) {
+                if (std::holds_alternative<ProblemEdge::Requires>(edge.get_weight())) {
                     // dependencies[edge.weight] = edge.node_to;
-                    dependencies.insert(std::pair(std::get<ProblemEdge::Requires>(edge.weight).version, edge.node_to.get_id()));
+                    dependencies.insert(std::pair(std::get<ProblemEdge::Requires>(edge.get_weight()).version_set_id, edge.get_node_to().get_id()));
                 }
             }
             bool all_deps_installable = true;
@@ -329,8 +347,8 @@ public:
             auto node_index = optional_node_index.value();
             bool outgoing_conflicts = false;
             for (auto& edge : graph.outgoing_edges(node_index)) {
-                if (edge.node_from.get_id() == optional_node_index) {
-                    if (std::holds_alternative<ProblemEdge::Conflict>(edge.weight)) {
+                if (edge.get_node_from().get_id() == optional_node_index) {
+                    if (std::holds_alternative<ProblemEdge::Conflict>(edge.get_weight())) {
                         outgoing_conflicts = true;
                         break;
                     }
@@ -341,9 +359,9 @@ public:
             }
             std::unordered_map<VersionSetId, NodeIndex> dependencies;
             for (auto& edge : graph.outgoing_edges(node_index)) {
-                if (edge.node_from.get_id() == optional_node_index) {
-                    if (std::holds_alternative<ProblemEdge::Requires>(edge.weight)) {
-                        dependencies.insert(std::pair(std::get<ProblemEdge::Requires>(edge.weight).version, edge.node_to.get_id()));
+                if (edge.get_node_from().get_id() == optional_node_index) {
+                    if (std::holds_alternative<ProblemEdge::Requires>(edge.get_weight())) {
+                        dependencies.insert(std::pair(std::get<ProblemEdge::Requires>(edge.get_weight()).version_set_id, edge.get_node_to().get_id()));
                     }
                 }
             }
@@ -373,19 +391,25 @@ private:
     std::vector<ChildOrder> levels;
     bool top_level_indent;
 public:
-    Indenter(bool top_level_indent) : top_level_indent(top_level_indent) {
+    explicit Indenter(bool top_level_indent) : top_level_indent(top_level_indent) {
+    }
+
+    Indenter(bool top_level_indent, std::vector<ChildOrder> levels) : top_level_indent(top_level_indent), levels(std::move(levels)) {
     }
 
     bool is_at_top_level() {
         return levels.size() == 1;
     }
 
-    void push_level() {
-        push_level_with_order(ChildOrder::HasRemainingSiblings);
+    Indenter push_level() {
+        return push_level_with_order(ChildOrder::HasRemainingSiblings);
     }
 
-    void push_level_with_order(ChildOrder order) {
-        levels.push_back(order);
+    Indenter push_level_with_order(ChildOrder order) {
+        std::vector<ChildOrder> new_levels;
+        std::copy(levels.begin(), levels.end(), new_levels.begin());
+        new_levels.push_back(order);
+        return {top_level_indent, new_levels};
     }
 
     void set_last() {
