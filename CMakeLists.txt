@@ -66,6 +66,7 @@ add_executable(test_resolvo
         src/resolvo/DisplayDecisionMap.h
         src/resolvo/internal/Mapping.h
         src/resolvo/DisplayUnsat.h
+        src/resolvo/DisplayMergedSolvable.h
 )
 
 
@@ -127,6 +128,7 @@ add_executable(${TARGET}
         src/resolvo/DisplayDecisionMap.h
         src/resolvo/internal/Mapping.h
         src/resolvo/DisplayUnsat.h
+        src/resolvo/DisplayMergedSolvable.h
 )
 
 
