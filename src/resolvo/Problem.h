@@ -131,20 +131,20 @@ template<typename P, typename W>
 class DiGraph {
 public:
     std::vector<Node<P>> nodes;
-    std::vector<Edge<Node<P>, W>> edges;
+    std::vector<Edge<P, W>> edges;
     NodeIndex add_node(P payload) {
         Node<P> node(payload);
         nodes.push_back(node);
         return node.get_id();
     }
     void add_edge(Node<P> node_from, Node<P> node_to, W weight) {
-        edges.push_back({node_from, node_to, weight});
+        edges.push_back(Edge<P, W>({node_from, node_to, weight}));
     }
     uint32_t node_count() {
         return nodes.size();
     }
-    std::vector<Edge<Node<P>, W>> incoming_edges(NodeIndex nodeIndex) {
-        std::vector<Edge<Node<P>, W>> incoming;
+    std::vector<Edge<P, W>> incoming_edges(NodeIndex nodeIndex) {
+        std::vector<Edge<P, W>> incoming;
         for (auto& edge : edges) {
             if (edge.get_node_to().get_id() == nodeIndex) {
                 incoming.push_back(edge);
@@ -152,8 +152,8 @@ public:
         }
         return incoming;
     }
-    std::vector<Edge<Node<P>, W>> outgoing_edges(NodeIndex nodeIndex) {
-        std::vector<Edge<Node<P>, W>> outgoing;
+    std::vector<Edge<P, W>> outgoing_edges(NodeIndex nodeIndex) {
+        std::vector<Edge<P, W>> outgoing;
         for (auto& edge : edges) {
             if (edge.get_node_from().get_id() == nodeIndex) {
                 outgoing.push_back(edge);
@@ -166,8 +166,8 @@ public:
         nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [node_index](Node<P> node) {
             return node.get_id() == node_index;
         }), nodes.end());
-        edges.erase(std::remove_if(edges.begin(), edges.end(), [node_index](Edge<Node<P>, W> edge) {
-            return edge.node_from.get_id() == node_index || edge.node_to.get_id() == node_index;
+        edges.erase(std::remove_if(edges.begin(), edges.end(), [node_index](Edge<P, W> edge) {
+            return edge.get_node_from().get_id() == node_index || edge.get_node_to().get_id() == node_index;
         }), edges.end());
     }
 
@@ -199,8 +199,8 @@ public:
         auto node_index = queue.front();
         queue.pop_front();
         for (auto& edge : graph.edges) {
-            if (edge.node_from == node_index) {
-                queue.push_back(edge.node_to.get_id());
+            if (edge.get_node_from().get_id() == node_index) {
+                queue.push_back(edge.get_node_to().get_id());
             }
         }
         return node_index;
@@ -326,7 +326,6 @@ public:
             std::unordered_map<VersionSetId, NodeIndex> dependencies;
             for (auto& edge : graph.outgoing_edges(node_index)) {
                 if (std::holds_alternative<ProblemEdge::Requires>(edge.get_weight())) {
-                    // dependencies[edge.weight] = edge.node_to;
                     dependencies.insert(std::pair(std::get<ProblemEdge::Requires>(edge.get_weight()).version_set_id, edge.get_node_to().get_id()));
                 }
             }
@@ -480,6 +479,7 @@ public:
         }
         return nodes.at(solvable_id);
     }
+
 };
 
 
