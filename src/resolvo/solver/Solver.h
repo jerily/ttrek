@@ -1305,7 +1305,7 @@ public:
                     auto sorted_candidates = cache.get_or_cache_sorted_candidates(clause_variant.requirement);
                     if (!sorted_candidates.empty()) {
                         for (const SolvableId &candidate_id: sorted_candidates) {
-                            tracing::info("%s requires %s",
+                            tracing::info("%s requires %s\n",
                                       display_solvable_parent.to_string().c_str(),
                                       display_solvable_requirement.to_string().c_str());
 
@@ -1316,7 +1316,7 @@ public:
                                     ProblemEdge::Requires{clause_variant.requirement});
                         }
                     } else {
-                        tracing::info("%s requires %s, which has no candidates",
+                        tracing::info("%s requires %s, which has no candidates\n",
                                       display_solvable_parent.to_string().c_str(),
                                       display_solvable_requirement.to_string().c_str());
 
