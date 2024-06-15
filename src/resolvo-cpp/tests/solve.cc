@@ -161,7 +161,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 #pragma clang diagnostic ignored "-Wunused-variable"
 #endif
 
-int main() {
+void test_default_sat() {
 /// Construct a database with packages a, b, and c.
 PackageDatabase db;
 
@@ -190,4 +190,36 @@ std::cout << "message: " << message << std::endl;
 assert(result.size() == 2);
 assert(result[0] == a_2);
 assert(result[1] == b_2);
+}
+
+void test_default_unsat() {
+/// Construct a database with packages a, b, and c.
+    PackageDatabase db;
+
+    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement("b", 1, 4)}, {}});
+    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement("b", 1, 4)}, {}});
+    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement("b", 4, 7)}, {}});
+
+    auto b_1 = db.alloc_candidate("b", 8, {});
+    auto b_2 = db.alloc_candidate("b", 9, {});
+    auto b_3 = db.alloc_candidate("b", 10, {});
+
+    auto c_1 = db.alloc_candidate("c", 1, {});
+
+// Construct a problem to be solved by the solver
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement("a", 1, 3)};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement("b", 1, 3),
+                                                          db.alloc_requirement("c", 1, 3)};
+
+// Solve the problem
+    resolvo::Vector<resolvo::SolvableId> result;
+    auto message = resolvo::solve(db, requirements, constraints, result);
+
+    std::cout << "message: " << message << std::endl;
+
+}
+
+int main() {
+    test_default_unsat();
+    return 0;
 }
