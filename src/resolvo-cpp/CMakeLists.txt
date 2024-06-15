@@ -8,12 +8,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
-include(FetchContent)
-FetchContent_Declare(
-        Resolvo
-        GIT_REPOSITORY https://github.com/mamba-org/resolvo.git
-        GIT_TAG resolvo_cpp-v0.1.0)
-FetchContent_MakeAvailable(Resolvo)
+#include(FetchContent)
+#FetchContent_Declare(
+#        Resolvo
+#        GIT_REPOSITORY https://github.com/mamba-org/resolvo.git
+#        GIT_TAG resolvo_cpp-v0.1.0)
+#FetchContent_MakeAvailable(Resolvo)
+
+add_subdirectory(resolvo)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
