@@ -1,3 +1,7 @@
+* You need to have [Rust installed on your system](https://www.rust-lang.org/tools/install).
+
+
+
 ```bash
 chmod +x install.sh start.sh
 ./install.sh
