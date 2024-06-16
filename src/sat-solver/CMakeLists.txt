@@ -30,11 +30,6 @@ target_link_libraries(test_resolvo_cpp
         Resolvo::Resolvo
 )
 
-target_include_directories(test_resolvo_cpp
-        PRIVATE
-        ${Resolvo_SOURCE_DIR}/include
-)
-
 add_executable(ttrek_resolvo
         tests/ttrek_resolvo.cc
 )
@@ -42,9 +37,4 @@ add_executable(ttrek_resolvo
 target_link_libraries(ttrek_resolvo
         PRIVATE
         Resolvo::Resolvo
-)
-
-target_include_directories(ttrek_resolvo
-        PRIVATE
-        ${Resolvo_SOURCE_DIR}/include
 )

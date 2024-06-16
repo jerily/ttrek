@@ -33,50 +33,12 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 #    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
-
-add_executable(test_resolvo
-        src/resolvo/tests/test_resolvo.cc
-        src/resolvo/internal/Arena.h
-        src/resolvo/internal/ArenaId.h
-        src/resolvo/internal/NameId.h
-        src/resolvo/internal/SolvableId.h
-        src/resolvo/internal/StringId.h
-        src/resolvo/internal/VersionSetId.h
-        src/resolvo/Pool.h
-        src/resolvo/Solvable.h
-        src/resolvo/internal/ClauseId.h
-        src/resolvo/solver/Solver.h
-        src/resolvo/internal/LearntClauseId.h
-        src/resolvo/internal/CandidatesId.h
-        src/resolvo/internal/DependenciesId.h
-        src/resolvo/solver/Clause.h
-        src/resolvo/Problem.h
-        src/resolvo/solver/WatchMap.h
-        src/resolvo/solver/DecisionTracker.h
-        src/resolvo/solver/Decision.h
-        src/resolvo/solver/DecisionMap.h
-        src/resolvo/solver/PropagationError.h
-        src/resolvo/internal/FrozenCopyMap.h
-        src/resolvo/solver/SolverCache.h
-        src/resolvo/Common.h
-        src/resolvo/Range.h
-        src/resolvo/tests/solver.h
-        src/resolvo/DisplayClause.h
-        src/resolvo/DisplayName.h
-        src/resolvo/DisplayDecisionMap.h
-        src/resolvo/internal/Mapping.h
-        src/resolvo/DisplayUnsat.h
-        src/resolvo/DisplayMergedSolvable.h
-)
-
+add_subdirectory(src/sat-solver)
 
 add_executable(${TARGET}
         src/base64/cdecode.c
         src/base64/cencode.c
         src/semver/semver.c
-        src/minisat/Solver.cc
-        src/minisat/Solver.h
-        src/minisat/SolverTypes.h
         src/base64.c
         src/registry.c
         src/initSubCmd.c
@@ -86,54 +48,13 @@ add_executable(${TARGET}
         src/ttrek.c
         src/common.c
         src/common.h
-        src/minisat/Solver.h
-        src/minisat/mtl/Alg.h
-        src/minisat/mtl/Alloc.h
-        src/minisat/mtl/Heap.h
-        src/minisat/mtl/IntTypes.h
-        src/minisat/mtl/Map.h
-        src/minisat/mtl/Queue.h
-        src/minisat/mtl/Sort.h
-        src/minisat/mtl/Vec.h
-        src/minisat/mtl/XAlloc.h
         src/base64/cdecode.h
         src/base64/cencode.h
-        src/resolvo/internal/Arena.h
-        src/resolvo/internal/ArenaId.h
-        src/resolvo/internal/NameId.h
-        src/resolvo/internal/SolvableId.h
-        src/resolvo/internal/StringId.h
-        src/resolvo/internal/VersionSetId.h
-        src/resolvo/Pool.h
-        src/resolvo/Solvable.h
-        src/resolvo/internal/ClauseId.h
-        src/resolvo/solver/Solver.h
-        src/resolvo/internal/LearntClauseId.h
-        src/resolvo/internal/CandidatesId.h
-        src/resolvo/internal/DependenciesId.h
-        src/resolvo/solver/Clause.h
-        src/resolvo/Problem.h
-        src/resolvo/solver/WatchMap.h
-        src/resolvo/solver/DecisionTracker.h
-        src/resolvo/solver/Decision.h
-        src/resolvo/solver/DecisionMap.h
-        src/resolvo/solver/PropagationError.h
-        src/resolvo/internal/FrozenCopyMap.h
-        src/resolvo/solver/SolverCache.h
-        src/resolvo/Common.h
-        src/resolvo/Range.h
-        src/resolvo/tests/solver.h
-        src/resolvo/DisplayClause.h
-        src/resolvo/DisplayName.h
-        src/resolvo/DisplayDecisionMap.h
-        src/resolvo/internal/Mapping.h
-        src/resolvo/DisplayUnsat.h
-        src/resolvo/DisplayMergedSolvable.h
 )
 
 
 include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
+target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} Resolvo::Resolvo)
 target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
 
 install(TARGETS ${TARGET}
