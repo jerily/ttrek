@@ -10,6 +10,10 @@
 struct Pack {
     uint32_t version;
 
+    Pack offset(uint32_t offset) const {
+        return Pack{version + offset};
+    }
+
     bool operator==(const Pack &other) const {
         return version == other.version;
     }
@@ -57,6 +61,21 @@ struct Candidate {
 /**
  * A requirement for a package.
  */
+
+
+std::vector<resolvo::String> split_string(const std::string &str, const char *split_str) {
+    std::vector<resolvo::String> split;
+    size_t start = 0;
+    size_t end = str.find(split_str);
+    while (end != std::string::npos) {
+        split.push_back(std::string_view(str.substr(start, end - start)));
+        start = end + 1;
+        end = str.find(split_str, start);
+    }
+    split.push_back(std::string_view(str.substr(start, end)));
+    return split;
+}
+
 struct Requirement {
     resolvo::NameId name;
 //    uint32_t version_start;
@@ -193,6 +212,41 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         const auto& candidate = candidates[solvable.id];
         return candidate.dependencies;
     }
+
+
+    static Range<Pack> version_range(std::optional<resolvo::String> s) {
+        std::string_view s_view = s.value();
+        if (s.has_value()) {
+            std::string start, end;
+            size_t pos = s_view.find("..");
+            if (pos != std::string::npos) {
+                start = s_view.substr(0, pos);
+                end = s_view.substr(pos + 2);
+            } else {
+                start = s.value();
+                end = ""; // This will be handled later
+            }
+            Pack startPack{static_cast<uint32_t>(std::stoi(start))};
+            Pack endPack = !end.empty() ? Pack{static_cast<uint32_t>(std::stoi(end))} : startPack.offset(1);
+//                std::cout << "startPack: " << startPack.version << std::endl;
+//                std::cout << "endPack: " << endPack.version << std::endl;
+            return Range<Pack>::between(startPack, endPack);
+        } else {
+            return Range<Pack>::full();
+        }
+    };
+
+    resolvo::VersionSetId alloc_requirement_from_str(const std::string &s) {
+        auto split = split_string(s, " ");
+        auto spec_name = names.alloc(split[0]);
+        auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
+        auto requirement = Requirement{spec_name, spec_versions};
+        auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
+        requirements.push_back(requirement);
+        return id;
+
+    }
+
 };
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -238,9 +292,9 @@ void test_default_unsat() {
 /// Construct a database with packages a, b, and c.
     PackageDatabase db;
 
-    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement("b", 1, 4)}, {}});
-    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement("b", 1, 4)}, {}});
-    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement("b", 4, 7)}, {}});
+    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement_from_str("b 1..4")}, {}});
+    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement_from_str("b 1..4")}, {}});
+    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement_from_str("b 4..7")}, {}});
 
     auto b_1 = db.alloc_candidate("b", 8, {});
     auto b_2 = db.alloc_candidate("b", 9, {});
@@ -249,9 +303,9 @@ void test_default_unsat() {
     auto c_1 = db.alloc_candidate("c", 1, {});
 
 // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement("a", 1, 3)};
-    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement("b", 1, 3),
-                                                          db.alloc_requirement("c", 1, 3)};
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a 1..3")};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b 1..3"),
+                                                          db.alloc_requirement_from_str("b 1..3")};
 
 // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
