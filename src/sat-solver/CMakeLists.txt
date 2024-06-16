@@ -31,7 +31,7 @@ target_link_libraries(test_resolvo_cpp
 )
 
 add_executable(ttrek_resolvo
-        tests/ttrek_resolvo.cc
+        ttrek_resolvo.cc
 )
 
 target_link_libraries(ttrek_resolvo
