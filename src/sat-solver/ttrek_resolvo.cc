@@ -273,7 +273,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         auto requirement = Requirement{spec_name, spec_versions};
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
         requirements.push_back(requirement);
-        std::cout << display_version_set(id) << std::endl;
+//        std::cout << display_version_set(id) << std::endl;
         return id;
 
     }
@@ -347,6 +347,7 @@ void test_default_unsat() {
 }
 
 int main() {
+    test_default_sat();
     test_default_unsat();
     return 0;
 }
