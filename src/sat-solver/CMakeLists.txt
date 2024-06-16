@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
+set(BUILD_SHARED_LIBS OFF)
 
 #include(FetchContent)
 #FetchContent_Declare(
