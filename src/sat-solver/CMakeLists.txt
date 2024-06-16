@@ -38,3 +38,5 @@ target_link_libraries(test_resolvo
         PRIVATE
         Resolvo::Resolvo
 )
+
+include_directories(build/resolvo/cpp/generated_include)
