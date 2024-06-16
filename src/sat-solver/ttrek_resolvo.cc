@@ -236,10 +236,9 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         }
     };
 
-    resolvo::VersionSetId alloc_requirement_from_str(const std::string &s) {
-        auto split = split_string(s, " ");
-        auto spec_name = names.alloc(split[0]);
-        auto spec_versions = version_range(split.size() > 1 ? std::optional(split[1]) : std::nullopt);
+    resolvo::VersionSetId alloc_requirement_from_str(const std::string_view package_name, const std::string_view &package_versions) {
+        auto spec_name = names.alloc(package_name);
+        auto spec_versions = version_range(std::optional(package_versions));
         auto requirement = Requirement{spec_name, spec_versions};
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
         requirements.push_back(requirement);
@@ -292,9 +291,9 @@ void test_default_unsat() {
 /// Construct a database with packages a, b, and c.
     PackageDatabase db;
 
-    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement_from_str("b 1..4")}, {}});
-    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement_from_str("b 1..4")}, {}});
-    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement_from_str("b 4..7")}, {}});
+    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement_from_str("b", "1..4")}, {}});
+    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement_from_str("b", "1..4")}, {}});
+    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement_from_str("b", "4..7")}, {}});
 
     auto b_1 = db.alloc_candidate("b", 8, {});
     auto b_2 = db.alloc_candidate("b", 9, {});
@@ -303,9 +302,9 @@ void test_default_unsat() {
     auto c_1 = db.alloc_candidate("c", 1, {});
 
 // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a 1..3")};
-    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b 1..3"),
-                                                          db.alloc_requirement_from_str("b 1..3")};
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", "1..3")};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", "1..3"),
+                                                          db.alloc_requirement_from_str("b", "1..3")};
 
 // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
