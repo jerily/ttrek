@@ -39,4 +39,5 @@ target_link_libraries(test_resolvo
         Resolvo::Resolvo
 )
 
+# temporary hack to include generated headers
 include_directories(build/resolvo/cpp/generated_include)
