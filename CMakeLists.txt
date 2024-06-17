@@ -72,10 +72,13 @@ add_executable(${TARGET}
         src/base64/cencode.h
 )
 
+# Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
+find_library(RESOLVO_LIB libresolvo_cpp.a ${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp)
+message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
 
 include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(${TARGET} PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} Resolvo::Resolvo)
-target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++ -nodefaultlibs)
+target_link_libraries(${TARGET} PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${RESOLVO_LIB})
+target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
