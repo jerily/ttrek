@@ -6,44 +6,57 @@
 #include <iostream>
 
 #include "Range.h"
+#include "semver/semver.h"
 
 struct Pack {
-    uint32_t version;
+    semver_t version = {0};
 
-    Pack offset(uint32_t offset) const {
-        return Pack{version + offset};
+    explicit Pack(const std::string& version_str) {
+        if (-1 == semver_parse(version_str.c_str(), &version)) {
+            throw std::runtime_error("Failed to parse version: " + version_str);
+        }
     }
 
     bool operator==(const Pack &other) const {
-        return version == other.version;
+        return semver_compare(version, other.version) == 0;
     }
 
     bool operator<(const Pack &other) const {
-        return version < other.version;
+        return semver_compare(version, other.version) < 0;
     }
 
     bool operator>(const Pack &other) const {
-        return version > other.version;
+        return semver_compare(version, other.version) > 0;
     }
 
     bool operator<=(const Pack &other) const {
-        return version <= other.version;
+        return semver_compare(version, other.version) <= 0;
     }
 
     bool operator>=(const Pack &other) const {
-        return version >= other.version;
+        return semver_compare(version, other.version) >= 0;
+    }
+
+    std::string to_string() const {
+        std::string version_str;
+        version_str += std::to_string(version.major);
+        version_str += ".";
+        version_str += std::to_string(version.minor);
+        version_str += ".";
+        version_str += std::to_string(version.patch);
+        return version_str;
     }
 
     friend std::string operator+(const std::string &lhs, const Pack &rhs) {
-        return lhs + std::to_string(rhs.version);
+        return lhs + rhs.to_string();
     }
 
     friend std::string operator+(const Pack &lhs, const std::string &rhs) {
-        return std::to_string(lhs.version) + rhs;
+        return lhs.to_string() + rhs;
     }
 
-    friend std::ostream &operator<<(std::ostream &os, const Pack &Pack) {
-        os << Pack.version;
+    friend std::ostream &operator<<(std::ostream &os, const Pack &pack) {
+        os << pack.to_string();
         return os;
     }
 
@@ -95,11 +108,11 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     /**
      * Allocates a new requirement and return the id of the requirement.
      */
-    resolvo::VersionSetId alloc_requirement(std::string_view package, uint32_t version_start,
-                                            uint32_t version_end) {
+    resolvo::VersionSetId alloc_requirement(std::string_view package, const std::string& version_start,
+                                            const std::string& version_end) {
         auto name_id = names.alloc(std::move(package));
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
-        auto versions = Range<Pack>::between(Pack{version_start}, Pack{version_end});
+        auto versions = Range<Pack>::between(Pack(version_start), Pack(version_end));
         requirements.push_back(Requirement{name_id, versions});
         return id;
     }
@@ -107,11 +120,11 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     /**
      * Allocates a new candidate and return the id of the candidate.
      */
-    resolvo::SolvableId alloc_candidate(std::string_view name, uint32_t version,
+    resolvo::SolvableId alloc_candidate(std::string_view name, const std::string& version,
                                         resolvo::Dependencies dependencies) {
         auto name_id = names.alloc(std::move(name));
         auto id = resolvo::SolvableId{static_cast<uint32_t>(candidates.size())};
-        candidates.push_back(Candidate{name_id, Pack{version}, dependencies});
+        candidates.push_back(Candidate{name_id, Pack(version), dependencies});
         return id;
     }
 
@@ -248,15 +261,15 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                 auto rest = std::string(rest_view);
                 // >=, <=, >, <, =, ==
                 if (op == ">=") {
-                    and_range = and_range.intersection_with(Range<Pack>::higher_than(Pack{static_cast<uint32_t>(std::stoi(rest))}));
+                    and_range = and_range.intersection_with(Range<Pack>::higher_than(Pack(rest)));
                 } else if (op == ">") {
-                    and_range = and_range.intersection_with(Range<Pack>::strictly_higher_than(Pack{static_cast<uint32_t>(std::stoi(rest))}));
+                    and_range = and_range.intersection_with(Range<Pack>::strictly_higher_than(Pack(rest)));
                 } else if (op == "<=") {
-                    and_range = and_range.intersection_with(Range<Pack>::lower_than(Pack{static_cast<uint32_t>(std::stoi(rest))}));
+                    and_range = and_range.intersection_with(Range<Pack>::lower_than(Pack(rest)));
                 } else if (op == "<") {
-                    and_range = and_range.intersection_with(Range<Pack>::strictly_lower_than(Pack{static_cast<uint32_t>(std::stoi(rest))}));
+                    and_range = and_range.intersection_with(Range<Pack>::strictly_lower_than(Pack(rest)));
                 } else if (op == "==") {
-                    and_range = and_range.intersection_with(Range<Pack>::singleton(Pack{static_cast<uint32_t>(std::stoi(rest))}));
+                    and_range = and_range.intersection_with(Range<Pack>::singleton(Pack(rest)));
                 } else {
                     throw std::runtime_error("Invalid operator: " + std::string(op));
                 }
@@ -292,20 +305,20 @@ void test_default_sat() {
 /// Construct a database with packages a, b, and c.
 PackageDatabase db;
 
-    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement_from_str("b", ">=1,<4")}, {}});
-    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement_from_str("b", ">=1,<4")}, {}});
-    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement_from_str("b", ">=4,<7")}, {}});
+    auto a_1 = db.alloc_candidate("a", "1.0.0", {{db.alloc_requirement_from_str("b", ">=1.0.0,<4.0.0")}, {}});
+    auto a_2 = db.alloc_candidate("a", "2.0.0", {{db.alloc_requirement_from_str("b", ">=1.0.0,<4.0.0")}, {}});
+    auto a_3 = db.alloc_candidate("a", "3.0.0", {{db.alloc_requirement_from_str("b", ">=4.0.0,<7.0.0")}, {}});
 
-auto b_1 = db.alloc_candidate("b", 1, {});
-auto b_2 = db.alloc_candidate("b", 2, {});
-auto b_3 = db.alloc_candidate("b", 3, {});
+auto b_1 = db.alloc_candidate("b", "1.0.0", {});
+auto b_2 = db.alloc_candidate("b", "2.0.0", {});
+auto b_3 = db.alloc_candidate("b", "3.0.0", {});
 
-auto c_1 = db.alloc_candidate("c", 1, {});
+auto c_1 = db.alloc_candidate("c", "1.0.0", {});
 
 // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=1,<3")};
-    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1,<3"),
-                                                          db.alloc_requirement_from_str("b", ">=1,<3")};
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=1.0.0,<3.0.0")};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0"),
+                                                          db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0")};
 
 // Solve the problem
 resolvo::Vector<resolvo::SolvableId> result;
@@ -323,20 +336,20 @@ void test_default_unsat() {
 /// Construct a database with packages a, b, and c.
     PackageDatabase db;
 
-    auto a_1 = db.alloc_candidate("a", 1, {{db.alloc_requirement_from_str("b", ">=1,<4")}, {}});
-    auto a_2 = db.alloc_candidate("a", 2, {{db.alloc_requirement_from_str("b", ">=1,<4")}, {}});
-    auto a_3 = db.alloc_candidate("a", 3, {{db.alloc_requirement_from_str("b", ">=4,<7")}, {}});
+    auto a_1 = db.alloc_candidate("a", "1.0.0", {{db.alloc_requirement_from_str("b", ">=1.0.0,<4.0.0")}, {}});
+    auto a_2 = db.alloc_candidate("a", "2.0.0", {{db.alloc_requirement_from_str("b", ">=1.0.0,<4.0.0")}, {}});
+    auto a_3 = db.alloc_candidate("a", "3.0.0", {{db.alloc_requirement_from_str("b", ">=4.0.0,<7.0.0")}, {}});
 
-    auto b_1 = db.alloc_candidate("b", 8, {});
-    auto b_2 = db.alloc_candidate("b", 9, {});
-    auto b_3 = db.alloc_candidate("b", 10, {});
+    auto b_1 = db.alloc_candidate("b", "8.0.0", {});
+    auto b_2 = db.alloc_candidate("b", "9.0.0", {});
+    auto b_3 = db.alloc_candidate("b", "10.0.0", {});
 
-    auto c_1 = db.alloc_candidate("c", 1, {});
+    auto c_1 = db.alloc_candidate("c", "1.0.0", {});
 
 // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=1,<3")};
-    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1,<3"),
-                                                          db.alloc_requirement_from_str("b", ">=1,<3")};
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=1.0.0,<3.0.0")};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0"),
+                                                          db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0")};
 
 // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
