@@ -33,7 +33,26 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 #    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
-add_subdirectory(src/sat-solver)
+add_subdirectory(src/sat-solver/resolvo)
+
+add_executable(ttrek_resolvo
+        src/ttrek_resolvo.cc
+        src/semver/semver.c
+)
+
+target_link_libraries(ttrek_resolvo
+        PRIVATE
+        Resolvo::Resolvo
+)
+
+add_executable(test_resolvo
+        src/sat-solver/tests/solve.cc
+)
+
+target_link_libraries(test_resolvo
+        PRIVATE
+        Resolvo::Resolvo
+)
 
 add_executable(${TARGET}
         src/base64/cdecode.c
@@ -62,3 +81,6 @@ install(TARGETS ${TARGET}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
         RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
 )
+
+# temporary hack to include generated headers
+include_directories(build/src/sat-solver/resolvo/cpp/generated_include)
