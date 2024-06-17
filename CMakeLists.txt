@@ -33,7 +33,8 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 #    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
-add_subdirectory(src/sat-solver/resolvo)
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(src/resolvo)
 
 add_executable(ttrek_resolvo
         src/ttrek_resolvo.cc
@@ -73,8 +74,8 @@ add_executable(${TARGET}
 
 
 include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(${TARGET} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} Resolvo::Resolvo)
-target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
+target_link_libraries(${TARGET} PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} Resolvo::Resolvo)
+target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++ -nodefaultlibs)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
@@ -83,4 +84,4 @@ install(TARGETS ${TARGET}
 )
 
 # temporary hack to include generated headers
-include_directories(build/src/sat-solver/resolvo/cpp/generated_include)
+include_directories(build/src/resolvo/cpp/generated_include)

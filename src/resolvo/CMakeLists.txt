@@ -1,52 +1,35 @@
-cmake_minimum_required(VERSION 3.22.1)
-project(test_resolvo VERSION 1.0.0 LANGUAGES C CXX)
+cmake_minimum_required(VERSION 3.21)
 
-set(TARGET ${PROJECT_NAME})
-set(CMAKE_C_STANDARD   11)
-set(CMAKE_C_STANDARD_REQUIRED true)
+project(resolvo LANGUAGES CXX)
+
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED true)
-set(THREADS_PREFER_PTHREAD_FLAG ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-message(STATUS "TCL_INCLUDE_PATH: ${TCL_INCLUDE_PATH}")
-message(STATUS "TCL_LIBRARY: ${TCL_LIBRARY}")
-message(STATUS "CJSON_LIBRARY: ${CJSON_LIBRARY}")
-message(STATUS "CJSON_INCLUDE_PATH: ${CJSON_INCLUDE_PATH}")
-message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
+include(FeatureSummary)
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
+option(RESOLVO_BUILD_TESTING "Build tests" OFF)
+add_feature_info(RESOLVO_BUILD_TESTING RESOLVO_BUILD_TESTING
+                 "configure whether to build the test suite")
+include(CTest)
 
-add_executable(test_resolvo
-        tests/test_resolvo.cc
-        internal/Arena.h
-        internal/ArenaId.h
-        internal/NameId.h
-        internal/SolvableId.h
-        internal/StringId.h
-        internal/VersionSetId.h
-        Pool.h
-        Solvable.h
-        internal/ClauseId.h
-        solver/Solver.h
-        internal/LearntClauseId.h
-        internal/CandidatesId.h
-        internal/DependenciesId.h
-        solver/Clause.h
-        Problem.h
-        solver/WatchMap.h
-        solver/DecisionTracker.h
-        solver/Decision.h
-        solver/DecisionMap.h
-        solver/PropagationError.h
-        internal/FrozenCopyMap.h
-        solver/SolverCache.h
-        Common.h
-        Range.h
-        tests/solver.h
-        DisplayClause.h
-        DisplayName.h
-        DisplayDecisionMap.h
-        internal/Mapping.h
-        DisplayUnsat.h
-)
+set(RESOLVO_IS_TOPLEVEL_BUILD TRUE)
+
+# Place all compiled examples into the same bin directory on Windows, where
+# we'll also put the dll
+if(WIN32)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/debug)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/release)
+elseif(APPLE)
+  # On macOS, the resolvo_cpp.dylib's install_name uses @rpath. CMake doesn't
+  # set BUILD_RPATH for imported targets though, so include the directory here
+  # by hand in the rpath used to build binaries in the build tree (such as our
+  # examples or tests).
+  set(CMAKE_BUILD_RPATH ${CMAKE_BINARY_DIR}/cpp)
+endif()
+
+add_subdirectory(cpp/)
+
+feature_summary(WHAT ENABLED_FEATURES DESCRIPTION "Enabled features:")
+feature_summary(WHAT DISABLED_FEATURES DESCRIPTION "Disabled features:")
