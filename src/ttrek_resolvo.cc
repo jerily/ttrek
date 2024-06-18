@@ -67,7 +67,7 @@ int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     // each argument is of the form "package_name@version_requirement"
 
     std::map<std::string, std::string> requirements;
-    for (int i = 1; i < objc; i++) {
+    for (int i = 0; i < objc; i++) {
         std::string arg = Tcl_GetString(objv[i]);
         std::string package_name = arg.substr(0, arg.find('@'));
         std::string version_requirement = arg.substr(arg.find('@') + 1);
