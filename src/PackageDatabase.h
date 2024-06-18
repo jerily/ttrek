@@ -8,6 +8,12 @@
 #define TTREK_PACKAGE_DATABASE_H
 
 
+#ifdef DEBUG
+# define DBG(x) x
+#else
+# define DBG(x)
+#endif
+
 #include <resolvo.h>
 #include <resolvo_pool.h>
 #include <vector>
@@ -49,11 +55,19 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
     for (int i = 0; i < cJSON_GetArraySize(versions_root); i++) {
         cJSON *version_item = cJSON_GetArrayItem(versions_root, i);
         const char *version_str = version_item->string;
-        fprintf(stderr, "version_str: %s\n", version_str);
+        DBG(fprintf(stderr, "version_str: %s\n", version_str));
+        std::vector<std::pair<std::string_view, std::string_view>> deps;
+        for (int j = 0; j < cJSON_GetArraySize(version_item); j++) {
+            cJSON *deps_item = cJSON_GetArrayItem(version_item, j);
+            const char *dep_name = deps_item->string;
+            const char *dep_version = cJSON_GetStringValue(deps_item);
+            DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
+            deps.push_back({dep_name, dep_version});
+        }
+        result[version_str] = deps;
     }
     cJSON_free(versions_root);
-    return repository[package_name];
-//    return result;
+    return result;
 }
 
 struct Pack {
@@ -299,14 +313,14 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         auto package_name = std::string(names[package]);
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
-            std::cout << "fetching from remote: " << names[package] << std::endl;
+            DBG(std::cout << "fetching from remote: " << names[package] << std::endl);
             auto package_versions = fetch_package_versions(package_name);
-            for (auto it = package_versions.cbegin(); it != package_versions.cend(); ++it) {
-                auto package_version = std::string(it->first);
-                auto package_version_deps = it->second;
+            for (const auto & it : package_versions) {
+                auto package_version = std::string(it.first);
+                auto package_version_deps = it.second;
                 auto dependencies = resolvo::Dependencies();
                 for (const auto &dep : package_version_deps) {
-                    auto dep_name = names.alloc(dep.first);
+//                    auto dep_name = names.alloc(dep.first);
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
                     dependencies.requirements.push_back(dep_version_set);
                 }

@@ -15,10 +15,10 @@ void test_default_sat() {
     PackageDatabase db;
 
 // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=4.0.0,<5.0.0")};
-//    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0"),
-//                                                          db.alloc_requirement_from_str("b", ">=1.0.0,<3.0.0")};
-    resolvo::Vector<resolvo::VersionSetId> constraints = {};
+    resolvo::Vector<resolvo::VersionSetId> requirements = {db.alloc_requirement_from_str("a", ">=4.0.0,<6.0.0")};
+    resolvo::Vector<resolvo::VersionSetId> constraints = {db.alloc_requirement_from_str("b", ">=1.0.0,<13.0.0"),
+                                                          db.alloc_requirement_from_str("b", ">=1.0.0,<13.0.0")};
+//    resolvo::Vector<resolvo::VersionSetId> constraints = {};
     // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
     auto message = resolvo::solve(db, requirements, constraints, result);
@@ -51,7 +51,11 @@ void test_default_unsat() {
 }
 
 int test_resolvo() {
+    std::cout << "----------------------------" << std::endl;
+    std::cout << "test_default_sat" << std::endl;
     test_default_sat();
+    std::cout << "----------------------------" << std::endl;
+    std::cout << "test_default_unsat" << std::endl;
     test_default_unsat();
     return 0;
 }
