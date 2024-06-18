@@ -1,6 +1,16 @@
+# NEW
+
 * You need to have [Rust installed on your system](https://www.rust-lang.org/tools/install).
+* Start ttrek.sh using ```tclsh9.0 app.tcl```
+```bash
+./build-ttrek.sh
+cd build
+./ttrek pretend
+```
 
+-----
 
+# OLD
 
 ```bash
 chmod +x install.sh start.sh
