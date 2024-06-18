@@ -297,9 +297,9 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
-        std::cout << "package=" << names[package] << std::endl;
+//        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
-            std::cout << "fetching from remote" << std::endl;
+            std::cout << "fetching from remote: " << names[package] << std::endl;
             auto package_versions = fetch_package_versions(package_name);
             for (auto it = package_versions.cbegin(); it != package_versions.cend(); ++it) {
                 auto package_version = std::string(it->first);

@@ -31,7 +31,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr) {
 
     CURLcode ret = curl_easy_perform(curl_handle);
     if (ret == CURLE_OK) {
-        fprintf(stderr, "%lu bytes retrieved\n", Tcl_DStringLength(dsPtr));
+//        fprintf(stderr, "%lu bytes retrieved\n", Tcl_DStringLength(dsPtr));
     } else {
         fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(ret));
 //        SetResult("failed to fetch spec file");
