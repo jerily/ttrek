@@ -223,7 +223,7 @@ ttrek_InstallDependency(
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, pkg_name);
     Tcl_DString versions_ds;
     Tcl_DStringInit(&versions_ds);
-    if (TCL_OK != ttrek_RegistryGet(interp, package_versions_url, &versions_ds)) {
+    if (TCL_OK != ttrek_RegistryGet(package_versions_url, &versions_ds)) {
         fprintf(stderr, "error: could not get versions for %s\n", pkg_name);
         return TCL_ERROR;
     }
@@ -290,7 +290,7 @@ ttrek_InstallDependency(
 
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
-    if (TCL_OK != ttrek_RegistryGet(interp, install_spec_url, &ds)) {
+    if (TCL_OK != ttrek_RegistryGet(install_spec_url, &ds)) {
         fprintf(stderr, "error: could not get install spec for %s@%s\n", pkg_name, resolved_version);
         return TCL_ERROR;
     }

@@ -36,16 +36,31 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(src/resolvo)
 
-add_executable(ttrek_resolvo
+add_executable(${TARGET}
         src/ttrek_resolvo.cc
+        src/ttrek_resolvo.h
         src/semver/semver.c
         src/PackageDatabase.h
+        src/base64/cdecode.c
+        src/base64/cencode.c
+        src/semver/semver.c
+        src/base64.c
+        src/registry.c
+        src/initSubCmd.c
+        src/installSubCmd.c
+        src/runSubCmd.c
+        src/pretendSubCmd.c
+        src/ttrek.c
+        src/common.c
+        src/common.h
+        src/base64/cdecode.h
+        src/base64/cencode.h
 )
 
-target_link_libraries(ttrek_resolvo
-        PRIVATE
-        Resolvo::Resolvo
-)
+#target_link_libraries(ttrek_resolvo
+#        PRIVATE
+#        Resolvo::Resolvo
+#)
 
 add_executable(test_resolvo
         src/sat-solver/tests/solve.cc
@@ -56,30 +71,17 @@ target_link_libraries(test_resolvo
         Resolvo::Resolvo
 )
 
-add_executable(${TARGET}
-        src/base64/cdecode.c
-        src/base64/cencode.c
-        src/semver/semver.c
-        src/base64.c
-        src/registry.c
-        src/initSubCmd.c
-        src/installSubCmd.c
-        src/runSubCmd.c
-        src/pretendSubCmd.cc
-        src/ttrek.c
-        src/common.c
-        src/common.h
-        src/base64/cdecode.h
-        src/base64/cencode.h
-)
-
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
 find_library(RESOLVO_LIB libresolvo_cpp.a ${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp)
 message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
 
-include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
+include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include)
 target_link_libraries(${TARGET} PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${RESOLVO_LIB})
 target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
+
+#target_link_libraries(ttrek_resolvo PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${RESOLVO_LIB})
+#target_link_options(ttrek_resolvo PRIVATE -static -static-libgcc -static-libstdc++)
+
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}

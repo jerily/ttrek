@@ -4,19 +4,18 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#ifndef TTREK_REGISTRY_H
-#define TTREK_REGISTRY_H
+#ifndef TTREK_RESOLVO_H
+#define TTREK_RESOLVO_H
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "common.h"
-
-int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr);
+    int test_resolvo();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif //TTREK_REGISTRY_H
+#endif //TTREK_RESOLVO_H

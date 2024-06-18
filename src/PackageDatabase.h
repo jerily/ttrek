@@ -1,5 +1,12 @@
+/**
+ * Copyright Jerily LTD. All Rights Reserved.
+ * SPDX-FileCopyrightText: 2024 Neofytos Dimitriou (neo@jerily.cy)
+ * SPDX-License-Identifier: MIT.
+ */
+
 #ifndef TTREK_PACKAGE_DATABASE_H
 #define TTREK_PACKAGE_DATABASE_H
+
 
 #include <resolvo.h>
 #include <resolvo_pool.h>
@@ -8,6 +15,8 @@
 #include <map>
 #include "semver/semver.h"
 #include "Range.h"
+#include "registry.h"
+#include "cjson/cJSON.h"
 
 std::map<std::string_view, std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>>> repository = {
         {"a", {
@@ -24,6 +33,28 @@ std::map<std::string_view, std::map<std::string_view, std::vector<std::pair<std:
                       {"1.0.0", {}},
               }}
 };
+
+std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(std::string package_name) {
+    std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> result;
+    char package_versions_url[256];
+    snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
+    Tcl_DString versions_ds;
+    Tcl_DStringInit(&versions_ds);
+    if (TCL_OK != ttrek_RegistryGet(package_versions_url, &versions_ds)) {
+        fprintf(stderr, "error: could not get versions for %s\n", package_name.c_str());
+        return result;
+    }
+    cJSON *versions_root = cJSON_Parse(Tcl_DStringValue(&versions_ds));
+    Tcl_DStringFree(&versions_ds);
+    for (int i = 0; i < cJSON_GetArraySize(versions_root); i++) {
+        cJSON *version_item = cJSON_GetArrayItem(versions_root, i);
+        const char *version_str = version_item->string;
+        fprintf(stderr, "version_str: %s\n", version_str);
+    }
+    cJSON_free(versions_root);
+    return repository[package_name];
+//    return result;
+}
 
 struct Pack {
     semver_t version = {0};
@@ -269,7 +300,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
             std::cout << "fetching from remote" << std::endl;
-            std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> package_versions = repository[package_name];
+            auto package_versions = fetch_package_versions(package_name);
             for (auto it = package_versions.cbegin(); it != package_versions.cend(); ++it) {
                 auto package_version = std::string(it->first);
                 auto package_version_deps = it->second;

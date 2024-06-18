@@ -1,15 +1,14 @@
+/**
+ * Copyright Jerily LTD. All Rights Reserved.
+ * SPDX-FileCopyrightText: 2024 Neofytos Dimitriou (neo@jerily.cy)
+ * SPDX-License-Identifier: MIT.
+ */
+
 #include <sstream>
 #include <cassert>
 #include <iostream>
 #include "PackageDatabase.h"
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-#elif defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-variable"
-#endif
+#include "ttrek_resolvo.h"
 
 void test_default_sat() {
 // Construct a database with packages a, b, and c.
@@ -86,7 +85,7 @@ void test_default_unsat2() {
 
 }
 
-int main() {
+int test_resolvo() {
 //    test_default_sat();
 //    test_default_unsat();
     test_default_unsat2();
