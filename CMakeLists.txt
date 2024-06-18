@@ -39,6 +39,7 @@ add_subdirectory(src/resolvo)
 add_executable(ttrek_resolvo
         src/ttrek_resolvo.cc
         src/semver/semver.c
+        src/PackageDatabase.h
 )
 
 target_link_libraries(ttrek_resolvo
