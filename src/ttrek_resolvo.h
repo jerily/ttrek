@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
     int test_resolvo();
+    int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]);
 
 #ifdef __cplusplus
 }

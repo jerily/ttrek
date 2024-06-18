@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
                 break;
             case SUBCMD_PRETEND:
                 fprintf(stderr, "pretend\n");
-                if (TCL_OK != ttrek_PretendSubCmd(interp, objc-2, &objv[2])) {
+                if (TCL_OK != ttrek_PretendSubCmd(interp, objc-1, &objv[1])) {
                     fprintf(stderr, "error: pretend subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }

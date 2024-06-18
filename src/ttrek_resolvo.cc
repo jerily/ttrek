@@ -59,3 +59,41 @@ int test_resolvo() {
     test_default_unsat();
     return 0;
 }
+
+int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+    PackageDatabase db;
+
+    // split all the arguments in "objv" into a vector of package names and the version requirements
+    // each argument is of the form "package_name@version_requirement"
+
+    std::map<std::string, std::string> requirements;
+    for (int i = 1; i < objc; i++) {
+        std::string arg = Tcl_GetString(objv[i]);
+        std::string package_name = arg.substr(0, arg.find('@'));
+        std::string version_requirement = arg.substr(arg.find('@') + 1);
+        std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement << std::endl;
+        requirements[package_name] = version_requirement;
+    }
+
+    // Construct a problem to be solved by the solver
+    resolvo::Vector<resolvo::VersionSetId> requirements_vector;
+    for (const auto& requirement : requirements) {
+        requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
+    }
+
+    resolvo::Vector<resolvo::VersionSetId> constraints;
+
+    // Solve the problem
+    resolvo::Vector<resolvo::SolvableId> result;
+    auto message = resolvo::solve(db, requirements_vector, constraints, result);
+
+    if (!result.empty()) {
+        for (auto solvable : result) {
+            std::cout << "install: " << db.display_solvable(solvable) << std::endl;
+        }
+    } else {
+        std::cout << "unsat message: " << message << std::endl;
+    }
+
+    return TCL_OK;
+}
