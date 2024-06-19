@@ -72,7 +72,7 @@ target_link_libraries(test_resolvo
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
-find_library(RESOLVO_LIB libresolvo_cpp.a ${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp)
+set(RESOLVO_LIB "${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp/libresolvo_cpp.a")
 message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
 
 include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include)
