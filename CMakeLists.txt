@@ -18,7 +18,7 @@ if (NOT APPLE)
 else()
     find_library(CORE_FOUNDATION CoreFoundation)
     message(STATUS "CORE_FOUNDATION: ${CORE_FOUNDATION}")
-    set(EXTRA_LIBS "-framework CoreFoundation")
+    set(EXTRA_LIBS "-framework CoreFoundation -framework SystemConfiguration")
 endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
