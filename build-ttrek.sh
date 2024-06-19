@@ -51,17 +51,7 @@ cd tcl8.6.14/unix
 make
 make install
 cd $BUILD_DIR
-cmake .. \
-  -DTCL_LIBRARY=$INSTALL_DIR/lib/libtcl8.6.a \
-  -DTCL_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DCJSON_LIBRARY=$INSTALL_DIR/lib/libcjson.a \
-  -DCJSON_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DZLIB_LIBRARY=$INSTALL_DIR/lib/libz.a \
-  -DZLIB_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DCURL_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DCURL_LIBRARY=$INSTALL_DIR/lib/libcurl.a \
-  -DOPENSSL_INCLUDE_DIR=$INSTALL_DIR/include \
-  -DOPENSSL_LIBRARIES="$INSTALL_DIR/lib64/libssl.a;$INSTALL_DIR/lib64/libcrypto.a"
+cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR
 make
 
 # sudo apt install musl-tools

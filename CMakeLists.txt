@@ -8,18 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 set(ZLIB_USE_STATIC_LIBS "ON")
+set(BUILD_SHARED_LIBS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-#find_package(TCL EXACT 8.6.13 REQUIRED)  # TCL_INCLUDE_PATH TCL_LIBRARY
-#find_package(ZLIB REQUIRED) # ZLIB_INCLUDE_DIRS ZLIB_LIBRARIES
 find_library(MATH_LIB NAMES libm.a)
-#find_package(CURL 8.7.1 REQUIRED) # CURL_INCLUDE_DIRS CURL_LIBRARIES
-
-message(STATUS "TCL_INCLUDE_PATH: ${TCL_INCLUDE_PATH}")
-message(STATUS "TCL_LIBRARY: ${TCL_LIBRARY}")
-message(STATUS "CJSON_LIBRARY: ${CJSON_LIBRARY}")
-message(STATUS "CJSON_INCLUDE_PATH: ${CJSON_INCLUDE_PATH}")
-message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
@@ -33,8 +25,16 @@ set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CM
 #    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
-set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(src/resolvo)
+
+add_executable(test_resolvo
+        src/sat-solver/tests/solve.cc
+)
+
+target_link_libraries(test_resolvo
+        PRIVATE
+        Resolvo::Resolvo
+)
 
 add_executable(${TARGET}
         src/ttrek_resolvo.cc
@@ -57,31 +57,22 @@ add_executable(${TARGET}
         src/base64/cencode.h
 )
 
-#target_link_libraries(ttrek_resolvo
-#        PRIVATE
-#        Resolvo::Resolvo
-#)
-
-add_executable(test_resolvo
-        src/sat-solver/tests/solve.cc
-)
-
-target_link_libraries(test_resolvo
-        PRIVATE
-        Resolvo::Resolvo
-)
-
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
 set(RESOLVO_LIB "${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp/libresolvo_cpp.a")
 message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
 
-include_directories(${TCL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR} ${CJSON_INCLUDE_DIR} ${CURL_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include)
-target_link_libraries(${TARGET} PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${RESOLVO_LIB})
+message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
+find_library(OPENSSL_SSL_LIBRARY NAMES libssl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
+find_library(OPENSSL_CRYPTO_LIBRARY NAMES libcrypto.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
+set(OPENSSL_LIBRARIES "${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}")
+find_library(CURL_LIBRARY NAMES libcurl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(TCL_LIBRARY NAMES libtcl8.6.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+
+target_include_directories(${TARGET} PRIVATE ${CMAKE_INSTALL_PREFIX}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include)
+target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
 target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
-
-#target_link_libraries(ttrek_resolvo PRIVATE ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${RESOLVO_LIB})
-#target_link_options(ttrek_resolvo PRIVATE -static -static-libgcc -static-libstdc++)
-
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
