@@ -38,7 +38,7 @@ cd $BUILD_DIR
 curl -L -O --output-dir $BUILD_DIR https://curl.se/download/curl-8.7.1.tar.gz
 tar -xvf $BUILD_DIR/curl-8.7.1.tar.gz -C $BUILD_DIR
 cd $BUILD_DIR/curl-8.7.1
-./configure --prefix=$INSTALL_DIR --with-openssl=$INSTALL_DIR --with-zlib=$INSTALL_DIR --disable-shared --without-brotli --without-zstd
+./configure --prefix=$INSTALL_DIR --with-openssl=$INSTALL_DIR --with-zlib=$INSTALL_DIR --disable-shared --without-brotli --without-zstd --without-nghttp2 --disable-ldap --without-libidn2
 make install
 
 

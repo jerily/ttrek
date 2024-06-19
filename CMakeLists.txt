@@ -11,7 +11,12 @@ set(ZLIB_USE_STATIC_LIBS "ON")
 set(BUILD_SHARED_LIBS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_library(MATH_LIB NAMES libm.a)
+
+if (NOT APPLE)
+    find_library(MATH_LIB NAMES libm.a)
+else()
+    set(MATH_LIB "")
+endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
@@ -70,9 +75,12 @@ find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" 
 find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(TCL_LIBRARY NAMES libtcl8.6.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 
-target_include_directories(${TARGET} PRIVATE ${CMAKE_INSTALL_PREFIX}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include)
+message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
+target_include_directories(${TARGET} PRIVATE "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
 target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${MATH_LIB} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
-target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
+if (NOT APPLE)
+    target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
