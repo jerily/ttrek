@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cassert>
 #include <iostream>
+#include <vector>
 
 /**
  * A single candidate for a package.
