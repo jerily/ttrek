@@ -184,8 +184,8 @@ static std::pair<std::string_view, std::string_view> parse_operator(const std::s
 }
 
 static Range<Pack> version_range(std::optional<resolvo::String> s) {
-    std::string_view s_view = s.value();
     if (s.has_value()) {
+        std::string_view s_view = s.value();
         auto and_parts = split_string(s_view, ",");
         Range<Pack> and_range = Range<Pack>::full();
         for (const auto &and_part : and_parts) {

@@ -69,8 +69,15 @@ int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     std::map<std::string, std::string> requirements;
     for (int i = 0; i < objc; i++) {
         std::string arg = Tcl_GetString(objv[i]);
-        std::string package_name = arg.substr(0, arg.find('@'));
-        std::string version_requirement = arg.substr(arg.find('@') + 1);
+        std::string package_name;
+        std::string version_requirement;
+        if (arg.find('@') == std::string::npos) {
+            package_name = arg;
+            version_requirement = "";
+        } else {
+            package_name = arg.substr(0, arg.find('@'));
+            version_requirement = arg.substr(arg.find('@') + 1);
+        }
         std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement << std::endl;
         requirements[package_name] = version_requirement;
     }
