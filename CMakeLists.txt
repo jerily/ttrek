@@ -42,6 +42,7 @@ add_executable(test_resolvo
 target_link_libraries(test_resolvo
         PRIVATE
         Resolvo::Resolvo
+        stdc++
 )
 
 add_executable(${TARGET}
@@ -80,9 +81,9 @@ find_library(TCL_LIBRARY NAMES libtcl8.6.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" N
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 target_include_directories(${TARGET} PRIVATE "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
-target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
+target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} stdc++ ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
 if (NOT APPLE)
-    target_link_options(${TARGET} PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(${TARGET} PRIVATE -static)
 endif()
 
 install(TARGETS ${TARGET}
