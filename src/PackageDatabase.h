@@ -116,6 +116,10 @@ struct Pack {
         version_str += std::to_string(version.minor);
         version_str += ".";
         version_str += std::to_string(version.patch);
+        if (version.prerelease != nullptr) {
+            version_str += "-";
+            version_str += version.prerelease;
+        }
         return version_str;
     }
 
