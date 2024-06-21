@@ -61,7 +61,7 @@ int test_resolvo() {
     return 0;
 }
 
-int parse_requirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
+int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
     for (int i = 0; i < objc; i++) {
         std::string arg = Tcl_GetString(objv[i]);
         std::string package_name;
@@ -79,21 +79,82 @@ int parse_requirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::strin
     return TCL_OK;
 }
 
-std::map<std::string, std::string> ttrek_parse_constraints_from_lock_file() {
-    return std::map<std::string, std::string>();
+int ttrek_ParseConstraintsFromLockFile(Tcl_Interp *interp, std::map<std::string, std::string>& constraints) {
+
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return TCL_ERROR;
+    }
+
+    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
+    Tcl_IncrRefCount(lock_filename_ptr);
+    Tcl_Obj *path_to_lock_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
+        Tcl_DecrRefCount(lock_filename_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return TCL_ERROR;
+    }
+    Tcl_DecrRefCount(lock_filename_ptr);
+    Tcl_IncrRefCount(path_to_lock_file_ptr);
+
+    cJSON *lock_root = nullptr;
+    if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
+        Tcl_DecrRefCount(path_to_lock_file_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return TCL_ERROR;
+    }
+
+    // add constraints from direct version requirements
+    cJSON *dependencies = cJSON_GetObjectItem(lock_root, "dependencies");
+    if (0 && dependencies) {
+        for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
+            cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
+            std::string package_name = dep_item->string;
+            std::string package_version_requirement = cJSON_GetStringValue(dep_item);
+            std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
+                      << package_version_requirement << std::endl;
+            constraints[package_name] = package_version_requirement;
+        }
+    }
+
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (packages) {
+        for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
+            cJSON *package = cJSON_GetArrayItem(packages, i);
+            cJSON *package_reqs = cJSON_GetObjectItem(package, "requires");
+            for (int j = 0; j < cJSON_GetArraySize(package_reqs); j++) {
+                cJSON *package_req = cJSON_GetArrayItem(package_reqs, j);
+                std::string package_name = package_req->string;
+                std::string package_version_requirement = cJSON_GetStringValue(package_req);
+                std::cout << "(transitive) package_name: " << package_name << " package_version_requirement: "
+                          << package_version_requirement << std::endl;
+                constraints[package_name] = package_version_requirement;
+            }
+        }
+    }
+
+    Tcl_DecrRefCount(path_to_lock_file_ptr);
+    Tcl_DecrRefCount(project_home_dir_ptr);
+    return TCL_OK;
 }
 
-std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements,
-                        std::vector<std::string> &installs) {
+int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::string& message, std::map<std::string, std::string> &requirements,
+                std::vector<std::string> &installs) {
     PackageDatabase db;
 
-    parse_requirements(objc, objv, requirements);
-    auto constraints = ttrek_parse_constraints_from_lock_file();
+    ttrek_ParseRequirements(objc, objv, requirements);
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
     for (const auto &requirement: requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
+    }
+
+    std::map<std::string, std::string> constraints;
+    if (TCL_OK != ttrek_ParseConstraintsFromLockFile(interp, constraints)) {
+        return TCL_ERROR;
     }
 
     resolvo::Vector<resolvo::VersionSetId> constraints_vector;
@@ -103,7 +164,7 @@ std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::stri
 
     // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
-    auto message = resolvo::solve(db, requirements_vector, constraints_vector, result);
+    message = resolvo::solve(db, requirements_vector, constraints_vector, result);
 
     if (!result.empty()) {
         for (auto solvable: result) {
@@ -111,14 +172,17 @@ std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::stri
         }
     }
 
-    return std::string(message);
+    return TCL_OK;
 }
 
 int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;
-    auto message = ttrek_solve(objc, objv, requirements, installs);
+    std::string message;
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, message, requirements, installs)) {
+        return TCL_ERROR;
+    }
     if (installs.empty()) {
         std::cout << message << std::endl;
     } else {
@@ -200,7 +264,12 @@ int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;
-    auto message = ttrek_solve(objc, objv, requirements, installs);
+    std::string message;
+
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, message, requirements, installs)) {
+        return TCL_ERROR;
+    }
+
     if (installs.empty()) {
         std::cout << message << std::endl;
     } else {
@@ -226,7 +295,8 @@ int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             auto package_version = install.substr(index + 1);
 
             auto direct_version_requirement =
-                    requirements.find(package_name) != requirements.end() ? requirements.at(package_name).c_str() : nullptr;
+                    requirements.find(package_name) != requirements.end() ? requirements.at(package_name).c_str()
+                                                                          : nullptr;
             if (TCL_OK !=
                 ttrek_InstallPackage(interp, package_name.c_str(), package_version.c_str(), direct_version_requirement,
                                      spec_root, lock_root)) {
