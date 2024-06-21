@@ -60,12 +60,7 @@ int test_resolvo() {
     return 0;
 }
 
-int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    PackageDatabase db;
-
-    // split all the arguments in "objv" into a vector of package names and the version requirements
-    // each argument is of the form "package_name@version_requirement"
-
+std::map<std::string, std::string> parse_requirements(Tcl_Size objc, Tcl_Obj *const objv[]) {
     std::map<std::string, std::string> requirements;
     for (int i = 0; i < objc; i++) {
         std::string arg = Tcl_GetString(objv[i]);
@@ -81,6 +76,13 @@ int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement << std::endl;
         requirements[package_name] = version_requirement;
     }
+    return requirements;
+}
+
+std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::vector<std::string>& installs) {
+    PackageDatabase db;
+
+    auto requirements = parse_requirements(objc, objv);
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
@@ -96,11 +98,38 @@ int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     if (!result.empty()) {
         for (auto solvable : result) {
-            std::cout << "install: " << db.display_solvable(solvable) << std::endl;
+            installs.emplace_back(db.display_solvable(solvable));
         }
-    } else {
-        std::cout << "unsat message: " << message << std::endl;
     }
 
+    return std::string(message);
+}
+
+int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+
+    std::vector<std::string> installs;
+    auto message = ttrek_solve(objc, objv, installs);
+    if (installs.empty()) {
+        std::cout << message << std::endl;
+    } else {
+        for (const auto& install : installs) {
+            std::cout << "install: " << install << std::endl;
+        }
+    }
+    return TCL_OK;
+}
+
+
+int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+
+    std::vector<std::string> installs;
+    auto message = ttrek_solve(objc, objv, installs);
+    if (installs.empty()) {
+        std::cout << message << std::endl;
+    } else {
+        for (const auto& install : installs) {
+            std::cout << "install: " << install << std::endl;
+        }
+    }
     return TCL_OK;
 }
