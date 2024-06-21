@@ -10,6 +10,7 @@
 #include "base64.h"
 #include "registry.h"
 #include "semver/semver.h"
+#include "ttrek_resolvo.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
@@ -462,21 +463,33 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     }
 
     int option_save_dev = 0;
+    int option_user = 0;
     int option_global = 0;
     Tcl_ArgvInfo ArgTable[] = {
-            {TCL_ARGV_CONSTANT, "--save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
-            {TCL_ARGV_CONSTANT, "--global", INT2PTR(1), &option_global, "install as a global package"},
+//            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
+            {TCL_ARGV_CONSTANT, "-u", INT2PTR(1), &option_user, "install as a user package"},
+            {TCL_ARGV_CONSTANT, "-g", INT2PTR(1), &option_global, "install as a global package"},
             {TCL_ARGV_END, NULL, NULL, NULL, NULL}
     };
 
     Tcl_Obj **remObjv;
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
+    if (TCL_OK != ttrek_install(interp, objc, remObjv)) {
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        Tcl_DecrRefCount(path_to_spec_file_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
+    return TCL_OK;
+
     cJSON *spec_root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_to_spec_file_ptr, &spec_root)) {
         fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_spec_file_ptr));
         Tcl_DecrRefCount(project_home_dir_ptr);
         Tcl_DecrRefCount(path_to_spec_file_ptr);
+        ckfree(remObjv);
         return TCL_ERROR;
     }
 
@@ -486,6 +499,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
         Tcl_DecrRefCount(lock_filename_ptr);
         Tcl_DecrRefCount(project_home_dir_ptr);
+        ckfree(remObjv);
         return TCL_ERROR;
     }
     Tcl_DecrRefCount(lock_filename_ptr);

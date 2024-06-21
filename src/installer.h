@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#ifndef TTREK_RESOLVO_H
-#define TTREK_RESOLVO_H
+#ifndef TTREK_INSTALLER_H
+#define TTREK_INSTALLER_H
 
+#include "common.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]);
-int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]);
+int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const char *package_version);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif //TTREK_RESOLVO_H
+#endif //TTREK_INSTALLER_H

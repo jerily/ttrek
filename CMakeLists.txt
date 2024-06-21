@@ -64,6 +64,8 @@ add_executable(${TARGET}
         src/common.h
         src/base64/cdecode.h
         src/base64/cencode.h
+        src/installer.h
+        src/installer.c
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:

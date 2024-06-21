@@ -9,6 +9,7 @@
 #include <iostream>
 #include "PackageDatabase.h"
 #include "ttrek_resolvo.h"
+#include "installer.h"
 
 void test_default_sat() {
 // Construct a database with packages a, b, and c.
@@ -79,10 +80,15 @@ std::map<std::string, std::string> parse_requirements(Tcl_Size objc, Tcl_Obj *co
     return requirements;
 }
 
+std::map<std::string, std::string> ttrek_parse_constraints_from_lock_file() {
+    return std::map<std::string, std::string>();
+}
+
 std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::vector<std::string>& installs) {
     PackageDatabase db;
 
     auto requirements = parse_requirements(objc, objv);
+    auto constraints = ttrek_parse_constraints_from_lock_file();
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
@@ -90,11 +96,14 @@ std::string ttrek_solve(Tcl_Size objc, Tcl_Obj *const objv[], std::vector<std::s
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
     }
 
-    resolvo::Vector<resolvo::VersionSetId> constraints;
+    resolvo::Vector<resolvo::VersionSetId> constraints_vector;
+    for (const auto& constraint : constraints) {
+        constraints_vector.push_back(db.alloc_requirement_from_str(constraint.first, constraint.second));
+    }
 
     // Solve the problem
     resolvo::Vector<resolvo::SolvableId> result;
-    auto message = resolvo::solve(db, requirements_vector, constraints, result);
+    auto message = resolvo::solve(db, requirements_vector, constraints_vector, result);
 
     if (!result.empty()) {
         for (auto solvable : result) {
@@ -127,8 +136,15 @@ int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     if (installs.empty()) {
         std::cout << message << std::endl;
     } else {
+        std::reverse(installs.begin(), installs.end());
         for (const auto& install : installs) {
-            std::cout << "install: " << install << std::endl;
+            std::cout << "installing... " << install << std::endl;
+            auto index = install.find('='); // package_name=package_version
+            auto package_name = install.substr(0, index);
+            auto package_version = install.substr(index + 1);
+            if (TCL_OK != ttrek_InstallPackage(interp, package_name.c_str(), package_version.c_str())) {
+                return TCL_ERROR;
+            }
         }
     }
     return TCL_OK;
