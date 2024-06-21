@@ -13,7 +13,8 @@
 extern "C" {
 #endif
 
-int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const char *package_version);
+int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const char *package_version, const char *direct_version_requirement,
+                         cJSON *spec_root, cJSON *lock_root);
 
 #ifdef __cplusplus
 }

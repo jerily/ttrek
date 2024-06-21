@@ -164,3 +164,70 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
     fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
     return NULL;
 }
+
+
+cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp) {
+
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return NULL;
+    }
+
+    Tcl_Obj *spec_filename_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
+    Tcl_IncrRefCount(spec_filename_ptr);
+    Tcl_Obj *path_to_spec_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, spec_filename_ptr, &path_to_spec_file_ptr)) {
+        Tcl_DecrRefCount(spec_filename_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(spec_filename_ptr);
+    Tcl_IncrRefCount(path_to_spec_file_ptr);
+
+    cJSON *spec_root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_to_spec_file_ptr, &spec_root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_spec_file_ptr));
+        Tcl_DecrRefCount(path_to_spec_file_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return NULL;
+    }
+
+    Tcl_DecrRefCount(path_to_spec_file_ptr);
+    Tcl_DecrRefCount(project_home_dir_ptr);
+
+    return spec_root;
+}
+
+cJSON *ttrek_GetLockRoot(Tcl_Interp *interp) {
+
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return NULL;
+    }
+
+    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
+    Tcl_IncrRefCount(lock_filename_ptr);
+    Tcl_Obj *path_to_lock_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
+        Tcl_DecrRefCount(lock_filename_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(lock_filename_ptr);
+    Tcl_IncrRefCount(path_to_lock_file_ptr);
+
+    cJSON *lock_root = NULL;
+    if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
+        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
+        Tcl_DecrRefCount(path_to_lock_file_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return NULL;
+    }
+
+    Tcl_DecrRefCount(path_to_lock_file_ptr);
+    Tcl_DecrRefCount(project_home_dir_ptr);
+
+    return lock_root;
+}

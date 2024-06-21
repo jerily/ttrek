@@ -74,6 +74,8 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
 
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp);
+cJSON *ttrek_GetLockRoot(Tcl_Interp *interp);
+cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
 
 #ifdef __cplusplus
 }

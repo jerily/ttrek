@@ -11,7 +11,26 @@
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
-static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, const char *package_name, const char *package_version) {
+
+static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
+                                   const char *version_requirement) {
+    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
+    if (!dependencies) {
+        dependencies = cJSON_CreateObject();
+        cJSON_AddItemToObject(spec_root, "dependencies", dependencies);
+    }
+
+    cJSON *package = cJSON_GetObjectItem(dependencies, package_name);
+    if (package) {
+        cJSON_ReplaceItemInObject(dependencies, package_name, cJSON_CreateString(version_requirement));
+    } else {
+        cJSON_AddStringToObject(dependencies, package_name, version_requirement);
+    }
+}
+
+static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, const char *package_name,
+                                         const char *package_version, const char *direct_version_requirement,
+                                         cJSON *spec_root, cJSON *lock_root) {
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, package_name, package_version);
 
@@ -41,9 +60,9 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
             fprintf(stderr, "patch_name: %s\n", patch_name);
 //            fprintf(stderr, "patch_diff: %s\n", base64_patch_diff);
 
-            char patch_diff[1024*1024];
+            char patch_diff[1024 * 1024];
             Tcl_Size patch_diff_len;
-            base64_decode(base64_patch_diff, strnlen(base64_patch_diff, 1024*1024), patch_diff, &patch_diff_len);
+            base64_decode(base64_patch_diff, strnlen(base64_patch_diff, 1024 * 1024), patch_diff, &patch_diff_len);
 
             char patch_filename[256];
             snprintf(patch_filename, sizeof(patch_filename), "build/%s", patch_name);
@@ -55,7 +74,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
     }
     char install_script[MAX_INSTALL_SCRIPT_LEN];
     Tcl_Size install_script_len;
-    base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script, &install_script_len);
+    base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script,
+                  &install_script_len);
 
     char install_filename[256];
     snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", package_name, package_version);
@@ -68,12 +88,23 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
     ttrek_ResolvePath(interp, project_home_dir_ptr, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
 
     Tcl_Size argc = 2;
-    const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(project_home_dir_ptr), NULL };
+    const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(project_home_dir_ptr), NULL};
     fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
 
     if (TCL_OK != ttrek_ExecuteCommand(interp, argc, argv)) {
-        fprintf(stderr, "error: could not execute install script to completion: %s\n", Tcl_GetString(path_to_install_file_ptr));
+        fprintf(stderr, "error: could not execute install script to completion: %s\n",
+                Tcl_GetString(path_to_install_file_ptr));
         return TCL_ERROR;
+    }
+
+    if (direct_version_requirement != NULL) {
+        if (strnlen(direct_version_requirement, 256) > 0) {
+            ttrek_AddPackageToSpec(spec_root, package_name, direct_version_requirement);
+        } else {
+            char package_version_with_caret_op[256];
+            snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
+            ttrek_AddPackageToSpec(spec_root, package_name, package_version_with_caret_op);
+        }
     }
 
     cJSON_free(install_spec_root);
@@ -81,7 +112,9 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
     return TCL_OK;
 }
 
-int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const char *package_version) {
+int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const char *package_version,
+                         const char *direct_version_requirement,
+                         cJSON *spec_root, cJSON *lock_root) {
 
     Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
     if (!project_home_dir_ptr) {
@@ -89,7 +122,10 @@ int ttrek_InstallPackage(Tcl_Interp *interp, const char *package_name, const cha
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_InstallScriptAndPatches(interp, project_home_dir_ptr, package_name, package_version)) {
+    if (TCL_OK !=
+        ttrek_InstallScriptAndPatches(interp, project_home_dir_ptr, package_name, package_version,
+                                      direct_version_requirement,
+                                      spec_root, lock_root)) {
         fprintf(stderr, "error: installing script & patches failed\n");
         return TCL_ERROR;
     }
