@@ -28,6 +28,51 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     }
 }
 
+static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name, const char *package_version, cJSON *deps_node) {
+
+    // add direct requirement to dependencies
+    if (direct_version_requirement != NULL) {
+        cJSON *deps = cJSON_GetObjectItem(lock_root, "dependencies");
+        cJSON *dep = cJSON_GetObjectItem(deps, package_name);
+        if (dep) {
+            // modify the value
+            cJSON_ReplaceItemInObject(deps, package_name, cJSON_CreateString(direct_version_requirement));
+        } else {
+            cJSON_AddStringToObject(deps, package_name, direct_version_requirement);
+        }
+    }
+
+    // add the package to the packages list together with its dependencies
+
+    cJSON *item_node = cJSON_CreateObject();
+    cJSON_AddItemToObject(item_node, "version", cJSON_CreateString(package_version));
+    cJSON *reqs_node = cJSON_CreateObject();
+
+    for (int i = 0; i < cJSON_GetArraySize(deps_node); i++) {
+        cJSON *dep_item = cJSON_GetArrayItem(deps_node, i);
+        const char *dep_name = dep_item->string;
+        const char *dep_version_requirement = dep_item->valuestring;
+        fprintf(stderr, "dep_name: %s\n", dep_name);
+        fprintf(stderr, "dep_version_requirement: %s\n", dep_version_requirement);
+        cJSON_AddItemToObject(reqs_node, dep_name, cJSON_CreateString(dep_version_requirement));
+    }
+    cJSON_AddItemToObject(item_node, "requires", reqs_node);
+
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (!packages) {
+        packages = cJSON_CreateObject();
+        cJSON_AddItemToObject(lock_root, "packages", packages);
+    }
+
+    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    if (package) {
+        // modify the value
+        cJSON_ReplaceItemInObject(packages, package_name, item_node);
+    } else {
+        cJSON_AddItemToObject(packages, package_name, item_node);
+    }
+}
+
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, const char *package_name,
                                          const char *package_version, const char *direct_version_requirement,
                                          cJSON *spec_root, cJSON *lock_root) {
@@ -97,14 +142,19 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
         return TCL_ERROR;
     }
 
+    cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, "dependencies");
     if (direct_version_requirement != NULL) {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(spec_root, package_name, direct_version_requirement);
+            ttrek_AddPackageToLock(lock_root, direct_version_requirement, package_name, package_version, deps_node);
         } else {
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(spec_root, package_name, package_version_with_caret_op);
+            ttrek_AddPackageToLock(lock_root, direct_version_requirement, package_name, package_version_with_caret_op, deps_node);
         }
+    } else {
+        ttrek_AddPackageToLock(lock_root, direct_version_requirement, package_name, package_version, deps_node);
     }
 
     cJSON_free(install_spec_root);
