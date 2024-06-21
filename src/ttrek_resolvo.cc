@@ -140,15 +140,44 @@ int ttrek_ParseConstraintsFromLockFile(Tcl_Interp *interp, std::map<std::string,
     return TCL_OK;
 }
 
+static int ttrek_ParseRequirementsFromSpecFile(Tcl_Interp *interp, std::map<std::string, std::string> &requirements) {
+    cJSON *spec_root = ttrek_GetSpecRoot(interp);
+    if (!spec_root) {
+        fprintf(stderr, "error: getting spec root failed\n");
+        return TCL_ERROR;
+    }
+
+    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
+    if (dependencies) {
+        for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
+            cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
+            std::string package_name = dep_item->string;
+            std::string package_version_requirement = cJSON_GetStringValue(dep_item);
+            std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
+                      << package_version_requirement << std::endl;
+            requirements[package_name] = package_version_requirement;
+        }
+    }
+    return TCL_OK;
+}
+
 int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::string& message, std::map<std::string, std::string> &requirements,
                 std::vector<std::string> &installs) {
     PackageDatabase db;
 
     ttrek_ParseRequirements(objc, objv, requirements);
+    // Parse additional requirements from spec file
+    std::map<std::string, std::string> additional_requirements;
+    if (TCL_OK != ttrek_ParseRequirementsFromSpecFile(interp, additional_requirements)) {
+        return TCL_ERROR;
+    }
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
     for (const auto &requirement: requirements) {
+        requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
+    }
+    for (const auto &requirement: additional_requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
     }
 
