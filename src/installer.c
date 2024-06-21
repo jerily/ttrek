@@ -151,10 +151,10 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, Tcl_Obj *project_ho
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(spec_root, package_name, package_version_with_caret_op);
-            ttrek_AddPackageToLock(lock_root, direct_version_requirement, package_name, package_version_with_caret_op, deps_node);
+            ttrek_AddPackageToLock(lock_root, package_version_with_caret_op, package_name, package_version, deps_node);
         }
     } else {
-        ttrek_AddPackageToLock(lock_root, direct_version_requirement, package_name, package_version, deps_node);
+        ttrek_AddPackageToLock(lock_root, NULL, package_name, package_version, deps_node);
     }
 
     cJSON_free(install_spec_root);
