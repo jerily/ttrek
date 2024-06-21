@@ -111,6 +111,12 @@ public:
         return Range({{Included<V>{v}, Unbounded()}});
     }
 
+    // Set of all versions higher or equal to some version
+    static Range compatible_with(const V &v) {
+        V next_v = v.next_major_version();
+        return Range({{Included<V>{v}, Excluded<V>{next_v}}});
+    }
+
     // Set of all versions higher to some version
     static Range strictly_higher_than(const V &v) {
         return Range({{Excluded<V>{v}, Unbounded()}});

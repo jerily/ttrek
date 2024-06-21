@@ -79,6 +79,16 @@ struct Pack {
         }
     }
 
+    explicit Pack(const semver_t &version) : version(version) {}
+
+    Pack next_major_version() const {
+        semver_t next_version = version;
+        next_version.major++;
+        next_version.minor = 0;
+        next_version.patch = 0;
+        return Pack(next_version);
+    }
+
     bool operator==(const Pack &other) const {
         return semver_compare(version, other.version) == 0;
     }
@@ -178,6 +188,8 @@ static std::pair<std::string_view, std::string_view> parse_operator(const std::s
         } else {
             return {"==", s.substr(1)};
         }
+    } else if (s.size() >= 2 && s[0] == '^') {
+        return {"^", s.substr(1)};
     } else {
         return {"==", s};
     }
@@ -202,6 +214,8 @@ static Range<Pack> version_range(std::optional<resolvo::String> s) {
                 and_range = and_range.intersection_with(Range<Pack>::strictly_lower_than(Pack(rest)));
             } else if (op == "==") {
                 and_range = and_range.intersection_with(Range<Pack>::singleton(Pack(rest)));
+            } else if (op == "^") {
+                and_range = and_range.intersection_with(Range<Pack>::compatible_with(Pack(rest)));
             } else {
                 throw std::runtime_error("Invalid operator: " + std::string(op));
             }
