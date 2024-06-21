@@ -153,9 +153,9 @@ int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::s
     }
 
     std::map<std::string, std::string> constraints;
-    if (TCL_OK != ttrek_ParseConstraintsFromLockFile(interp, constraints)) {
-        return TCL_ERROR;
-    }
+//    if (TCL_OK != ttrek_ParseConstraintsFromLockFile(interp, constraints)) {
+//        return TCL_ERROR;
+//    }
 
     resolvo::Vector<resolvo::VersionSetId> constraints_vector;
     for (const auto &constraint: constraints) {
