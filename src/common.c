@@ -18,6 +18,8 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj
         return TCL_ERROR;
     }
 
+//    *path_ptr = Tcl_FSGetNormalizedPath(interp, *path_ptr);
+
     return TCL_OK;
 }
 
@@ -40,9 +42,8 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 }
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
-    char buffer[65536];
-    cJSON_PrintPreallocated(root, buffer, sizeof(buffer), 1);
-    return ttrek_WriteChars(interp, path_ptr, Tcl_NewStringObj(buffer, -1), 0666);
+    int prebuffer = 1024 * 1024;
+    return ttrek_WriteChars(interp, path_ptr, Tcl_NewStringObj(cJSON_PrintBuffered(root, prebuffer, 1), -1), 0666);
 }
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {
@@ -165,6 +166,27 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
     return NULL;
 }
 
+Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp) {
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return NULL;
+    }
+
+    Tcl_Obj *install_dir_ptr = Tcl_NewStringObj(INSTALL_DIR, -1);
+    Tcl_IncrRefCount(install_dir_ptr);
+    Tcl_Obj *path_to_install_dir_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, install_dir_ptr, &path_to_install_dir_ptr)) {
+        Tcl_DecrRefCount(install_dir_ptr);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(install_dir_ptr);
+    Tcl_IncrRefCount(path_to_install_dir_ptr);
+
+    Tcl_DecrRefCount(project_home_dir_ptr);
+    return path_to_install_dir_ptr;
+}
 
 cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp) {
 
