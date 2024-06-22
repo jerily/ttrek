@@ -8,6 +8,12 @@
 #include "ttrek_resolvo.h"
 
 int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    return ttrek_pretend(interp, objc, objv);
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, MODE_LOCAL);
+    if (state_ptr == NULL) {
+        return TCL_ERROR;
+    }
+    int result = ttrek_pretend(interp, objc, objv, state_ptr);
+    ttrek_DestroyState(state_ptr);
+    return result;
 }
 

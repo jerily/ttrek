@@ -12,8 +12,8 @@
 extern "C" {
 #endif
 
-int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]);
-int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]);
+int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr);
+int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr);
 
 #ifdef __cplusplus
 }

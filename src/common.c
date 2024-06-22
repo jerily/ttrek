@@ -7,6 +7,7 @@
 #include "common.h"
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdlib.h>
 #include "cjson/cJSON.h"
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
@@ -112,7 +113,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) 
     return TCL_OK;
 }
 
-Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
+Tcl_Obj *ttrek_GetProjectDirForLocalMode(Tcl_Interp *interp) {
     Tcl_Obj *project_homedir_ptr = Tcl_FSGetCwd(interp);
     if (!project_homedir_ptr) {
         fprintf(stderr, "error: getting project home directory failed\n");
@@ -166,79 +167,71 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp) {
     return NULL;
 }
 
-Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp) {
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return NULL;
+Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
+    if (mode == MODE_LOCAL) {
+        return ttrek_GetProjectDirForLocalMode(interp);
+    } else if (mode == MODE_USER) {
+//        return ttrek_GetProjectDirForUserMode(interp);
+    } else if (mode == MODE_GLOBAL) {
+//        return ttrek_GetProjectDirForGlobalMode(interp);
     }
+    return NULL;
+}
 
+Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     Tcl_Obj *install_dir_ptr = Tcl_NewStringObj(INSTALL_DIR, -1);
     Tcl_IncrRefCount(install_dir_ptr);
     Tcl_Obj *path_to_install_dir_ptr;
     if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, install_dir_ptr, &path_to_install_dir_ptr)) {
         Tcl_DecrRefCount(install_dir_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
         return NULL;
     }
     Tcl_DecrRefCount(install_dir_ptr);
     Tcl_IncrRefCount(path_to_install_dir_ptr);
-
-    Tcl_DecrRefCount(project_home_dir_ptr);
     return path_to_install_dir_ptr;
 }
 
-cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp) {
-
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return NULL;
-    }
-
+Tcl_Obj *ttrek_GetSpecFilePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     Tcl_Obj *spec_filename_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
     Tcl_IncrRefCount(spec_filename_ptr);
     Tcl_Obj *path_to_spec_file_ptr;
     if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, spec_filename_ptr, &path_to_spec_file_ptr)) {
         Tcl_DecrRefCount(spec_filename_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
         return NULL;
     }
     Tcl_DecrRefCount(spec_filename_ptr);
     Tcl_IncrRefCount(path_to_spec_file_ptr);
+    return path_to_spec_file_ptr;
+}
 
+cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
+    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
     cJSON *spec_root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_to_spec_file_ptr, &spec_root)) {
         fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_spec_file_ptr));
         Tcl_DecrRefCount(path_to_spec_file_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
         return NULL;
     }
-
     Tcl_DecrRefCount(path_to_spec_file_ptr);
-    Tcl_DecrRefCount(project_home_dir_ptr);
-
     return spec_root;
 }
 
-cJSON *ttrek_GetLockRoot(Tcl_Interp *interp) {
-
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return NULL;
-    }
-
+Tcl_Obj *ttrek_GetLockFilePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
     Tcl_IncrRefCount(lock_filename_ptr);
     Tcl_Obj *path_to_lock_file_ptr;
     if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
         Tcl_DecrRefCount(lock_filename_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
         return NULL;
     }
     Tcl_DecrRefCount(lock_filename_ptr);
     Tcl_IncrRefCount(path_to_lock_file_ptr);
+    return path_to_lock_file_ptr;
+}
+
+cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
+
+    Tcl_Obj *path_to_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
 
     cJSON *lock_root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
@@ -252,4 +245,58 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp) {
     Tcl_DecrRefCount(project_home_dir_ptr);
 
     return lock_root;
+}
+
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
+    ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
+    if (!state_ptr) {
+        return NULL;
+    }
+    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp, mode);
+    if (!project_home_dir_ptr) {
+        fprintf(stderr, "error: getting project home directory failed\n");
+        return NULL;
+    }
+
+    fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr));
+
+    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
+
+    if (TCL_OK != ttrek_CheckFileExists(path_to_spec_file_ptr)) {
+        fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        Tcl_DecrRefCount(path_to_spec_file_ptr);
+        return NULL;
+    }
+
+    Tcl_Obj *path_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
+
+    if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
+        fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", LOCK_JSON_FILE);
+        Tcl_DecrRefCount(project_home_dir_ptr);
+        Tcl_DecrRefCount(path_to_spec_file_ptr);
+        Tcl_DecrRefCount(path_lock_file_ptr);
+        return NULL;
+    }
+
+    state_ptr->mode = mode;
+    state_ptr->project_home_dir_ptr = project_home_dir_ptr;
+    state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
+    state_ptr->lock_json_path_ptr = path_lock_file_ptr;
+    state_ptr->project_install_dir_ptr = ttrek_GetInstallDir(interp, project_home_dir_ptr);
+    state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
+    state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
+
+
+    return state_ptr;
+}
+
+void ttrek_DestroyState(ttrek_state_t *state_ptr) {
+    Tcl_DecrRefCount(state_ptr->project_home_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
+    Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
+    Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
+    cJSON_Delete(state_ptr->spec_root);
+    cJSON_Delete(state_ptr->lock_root);
+    Tcl_Free((char *) state_ptr);
 }

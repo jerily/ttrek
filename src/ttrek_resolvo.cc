@@ -79,75 +79,8 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
     return TCL_OK;
 }
 
-int ttrek_ParseConstraintsFromLockFile(Tcl_Interp *interp, std::map<std::string, std::string>& constraints) {
-
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return TCL_ERROR;
-    }
-
-    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
-    Tcl_IncrRefCount(lock_filename_ptr);
-    Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
-        Tcl_DecrRefCount(lock_filename_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        return TCL_ERROR;
-    }
-    Tcl_DecrRefCount(lock_filename_ptr);
-    Tcl_IncrRefCount(path_to_lock_file_ptr);
-
-    cJSON *lock_root = nullptr;
-    if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
-        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
-        Tcl_DecrRefCount(path_to_lock_file_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        return TCL_ERROR;
-    }
-
-    // add constraints from direct version requirements
-    cJSON *dependencies = cJSON_GetObjectItem(lock_root, "dependencies");
-    if (0 && dependencies) {
-        for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
-            cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
-            std::string package_name = dep_item->string;
-            std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
-                      << package_version_requirement << std::endl;
-            constraints[package_name] = package_version_requirement;
-        }
-    }
-
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
-    if (packages) {
-        for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
-            cJSON *package = cJSON_GetArrayItem(packages, i);
-            cJSON *package_reqs = cJSON_GetObjectItem(package, "requires");
-            for (int j = 0; j < cJSON_GetArraySize(package_reqs); j++) {
-                cJSON *package_req = cJSON_GetArrayItem(package_reqs, j);
-                std::string package_name = package_req->string;
-                std::string package_version_requirement = cJSON_GetStringValue(package_req);
-                std::cout << "(transitive) package_name: " << package_name << " package_version_requirement: "
-                          << package_version_requirement << std::endl;
-                constraints[package_name] = package_version_requirement;
-            }
-        }
-    }
-
-    Tcl_DecrRefCount(path_to_lock_file_ptr);
-    Tcl_DecrRefCount(project_home_dir_ptr);
-    return TCL_OK;
-}
-
-static int ttrek_ParseRequirementsFromSpecFile(Tcl_Interp *interp, std::map<std::string, std::string> &requirements) {
-    cJSON *spec_root = ttrek_GetSpecRoot(interp);
-    if (!spec_root) {
-        fprintf(stderr, "error: getting spec root failed\n");
-        return TCL_ERROR;
-    }
-
-    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
+static void ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::map<std::string, std::string> &requirements) {
+    cJSON *dependencies = cJSON_GetObjectItem(state_ptr->spec_root, "dependencies");
     if (dependencies) {
         for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
@@ -158,19 +91,16 @@ static int ttrek_ParseRequirementsFromSpecFile(Tcl_Interp *interp, std::map<std:
             requirements[package_name] = package_version_requirement;
         }
     }
-    return TCL_OK;
 }
 
-int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::string& message, std::map<std::string, std::string> &requirements,
+int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, std::string& message, std::map<std::string, std::string> &requirements,
                 std::vector<std::string> &installs) {
     PackageDatabase db;
 
     ttrek_ParseRequirements(objc, objv, requirements);
     // Parse additional requirements from spec file
     std::map<std::string, std::string> additional_requirements;
-    if (TCL_OK != ttrek_ParseRequirementsFromSpecFile(interp, additional_requirements)) {
-        return TCL_ERROR;
-    }
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, additional_requirements);
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
@@ -182,9 +112,7 @@ int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::s
     }
 
     std::map<std::string, std::string> constraints;
-//    if (TCL_OK != ttrek_ParseConstraintsFromLockFile(interp, constraints)) {
-//        return TCL_ERROR;
-//    }
+    // todo: constraints for optional dependencies
 
     resolvo::Vector<resolvo::VersionSetId> constraints_vector;
     for (const auto &constraint: constraints) {
@@ -204,12 +132,12 @@ int ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], std::s
     return TCL_OK;
 }
 
-int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;
     std::string message;
-    if (TCL_OK != ttrek_Solve(interp, objc, objv, message, requirements, installs)) {
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, state_ptr, message, requirements, installs)) {
         return TCL_ERROR;
     }
     if (installs.empty()) {
@@ -223,97 +151,38 @@ int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 }
 
 
-static int ttrek_UpdateSpecFileAfterInstall(Tcl_Interp *interp, cJSON *spec_root) {
-
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return TCL_ERROR;
-    }
-
-    // path_to_spec_file_ptr
-    Tcl_Obj *spec_file_name_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
-    Tcl_IncrRefCount(spec_file_name_ptr);
-    Tcl_Obj *path_to_spec_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, spec_file_name_ptr, &path_to_spec_file_ptr)) {
-        Tcl_DecrRefCount(spec_file_name_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        return TCL_ERROR;
-    }
-    Tcl_DecrRefCount(spec_file_name_ptr);
-    Tcl_IncrRefCount(path_to_spec_file_ptr);
-
+static int ttrek_UpdateSpecFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
     // write spec file
-    if (TCL_OK != ttrek_WriteJsonFile(interp, path_to_spec_file_ptr, spec_root)) {
-        fprintf(stderr, "error: could not write %s\n", Tcl_GetString(path_to_spec_file_ptr));
-        Tcl_DecrRefCount(path_to_spec_file_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
+    if (TCL_OK != ttrek_WriteJsonFile(interp, state_ptr->spec_json_path_ptr, state_ptr->spec_root)) {
+        fprintf(stderr, "error: could not write %s\n", Tcl_GetString(state_ptr->spec_json_path_ptr));
         return TCL_ERROR;
     }
-
-    Tcl_DecrRefCount(path_to_spec_file_ptr);
-    Tcl_DecrRefCount(project_home_dir_ptr);
     return TCL_OK;
 }
 
-static int ttrek_UpdateLockFileAfterInstall(Tcl_Interp *interp, cJSON *lock_root) {
-
-    Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp);
-    if (!project_home_dir_ptr) {
-        fprintf(stderr, "error: getting project home directory failed\n");
-        return TCL_ERROR;
-    }
-
-    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
-    Tcl_IncrRefCount(lock_filename_ptr);
-    Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
-        Tcl_DecrRefCount(lock_filename_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        return TCL_ERROR;
-    }
-    Tcl_DecrRefCount(lock_filename_ptr);
-    Tcl_IncrRefCount(path_to_lock_file_ptr);
-
+static int ttrek_UpdateLockFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
     // write lock file
-    if (TCL_OK != ttrek_WriteJsonFile(interp, path_to_lock_file_ptr, lock_root)) {
-        fprintf(stderr, "error: could not write %s\n", Tcl_GetString(path_to_lock_file_ptr));
-        Tcl_DecrRefCount(path_to_lock_file_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
+    if (TCL_OK != ttrek_WriteJsonFile(interp, state_ptr->lock_json_path_ptr, state_ptr->lock_root)) {
+        fprintf(stderr, "error: could not write %s\n", Tcl_GetString(state_ptr->lock_json_path_ptr));
         return TCL_ERROR;
     }
-
-    Tcl_DecrRefCount(path_to_lock_file_ptr);
-    Tcl_DecrRefCount(project_home_dir_ptr);
     return TCL_OK;
 }
 
-int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
 
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;
     std::string message;
 
-    if (TCL_OK != ttrek_Solve(interp, objc, objv, message, requirements, installs)) {
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, state_ptr, message, requirements, installs)) {
         return TCL_ERROR;
     }
 
     if (installs.empty()) {
         std::cout << message << std::endl;
     } else {
-
-        cJSON *spec_root = ttrek_GetSpecRoot(interp);
-        if (!spec_root) {
-            fprintf(stderr, "error: getting spec root failed\n");
-            return TCL_ERROR;
-        }
-
-        cJSON *lock_root = ttrek_GetLockRoot(interp);
-        if (!lock_root) {
-            fprintf(stderr, "error: getting lock root failed\n");
-            return TCL_ERROR;
-        }
 
         std::reverse(installs.begin(), installs.end());
         for (const auto &install: installs) {
@@ -327,26 +196,18 @@ int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
                     requirements.find(package_name) != requirements.end() ? requirements.at(package_name).c_str()
                                                                           : nullptr;
             if (TCL_OK !=
-                ttrek_InstallPackage(interp, package_name.c_str(), package_version.c_str(), direct_version_requirement,
-                                     spec_root, lock_root)) {
+                ttrek_InstallPackage(interp, state_ptr, package_name.c_str(), package_version.c_str(), direct_version_requirement)) {
                 return TCL_ERROR;
             }
         }
 
-        if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, spec_root)) {
-            cJSON_free(spec_root);
-            cJSON_free(lock_root);
+        if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;
         }
 
-        if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, lock_root)) {
-            cJSON_free(spec_root);
-            cJSON_free(lock_root);
+        if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;
         }
-
-        cJSON_free(spec_root);
-        cJSON_free(lock_root);
 
     }
     return TCL_OK;

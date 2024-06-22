@@ -60,21 +60,20 @@ static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *INSTALL_DIR = "local";
 
+typedef enum {
+    MODE_LOCAL,
+    MODE_USER,
+    MODE_GLOBAL
+} ttrek_mode_t;
+
 typedef struct {
-    Tcl_Interp *interp;
     Tcl_Obj *project_home_dir_ptr;
     Tcl_Obj *project_install_dir_ptr;
-    Tcl_Obj *spec_json_file_ptr;
-    Tcl_Obj *lock_json_file_ptr;
     Tcl_Obj *spec_json_path_ptr;
     Tcl_Obj *lock_json_path_ptr;
-    Tcl_Obj *spec_json_contents_ptr;
-    Tcl_Obj *lock_json_contents_ptr;
     cJSON *spec_root;
     cJSON *lock_root;
-    int option_user;
-    int option_global;
-    int option_local;
+    ttrek_mode_t mode;
 } ttrek_state_t;
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
@@ -91,10 +90,13 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
 
-Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp);
-Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp);
-cJSON *ttrek_GetLockRoot(Tcl_Interp *interp);
-cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
+//Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode);
+//Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp);
+//cJSON *ttrek_GetLockRoot(Tcl_Interp *interp);
+//cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
+
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode);
+void ttrek_DestroyState(ttrek_state_t *state_ptr);
 
 #ifdef __cplusplus
 }
