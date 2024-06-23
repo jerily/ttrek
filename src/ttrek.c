@@ -28,6 +28,19 @@ enum subcommand {
     SUBCMD_PRETEND
 };
 
+static int ttrek_Startup(Tcl_Interp *interp) {
+
+    if (Tcl_Init(interp) != TCL_OK) {
+        goto error;
+    }
+
+    return TCL_OK;
+
+error:
+    return TCL_ERROR;
+
+}
+
 int main(int argc, char *argv[]) {
 
     if (argc <= 1) {
@@ -77,6 +90,9 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
+
+    TclZipfs_AppHook(&argc, &argv);
+    Tcl_MainEx(argc, argv, ttrek_Startup, interp);
 
     return 0;
 }
