@@ -10,11 +10,11 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, MODE_LOCAL);
 
-    Tcl_Obj *filename_ptr = Tcl_NewStringObj("local/bin/", -1);
+    Tcl_Obj *filename_ptr = Tcl_NewStringObj("bin/", -1);
     Tcl_IncrRefCount(filename_ptr);
     Tcl_AppendObjToObj(filename_ptr, objv[0]);
     Tcl_Obj *path_to_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, state_ptr->project_home_dir_ptr, filename_ptr, &path_to_file_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, filename_ptr, &path_to_file_ptr)) {
         Tcl_DecrRefCount(filename_ptr);
         return TCL_ERROR;
     }
