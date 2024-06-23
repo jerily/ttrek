@@ -8,5 +8,6 @@ install
 local
 local-static
 certs
+/ttrek-venv
 /ttrek.json
 /ttrek-lock.json

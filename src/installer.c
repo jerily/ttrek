@@ -88,6 +88,12 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                                          const char *package_version, const char *direct_version_requirement) {
+
+    if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
+        fprintf(stderr, "error: could not ensure directory skeleton exists\n");
+        return TCL_ERROR;
+    }
+
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, package_name, package_version);
 
@@ -122,10 +128,10 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             base64_decode(base64_patch_diff, strnlen(base64_patch_diff, MAX_PATCH_FILE_SIZE), patch_diff, &patch_diff_len);
 
             char patch_filename[256];
-            snprintf(patch_filename, sizeof(patch_filename), "build/%s", patch_name);
+            snprintf(patch_filename, sizeof(patch_filename), "patch-%s-%s-%s", package_name, package_version, patch_name);
 
             Tcl_Obj *patch_file_path_ptr;
-            ttrek_ResolvePath(interp, state_ptr->project_home_dir_ptr, Tcl_NewStringObj(patch_filename, -1), &patch_file_path_ptr);
+            ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1), &patch_file_path_ptr);
             ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0666);
         }
     }
@@ -135,17 +141,14 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
                   &install_script_len);
 
     char install_filename[256];
-    snprintf(install_filename, sizeof(install_filename), "build/install-%s-%s.sh", package_name, package_version);
-
-    Tcl_Obj *install_file_path_ptr;
-    ttrek_ResolvePath(interp, state_ptr->project_home_dir_ptr, Tcl_NewStringObj(install_filename, -1), &install_file_path_ptr);
-    ttrek_WriteChars(interp, install_file_path_ptr, Tcl_NewStringObj(install_script, install_script_len), 0777);
+    snprintf(install_filename, sizeof(install_filename), "install-%s-%s.sh", package_name, package_version);
 
     Tcl_Obj *path_to_install_file_ptr;
-    ttrek_ResolvePath(interp, state_ptr->project_home_dir_ptr, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
+    ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
+    ttrek_WriteChars(interp, path_to_install_file_ptr, Tcl_NewStringObj(install_script, install_script_len), 0777);
 
     Tcl_Size argc = 2;
-    const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(state_ptr->project_home_dir_ptr), NULL};
+    const char *argv[3] = {Tcl_GetString(path_to_install_file_ptr), Tcl_GetString(state_ptr->project_venv_dir_ptr), NULL};
     fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
 
     ttrek_fsmonitor_state_t *fsmonitor_state_ptr = (ttrek_fsmonitor_state_t *) Tcl_Alloc(sizeof(ttrek_fsmonitor_state_t));

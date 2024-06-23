@@ -49,6 +49,17 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
+    Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, cwd);
+    if (TCL_OK == ttrek_CheckFileExists(project_venv_dir_ptr)) {
+        fprintf(stderr, "error: %s already exists\n", Tcl_GetString(project_venv_dir_ptr));
+        Tcl_DecrRefCount(path_to_spec_ptr);
+        Tcl_DecrRefCount(path_to_lock_ptr);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
+        Tcl_DecrRefCount(project_venv_dir_ptr);
+        return TCL_ERROR;
+    }
+
 
     int option_yes = 0;
     int option_force = 0;
@@ -98,7 +109,6 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     cJSON *lock_dependencies = cJSON_CreateObject();
     cJSON_AddItemToObject(lock_root, "dependencies", lock_dependencies);
     ttrek_WriteJsonFile(interp, path_to_lock_ptr, lock_root);
-
 
     cJSON_Delete(spec_root);
     cJSON_Delete(lock_root);

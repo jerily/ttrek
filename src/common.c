@@ -31,6 +31,64 @@ int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
     return TCL_OK;
 }
 
+static int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) {
+    if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
+        *exists = 0;
+    } else {
+        *exists = 1;
+    }
+    return TCL_OK;
+}
+
+static int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
+    int exists;
+    if (TCL_OK != ttrek_FileExists(interp, dir_path_ptr, &exists)) {
+        fprintf(stderr, "error: could not check if directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (exists) {
+        return TCL_OK;
+    }
+
+    if (TCL_OK != Tcl_FSCreateDirectory(dir_path_ptr)) {
+        fprintf(stderr, "error: could not create directory\n");
+        return TCL_ERROR;
+    }
+
+    return TCL_OK;
+}
+
+int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_home_dir_ptr)) {
+        fprintf(stderr, "error: could not ensure project home directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_venv_dir_ptr)) {
+        fprintf(stderr, "error: could not ensure project venv directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_build_dir_ptr)) {
+        fprintf(stderr, "error: could not ensure project build directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_install_dir_ptr)) {
+        fprintf(stderr, "error: could not ensure project install directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_temp_dir_ptr)) {
+        fprintf(stderr, "error: could not ensure project temp directory exists\n");
+        return TCL_ERROR;
+    }
+
+    return TCL_OK;
+}
+
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions) {
     Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", permissions);
     if (!chan) {
@@ -178,11 +236,24 @@ Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
     return NULL;
 }
 
-Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
-    Tcl_Obj *install_dir_ptr = Tcl_NewStringObj(INSTALL_DIR, -1);
+Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
+    Tcl_Obj *venv_dir_ptr = Tcl_NewStringObj(VENV_DIR, -1);
+    Tcl_IncrRefCount(venv_dir_ptr);
+    Tcl_Obj *path_to_venv_dir_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, venv_dir_ptr, &path_to_venv_dir_ptr)) {
+        Tcl_DecrRefCount(venv_dir_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(venv_dir_ptr);
+    Tcl_IncrRefCount(path_to_venv_dir_ptr);
+    return path_to_venv_dir_ptr;
+}
+
+Tcl_Obj *ttrek_GetVenvSubDir(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr, const char *subdir) {
+    Tcl_Obj *install_dir_ptr = Tcl_NewStringObj(subdir, -1);
     Tcl_IncrRefCount(install_dir_ptr);
     Tcl_Obj *path_to_install_dir_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, install_dir_ptr, &path_to_install_dir_ptr)) {
+    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, install_dir_ptr, &path_to_install_dir_ptr)) {
         Tcl_DecrRefCount(install_dir_ptr);
         return NULL;
     }
@@ -279,11 +350,16 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
         return NULL;
     }
 
+    Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
+
     state_ptr->mode = mode;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
+    state_ptr->project_venv_dir_ptr = project_venv_dir_ptr;
+    state_ptr->project_install_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, INSTALL_DIR);
+    state_ptr->project_build_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, BUILD_DIR);
+    state_ptr->project_temp_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, TEMP_DIR);
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
-    state_ptr->project_install_dir_ptr = ttrek_GetInstallDir(interp, project_home_dir_ptr);
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
 
@@ -293,9 +369,12 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
 
 void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->project_home_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->project_venv_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->project_build_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->project_temp_dir_ptr);
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
-    Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
     cJSON_Delete(state_ptr->spec_root);
     cJSON_Delete(state_ptr->lock_root);
     Tcl_Free((char *) state_ptr);

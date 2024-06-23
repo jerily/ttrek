@@ -86,8 +86,7 @@ static void ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::m
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
             std::string package_name = dep_item->string;
             std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
-                      << package_version_requirement << std::endl;
+            DBG(std::cout << "(direct) package_name: " << package_name << " package_version_requirement: " << package_version_requirement << std::endl);
             requirements[package_name] = package_version_requirement;
         }
     }

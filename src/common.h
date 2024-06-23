@@ -58,7 +58,10 @@ static const char *VERSION = XSTR(PROJECT_VERSION);
 static const char *REGISTRY_URL = "http://localhost:8080/registry";
 static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
+static const char *VENV_DIR = "ttrek-venv";
 static const char *INSTALL_DIR = "local";
+static const char *BUILD_DIR = "build";
+static const char *TEMP_DIR = "tmp";
 
 typedef enum {
     MODE_LOCAL,
@@ -68,7 +71,10 @@ typedef enum {
 
 typedef struct {
     Tcl_Obj *project_home_dir_ptr;
+    Tcl_Obj *project_venv_dir_ptr;
     Tcl_Obj *project_install_dir_ptr;
+    Tcl_Obj *project_build_dir_ptr;
+    Tcl_Obj *project_temp_dir_ptr;
     Tcl_Obj *spec_json_path_ptr;
     Tcl_Obj *lock_json_path_ptr;
     cJSON *spec_root;
@@ -79,6 +85,7 @@ typedef struct {
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
+int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root);
 
@@ -95,6 +102,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
 //cJSON *ttrek_GetLockRoot(Tcl_Interp *interp);
 //cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
 
+Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
 ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode);
 void ttrek_DestroyState(ttrek_state_t *state_ptr);
 
