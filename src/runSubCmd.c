@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT.
  */
 
+#include <stdlib.h>
 #include "subCmdDecls.h"
 
 int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
@@ -21,8 +22,13 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(filename_ptr);
     Tcl_IncrRefCount(path_to_file_ptr);
 
+    char ld_library_path_str[1024];
+    snprintf(ld_library_path_str, 1024, "LD_LIBRARY_PATH=%s/lib;%s/lib64",
+             Tcl_GetString(state_ptr->project_install_dir_ptr), Tcl_GetString(state_ptr->project_install_dir_ptr));
+
     Tcl_Size argc = objc;
     const char *argv[objc];
+    setenv("LD_LIBRARY_PATH", ld_library_path_str, 1);
     argv[0] = Tcl_GetString(path_to_file_ptr);
     fprintf(stderr, "path_to_file: %s\n", Tcl_GetString(path_to_file_ptr));
     for (int i = 1; i < objc; i++) {
