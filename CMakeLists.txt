@@ -76,6 +76,7 @@ add_custom_command(
     DEPENDS mkimg.tcl
         scripts/main.tcl
         scripts/tcl_library/ttrek/pkgIndex.tcl
+        scripts/tcl_library/ttrek/ttrek_helper.tcl
         scripts/tcl_library/ttrek/ttrek.tcl
     VERBATIM
 )
@@ -102,6 +103,8 @@ if (NOT APPLE)
 endif()
 
 add_dependencies(${TARGET} generate_ttrek_image)
+
+set_target_properties(${TARGET} PROPERTIES LINK_DEPENDS ttrek.img)
 
 add_custom_command(TARGET ${TARGET}
     POST_BUILD
