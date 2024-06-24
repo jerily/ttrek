@@ -40,7 +40,7 @@ std::map<std::string_view, std::map<std::string_view, std::vector<std::pair<std:
               }}
 };
 
-std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(std::string package_name) {
+std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(const std::string& package_name) {
     std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> result;
     char package_versions_url[256];
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
@@ -62,7 +62,7 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
             const char *dep_name = deps_item->string;
             const char *dep_version = cJSON_GetStringValue(deps_item);
             DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
-            deps.push_back({dep_name, dep_version});
+            deps.emplace_back(dep_name, dep_version);
         }
         result[version_str] = deps;
     }
