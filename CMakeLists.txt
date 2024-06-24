@@ -70,6 +70,18 @@ add_executable(${TARGET}
         src/fsmonitor/fsmonitor.c
 )
 
+add_custom_command(
+    OUTPUT ttrek.img
+    COMMAND ${CMAKE_INSTALL_PREFIX}/bin/tclsh9.0 ${CMAKE_CURRENT_SOURCE_DIR}/mkimg.tcl -o ttrek.img
+    DEPENDS mkimg.tcl
+        scripts/main.tcl
+        scripts/tcl_library/ttrek/pkgIndex.tcl
+        scripts/tcl_library/ttrek/ttrek_helper.tcl
+        scripts/tcl_library/ttrek/ttrek.tcl
+    VERBATIM
+)
+add_custom_target(generate_ttrek_image DEPENDS ttrek.img)
+
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
 set(RESOLVO_LIB "${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp/libresolvo_cpp.a")
 message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
@@ -81,7 +93,7 @@ set(OPENSSL_LIBRARIES "${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}")
 find_library(CURL_LIBRARY NAMES libcurl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(TCL_LIBRARY NAMES libtcl8.6.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(TCL_LIBRARY NAMES libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 target_include_directories(${TARGET} PRIVATE "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
@@ -89,6 +101,16 @@ target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} stdc++ ${TCL_LIBRARY} ${Z
 if (NOT APPLE)
     target_link_options(${TARGET} PRIVATE -static)
 endif()
+
+add_dependencies(${TARGET} generate_ttrek_image)
+
+set_target_properties(${TARGET} PROPERTIES LINK_DEPENDS ttrek.img)
+
+add_custom_command(TARGET ${TARGET}
+    POST_BUILD
+    COMMAND cat ttrek.img >> ${TARGET}
+    VERBATIM
+)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}

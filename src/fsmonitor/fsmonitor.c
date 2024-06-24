@@ -14,7 +14,7 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
     Tcl_InitHashTable(&ht, TCL_STRING_KEYS);
 
     // add all elements of list1 to the hash table
-    int list1_len;
+    Tcl_Size list1_len;
     if (TCL_OK != Tcl_ListObjLength(interp, list1, &list1_len)) {
         fprintf(stderr, "error: could not get length of list1\n");
         return TCL_ERROR;
@@ -32,7 +32,7 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
     }
 
     // remove all elements of list2 from the hash table
-    int list2_len;
+    Tcl_Size list2_len;
     if (TCL_OK != Tcl_ListObjLength(interp, list2, &list2_len)) {
         fprintf(stderr, "error: could not get length of list2\n");
         return TCL_ERROR;
@@ -76,17 +76,17 @@ int ttrek_MatchInDirectory(Tcl_Interp *interp, Tcl_Obj *result_ptr, Tcl_Obj *pat
     }
 
     // append the list of files to the result
-    int list_len;
+    Tcl_Size list_len;
     if (TCL_OK != Tcl_ListObjLength(interp, files_ptr, &list_len)) {
         fprintf(stderr, "error: could not get length of files\n");
         Tcl_DecrRefCount(files_ptr);
         return TCL_ERROR;
     }
 
-    for (int i = 0; i < list_len; i++) {
+    for (Tcl_Size i = 0; i < list_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, files_ptr, i, &elem)) {
-            fprintf(stderr, "error: could not get element %d of files\n", i);
+            fprintf(stderr, "error: could not get element %" TCL_SIZE_MODIFIER "d of files\n", i);
             Tcl_DecrRefCount(files_ptr);
             return TCL_ERROR;
         }
@@ -112,17 +112,17 @@ int ttrek_MatchInDirectory(Tcl_Interp *interp, Tcl_Obj *result_ptr, Tcl_Obj *pat
         }
 
         // for each directory, call MatchInDirectory
-        int dirs_len;
+        Tcl_Size dirs_len;
         if (TCL_OK != Tcl_ListObjLength(interp, dirs_ptr, &dirs_len)) {
             fprintf(stderr, "error: could not get length of dirs\n");
             Tcl_DecrRefCount(dirs_ptr);
             return TCL_ERROR;
         }
 
-        for (int i = 0; i < dirs_len; i++) {
+        for (Tcl_Size i = 0; i < dirs_len; i++) {
             Tcl_Obj *dir;
             if (TCL_OK != Tcl_ListObjIndex(interp, dirs_ptr, i, &dir)) {
-                fprintf(stderr, "error: could not get element %d of dirs\n", i);
+                fprintf(stderr, "error: could not get element %" TCL_SIZE_MODIFIER "d of dirs\n", i);
                 Tcl_DecrRefCount(dirs_ptr);
                 return TCL_ERROR;
             }

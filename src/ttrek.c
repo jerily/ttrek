@@ -28,14 +28,31 @@ enum subcommand {
     SUBCMD_PRETEND
 };
 
-int main(int argc, char *argv[]) {
+static int ttrek_Startup(Tcl_Interp *interp) {
 
-    if (argc <= 1) {
-        fprintf(stderr, "Usage: ttrek <subcommand> [options]\n");
-        return 1;
+    if (Tcl_Init(interp) != TCL_OK) {
+        goto error;
     }
 
+    return TCL_OK;
+
+error:
+    return TCL_ERROR;
+
+}
+
+int main(int argc, char *argv[]) {
+
     Tcl_Interp *interp = Tcl_CreateInterp();
+
+    if (argc <= 1) {
+        goto tclshell;
+    }
+
+    if (argc == 3 && strcmp(argv[2], "help") == 0) {
+        goto tclshell;
+    }
+
     Tcl_Size objc = argc;
     Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);
     for (int i = 0; i < argc; i++) {
@@ -77,6 +94,11 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
+
+tclshell:
+
+    TclZipfs_AppHook(&argc, &argv);
+    Tcl_MainEx(argc, argv, ttrek_Startup, interp);
 
     return 0;
 }

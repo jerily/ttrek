@@ -40,7 +40,7 @@ std::map<std::string_view, std::map<std::string_view, std::vector<std::pair<std:
               }}
 };
 
-std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(std::string package_name) {
+std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(const std::string& package_name) {
     std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> result;
     char package_versions_url[256];
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
@@ -62,13 +62,15 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
             const char *dep_name = deps_item->string;
             const char *dep_version = cJSON_GetStringValue(deps_item);
             DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
-            deps.push_back({dep_name, dep_version});
+            deps.emplace_back(dep_name, dep_version);
         }
         result[version_str] = deps;
     }
     cJSON_free(versions_root);
     return result;
 }
+
+static char EMPTY_STRING[] = "";
 
 struct Pack {
     semver_t version = {0};
@@ -86,6 +88,11 @@ struct Pack {
         next_version.major++;
         next_version.minor = 0;
         next_version.patch = 0;
+
+        // Needed to make sure 9.0.0-beta.2 does NOT satisfy <9.0.0
+        // in essence the empty string will make sure that the prerelease
+        // precedes any other alpha, beta, and so on versions.
+        next_version.prerelease = EMPTY_STRING;
         return Pack(next_version);
     }
 
@@ -116,7 +123,7 @@ struct Pack {
         version_str += std::to_string(version.minor);
         version_str += ".";
         version_str += std::to_string(version.patch);
-        if (version.prerelease != nullptr) {
+        if (version.prerelease != nullptr && version.prerelease[0] != '\0') {
             version_str += "-";
             version_str += version.prerelease;
         }
