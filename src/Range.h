@@ -233,7 +233,7 @@ public:
     // Returns true if the this Range contains the specified value.
     bool contains(const V &v) const {
         for (auto [start, end]: segments) {
-            auto result = std::visit([&v](const auto &start_arg, const auto &end_arg) {
+            auto result = std::visit([&v](auto &&start_arg, auto &&end_arg) {
                 using T_start = std::decay_t<decltype(start_arg)>;
                 using T_end = std::decay_t<decltype(end_arg)>;
 
@@ -271,11 +271,11 @@ public:
                 return false;
             }, start, end);
 
-            if (result) {
-                return true;
+            if (!result) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     // Computes the union of this `Range` and another.

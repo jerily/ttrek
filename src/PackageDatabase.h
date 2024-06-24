@@ -70,6 +70,8 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
     return result;
 }
 
+static char EMPTY_STRING[] = "";
+
 struct Pack {
     semver_t version = {0};
 
@@ -86,6 +88,11 @@ struct Pack {
         next_version.major++;
         next_version.minor = 0;
         next_version.patch = 0;
+
+        // Needed to make sure 9.0.0-beta.2 does NOT satisfy <9.0.0
+        // in essence the empty string will make sure that the prerelease
+        // precedes any other alpha, beta, and so on versions.
+        next_version.prerelease = EMPTY_STRING;
         return Pack(next_version);
     }
 
@@ -116,7 +123,7 @@ struct Pack {
         version_str += std::to_string(version.minor);
         version_str += ".";
         version_str += std::to_string(version.patch);
-        if (version.prerelease != nullptr) {
+        if (version.prerelease != nullptr && version.prerelease[0] != '\0') {
             version_str += "-";
             version_str += version.prerelease;
         }
