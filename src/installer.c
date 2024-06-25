@@ -206,17 +206,21 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     if (TCL_OK != ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not remove watch on install directory\n");
+        Tcl_Free((char *) fsmonitor_state_ptr);
         cJSON_free(install_spec_root);
         Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 
+    Tcl_Free((char *) fsmonitor_state_ptr);
     cJSON_free(install_spec_root);
     Tcl_DStringFree(&ds);
     return TCL_OK;
 }
 
-int ttrek_IsExistingInLock(cJSON *lock_root, const char *package_name, const char *package_version) {
+static int ttrek_ExistsInLock(cJSON *lock_root, const char *package_name, const char *package_version, int *package_name_exists_in_lock_p) {
+
+    *package_name_exists_in_lock_p = 0;
 
     cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
     if (!packages) {
@@ -227,6 +231,8 @@ int ttrek_IsExistingInLock(cJSON *lock_root, const char *package_name, const cha
     if (!package) {
         return 0;
     }
+
+    *package_name_exists_in_lock_p = 1;
 
     cJSON *version = cJSON_GetObjectItem(package, "version");
     if (!version) {
@@ -240,19 +246,179 @@ int ttrek_IsExistingInLock(cJSON *lock_root, const char *package_name, const cha
     return 1;
 }
 
+static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_path_ptr) {
+    Tcl_Size len;
+    Tcl_Obj *list_ptr = Tcl_FSSplitPath(file_path_ptr, &len);
+    Tcl_Obj *dir_path_ptr = Tcl_NewObj();
+    Tcl_IncrRefCount(dir_path_ptr);
+    for (int i = 0; i < len - 1; i++) {
+        Tcl_Obj *part_ptr;
+        Tcl_ListObjIndex(interp, list_ptr, i, &part_ptr);
+        Tcl_Obj *dir_path_ptr_copy;
+        ttrek_ResolvePath(interp, dir_path_ptr, part_ptr, &dir_path_ptr_copy);
+        if (ttrek_CheckFileExists(dir_path_ptr_copy) == TCL_OK) {
+            Tcl_DecrRefCount(dir_path_ptr);
+            dir_path_ptr = dir_path_ptr_copy;
+            continue;
+        }
+        if (TCL_OK != Tcl_FSCreateDirectory(dir_path_ptr_copy)) {
+            fprintf(stderr, "error: could not create directory %s\n", Tcl_GetString(dir_path_ptr_copy));
+            Tcl_DecrRefCount(dir_path_ptr);
+            Tcl_DecrRefCount(dir_path_ptr_copy);
+            Tcl_DecrRefCount(list_ptr);
+            return TCL_ERROR;
+        }
+        Tcl_DecrRefCount(dir_path_ptr);
+        dir_path_ptr = dir_path_ptr_copy;
+    }
+    Tcl_DecrRefCount(list_ptr);
+    Tcl_DecrRefCount(dir_path_ptr);
+    return TCL_OK;
+}
+
+static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    if (!packages) {
+        return TCL_OK;
+    }
+
+    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    if (!package) {
+        return TCL_OK;
+    }
+
+    cJSON *files = cJSON_GetObjectItem(package, "files");
+    if (!files) {
+        return TCL_OK;
+    }
+
+    Tcl_Obj *temp_package_dir_ptr;
+    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+    if (TCL_OK != Tcl_FSCreateDirectory(temp_package_dir_ptr)) {
+        fprintf(stderr, "error: could not create temp dir for package %s\n", package_name);
+        Tcl_DecrRefCount(temp_package_dir_ptr);
+        return TCL_ERROR;
+    }
+
+    for (int i = 0; i < cJSON_GetArraySize(files); i++) {
+        cJSON *file = cJSON_GetArrayItem(files, i);
+        const char *file_path = file->valuestring;
+
+        // move the file from install dir to temp dir
+
+        Tcl_Obj *file_path_ptr;
+        ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
+        Tcl_Obj *temp_file_path_ptr;
+        ttrek_ResolvePath(interp, temp_package_dir_ptr, Tcl_NewStringObj(file_path, -1), &temp_file_path_ptr);
+
+        // create directory structure if it does not exist in temp_file_path_ptr
+
+        if (TCL_OK != ttrek_EnsureDirectoryTreeExists(interp, temp_file_path_ptr)) {
+            fprintf(stderr, "error: could not create directory tree for %s\n", file_path);
+            Tcl_DecrRefCount(file_path_ptr);
+            Tcl_DecrRefCount(temp_package_dir_ptr);
+            Tcl_DecrRefCount(temp_file_path_ptr);
+            return TCL_ERROR;
+        }
+
+        if (TCL_OK != Tcl_FSRenameFile(file_path_ptr, temp_file_path_ptr)) {
+            fprintf(stderr, "error: could not move file %s to temp dir\n", file_path);
+            Tcl_DecrRefCount(file_path_ptr);
+            Tcl_DecrRefCount(temp_package_dir_ptr);
+            Tcl_DecrRefCount(temp_file_path_ptr);
+            return TCL_ERROR;
+        }
+        Tcl_DecrRefCount(file_path_ptr);
+        Tcl_DecrRefCount(temp_package_dir_ptr);
+        Tcl_DecrRefCount(temp_file_path_ptr);
+    }
+
+    return TCL_OK;
+}
+
+static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    if (!packages) {
+        return TCL_OK;
+    }
+
+    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    if (!package) {
+        return TCL_OK;
+    }
+
+    cJSON *files = cJSON_GetObjectItem(package, "files");
+    if (!files) {
+        return TCL_OK;
+    }
+
+    for (int i = 0; i < cJSON_GetArraySize(files); i++) {
+        cJSON *file = cJSON_GetArrayItem(files, i);
+        const char *file_path = file->valuestring;
+        // move the file from temp dir to install dir
+        Tcl_Obj *temp_package_dir_ptr;
+        ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+        Tcl_Obj *temp_file_path_ptr;
+        ttrek_ResolvePath(interp, temp_package_dir_ptr, Tcl_NewStringObj(file_path, -1), &temp_file_path_ptr);
+        Tcl_Obj *file_path_ptr;
+        ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
+        if (TCL_OK != Tcl_FSRenameFile(temp_file_path_ptr, file_path_ptr)) {
+            fprintf(stderr, "error: could not move file %s to temp dir\n", file_path);
+            Tcl_DecrRefCount(temp_package_dir_ptr);
+            Tcl_DecrRefCount(temp_file_path_ptr);
+            Tcl_DecrRefCount(file_path_ptr);
+            return TCL_ERROR;
+        }
+        Tcl_DecrRefCount(temp_package_dir_ptr);
+        Tcl_DecrRefCount(temp_file_path_ptr);
+        Tcl_DecrRefCount(file_path_ptr);
+    }
+    return TCL_OK;
+}
+
+static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+    Tcl_Obj *temp_package_dir_ptr;
+    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+    Tcl_Obj *error_ptr;
+    int result = Tcl_FSRemoveDirectory(temp_package_dir_ptr, 1, &error_ptr);
+    Tcl_DecrRefCount(error_ptr);
+    Tcl_DecrRefCount(temp_package_dir_ptr);
+    return result;
+}
+
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name, const char *package_version,
                          const char *direct_version_requirement) {
 
-    if (ttrek_IsExistingInLock(state_ptr->lock_root, package_name, package_version)) {
+    int package_name_exists_in_lock_p;
+    if (ttrek_ExistsInLock(state_ptr->lock_root, package_name, package_version, &package_name_exists_in_lock_p)) {
         fprintf(stderr, "info: %s@%s already installed\n", package_name, package_version);
         return TCL_OK;
+    }
+
+    if (package_name_exists_in_lock_p) {
+        if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {
+            fprintf(stderr, "error: could not backup package files from existing installation\n");
+            return TCL_ERROR;
+        }
     }
 
     if (TCL_OK !=
         ttrek_InstallScriptAndPatches(interp, state_ptr, package_name, package_version,
                                       direct_version_requirement)) {
+
         fprintf(stderr, "error: installing script & patches failed\n");
+
+        if (package_name_exists_in_lock_p) {
+            if (TCL_OK != ttrek_RestoreTempFiles(interp, state_ptr, package_name)) {
+                fprintf(stderr, "error: could not restore package files from old installation\n");
+            }
+        }
+
         return TCL_ERROR;
+    }
+
+    if (package_name_exists_in_lock_p) {
+        ttrek_DeleteTempFiles(interp, state_ptr, package_name);
     }
 
     return TCL_OK;

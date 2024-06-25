@@ -18,7 +18,7 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj
         fprintf(stderr, "error: could not resolve path for %s\n", Tcl_GetString(filename_ptr));
         return TCL_ERROR;
     }
-
+    Tcl_IncrRefCount(*path_ptr);
 //    *path_ptr = Tcl_FSGetNormalizedPath(interp, *path_ptr);
 
     return TCL_OK;
