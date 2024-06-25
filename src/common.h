@@ -82,7 +82,7 @@ typedef struct {
     ttrek_mode_t mode;
 } ttrek_state_t;
 
-int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr);
+int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
 int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
