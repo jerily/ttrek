@@ -142,7 +142,12 @@ int ttrek_FSMonitor_AddWatch(Tcl_Interp *interp, Tcl_Obj *project_install_dir_pt
     state_ptr->files_before = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(state_ptr->files_before);
 
-    if (TCL_OK != ttrek_MatchInDirectory(interp, state_ptr->files_before, project_install_dir_ptr, "*", 1, NULL)) {
+    Tcl_GlobTypeData filetypes;
+    filetypes.type = TCL_GLOB_TYPE_FILE;
+    filetypes.perm = 0;
+    filetypes.macCreator = NULL;
+    filetypes.macType = NULL;
+    if (TCL_OK != ttrek_MatchInDirectory(interp, state_ptr->files_before, project_install_dir_ptr, "*", 1, &filetypes)) {
         fprintf(stderr, "error: could not list files in %s\n", Tcl_GetString(project_install_dir_ptr));
         Tcl_DecrRefCount(state_ptr->files_before);
         return TCL_ERROR;
@@ -155,7 +160,12 @@ int ttrek_FSMonitor_ReadChanges(Tcl_Interp *interp, Tcl_Obj *project_install_dir
     Tcl_Obj *files_after = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(files_after);
 
-    if (TCL_OK != ttrek_MatchInDirectory(interp, files_after, project_install_dir_ptr, "*", 1, NULL)) {
+    Tcl_GlobTypeData filetypes;
+    filetypes.type = TCL_GLOB_TYPE_FILE;
+    filetypes.perm = 0;
+    filetypes.macCreator = NULL;
+    filetypes.macType = NULL;
+    if (TCL_OK != ttrek_MatchInDirectory(interp, files_after, project_install_dir_ptr, "*", 1, &filetypes)) {
         fprintf(stderr, "error: could not list files in %s\n", Tcl_GetString(project_install_dir_ptr));
         Tcl_DecrRefCount(files_after);
         return TCL_ERROR;

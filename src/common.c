@@ -10,15 +10,15 @@
 #include <stdlib.h>
 #include "cjson/cJSON.h"
 
-int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **path_ptr) {
+int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
     Tcl_Obj *objv[1] = {filename_ptr};
-    *path_ptr = Tcl_FSJoinToPath(project_home_dir_ptr, 1, objv);
+    *output_path_ptr = Tcl_FSJoinToPath(path_ptr, 1, objv);
 
-    if (!*path_ptr) {
+    if (!*output_path_ptr) {
         fprintf(stderr, "error: could not resolve path for %s\n", Tcl_GetString(filename_ptr));
         return TCL_ERROR;
     }
-
+    Tcl_IncrRefCount(*output_path_ptr);
 //    *path_ptr = Tcl_FSGetNormalizedPath(interp, *path_ptr);
 
     return TCL_OK;

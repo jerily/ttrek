@@ -16,6 +16,7 @@
 
 #include <resolvo.h>
 #include <resolvo_pool.h>
+#include <utility>
 #include <vector>
 #include <set>
 #include <map>
@@ -78,6 +79,9 @@ struct Pack {
     explicit Pack(const std::string& version_str) {
         if (-1 == semver_parse(version_str.c_str(), &version)) {
             throw std::runtime_error("Failed to parse version: " + version_str);
+        }
+        if (version.prerelease == nullptr) {
+            version.prerelease = EMPTY_STRING;
         }
     }
 
@@ -152,6 +156,7 @@ struct Candidate {
     resolvo::NameId name;
     Pack version;
     resolvo::Dependencies dependencies;
+    resolvo::SolvableId id;
 };
 
 /**
@@ -247,27 +252,32 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     std::vector<Requirement> requirements;
 
     std::set<std::string> candidate_names;
+    std::map<std::string, std::string> locked_packages;
 
     /**
      * Allocates a new requirement and return the id of the requirement.
      */
     resolvo::VersionSetId alloc_requirement(std::string_view package, const std::string& version_start,
                                             const std::string& version_end) {
-        auto name_id = names.alloc(std::move(package));
+        auto name_id = names.alloc(package);
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
         auto versions = Range<Pack>::between(Pack(version_start), Pack(version_end));
         requirements.push_back(Requirement{name_id, versions});
         return id;
     }
 
-    resolvo::VersionSetId alloc_requirement_from_str(const std::string_view package_name, const std::string_view &package_versions) {
+    resolvo::VersionSetId alloc_requirement_from_str(const std::string_view &package_name, const std::string_view &package_versions) {
         auto spec_name = names.alloc(package_name);
         auto spec_versions = version_range(package_versions.empty() ? std::nullopt : std::optional(package_versions));
         auto requirement = Requirement{spec_name, spec_versions};
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
         requirements.push_back(requirement);
         return id;
+    }
 
+    void alloc_locked_package(const std::string &package_name, const std::string &package_version) {
+        DBG(std::cout << "set locked package: " << package_name << "=" << package_version << std::endl);
+        locked_packages[package_name] = package_version;
     }
 
     /**
@@ -275,9 +285,9 @@ struct PackageDatabase : public resolvo::DependencyProvider {
      */
     resolvo::SolvableId alloc_candidate(std::string_view name, const std::string& version,
                                         resolvo::Dependencies dependencies) {
-        auto name_id = names.alloc(std::move(name));
+        auto name_id = names.alloc(name);
         auto id = resolvo::SolvableId{static_cast<uint32_t>(candidates.size())};
-        candidates.push_back(Candidate{name_id, Pack(version), dependencies});
+        candidates.push_back(Candidate{name_id, Pack(version), std::move(dependencies), id});
         return id;
     }
 
@@ -336,6 +346,9 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
+        auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
+        DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
+        resolvo::SolvableId locked_candidate_id{};
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
             DBG(std::cout << "fetching from remote: " << names[package] << std::endl);
@@ -349,23 +362,33 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
                     dependencies.requirements.push_back(dep_version_set);
                 }
-                alloc_candidate(package_name, package_version, dependencies);
+                auto id = alloc_candidate(package_name, package_version, dependencies);
+                DBG(std::cout << "candidate: " << package_name << "=" << package_version << std::endl);
+                if (set_locked_p && locked_packages[package_name] == package_version) {
+                    DBG(std::cout << "locked package: " << package_name << "=" << package_version << std::endl);
+                    locked_candidate_id = id;
+                }
             }
         }
 
         resolvo::Candidates result;
+        result.favored = nullptr;
+        result.locked = nullptr; // currently installed package
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
             const auto& candidate = candidates[i];
             if (candidate.name != package) {
                 continue;
             }
+
+            if (set_locked_p && locked_candidate_id == candidate.id) {
+//                result.locked = &candidate.id;
+                result.favored = &candidate.id;
+            }
+
             result.candidates.push_back(resolvo::SolvableId{i});
             result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
         }
-
-        result.favored = nullptr;
-        result.locked = nullptr;
 
         return result;
     }
