@@ -65,6 +65,7 @@ int main(int argc, char *argv[]) {
             case SUBCMD_INIT:
                 fprintf(stderr, "init\n");
                 ttrek_InitSubCmd(interp, objc-1, &objv[1]);
+                return 0;
                 break;
             case SUBCMD_INSTALL:
                 curl_global_init(CURL_GLOBAL_ALL);
@@ -75,15 +76,18 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 curl_global_cleanup();
+                return 0;
                 break;
             case SUBCMD_UNINSTALL:
                 fprintf(stderr, "uninstall\n");
+                return 0;
                 break;
             case SUBCMD_RUN:
                 if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
                     fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }
+                return 0;
                 break;
             case SUBCMD_PRETEND:
                 fprintf(stderr, "pretend\n");
@@ -91,6 +95,7 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "error: pretend subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }
+                return 0;
                 break;
         }
     }

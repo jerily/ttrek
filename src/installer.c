@@ -343,6 +343,38 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
     return TCL_OK;
 }
 
+static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    if (!packages) {
+        return TCL_OK;
+    }
+
+    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    if (!package) {
+        return TCL_OK;
+    }
+
+    cJSON *files = cJSON_GetObjectItem(package, "files");
+    if (!files) {
+        return TCL_OK;
+    }
+
+    Tcl_Obj *file_path_ptr;
+    for (int i = 0; i < cJSON_GetArraySize(files); i++) {
+        cJSON *file = cJSON_GetArrayItem(files, i);
+        const char *file_path = file->valuestring;
+        ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
+        if (TCL_OK != Tcl_FSDeleteFile(file_path_ptr)) {
+            fprintf(stderr, "error: could not delete file %s\n", file_path);
+            Tcl_DecrRefCount(file_path_ptr);
+            return TCL_ERROR;
+        }
+        Tcl_DecrRefCount(file_path_ptr);
+    }
+
+    return TCL_OK;
+}
+
 static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
     cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
     if (!packages) {
@@ -405,6 +437,10 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
     if (package_name_exists_in_lock_p) {
         if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {
             fprintf(stderr, "error: could not backup package files from existing installation\n");
+            return TCL_ERROR;
+        }
+        if (TCL_OK != ttrek_DeletePackageFiles(interp, state_ptr, package_name)) {
+            fprintf(stderr, "error: could not delete package files from existing installation\n");
             return TCL_ERROR;
         }
     }
