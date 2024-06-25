@@ -257,7 +257,6 @@ static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_pat
         Tcl_Obj *dir_path_ptr_copy;
         ttrek_ResolvePath(interp, dir_path_ptr, part_ptr, &dir_path_ptr_copy);
         if (ttrek_CheckFileExists(dir_path_ptr_copy) == TCL_OK) {
-            Tcl_DecrRefCount(dir_path_ptr);
             dir_path_ptr = dir_path_ptr_copy;
             continue;
         }
@@ -268,7 +267,6 @@ static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_pat
             Tcl_DecrRefCount(list_ptr);
             return TCL_ERROR;
         }
-        Tcl_DecrRefCount(dir_path_ptr);
         dir_path_ptr = dir_path_ptr_copy;
     }
     Tcl_DecrRefCount(list_ptr);
@@ -294,21 +292,31 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 
     Tcl_Obj *temp_package_dir_ptr;
     ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+
+    if (ttrek_CheckFileExists(temp_package_dir_ptr) == TCL_OK) {
+        Tcl_Obj *error_ptr;
+        if (TCL_OK != Tcl_FSRemoveDirectory(temp_package_dir_ptr, 1, &error_ptr)) {
+            fprintf(stderr, "error: could not remove temp dir for package %s\n", package_name);
+            Tcl_DecrRefCount(temp_package_dir_ptr);
+            return TCL_ERROR;
+        }
+    }
+
     if (TCL_OK != Tcl_FSCreateDirectory(temp_package_dir_ptr)) {
         fprintf(stderr, "error: could not create temp dir for package %s\n", package_name);
         Tcl_DecrRefCount(temp_package_dir_ptr);
         return TCL_ERROR;
     }
 
+    Tcl_Obj *file_path_ptr;
+    Tcl_Obj *temp_file_path_ptr;
     for (int i = 0; i < cJSON_GetArraySize(files); i++) {
         cJSON *file = cJSON_GetArrayItem(files, i);
         const char *file_path = file->valuestring;
 
         // move the file from install dir to temp dir
 
-        Tcl_Obj *file_path_ptr;
         ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
-        Tcl_Obj *temp_file_path_ptr;
         ttrek_ResolvePath(interp, temp_package_dir_ptr, Tcl_NewStringObj(file_path, -1), &temp_file_path_ptr);
 
         // create directory structure if it does not exist in temp_file_path_ptr
@@ -321,15 +329,14 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
             return TCL_ERROR;
         }
 
-        if (TCL_OK != Tcl_FSRenameFile(file_path_ptr, temp_file_path_ptr)) {
-            fprintf(stderr, "error: could not move file %s to temp dir\n", file_path);
+        if (TCL_OK != Tcl_FSCopyFile(file_path_ptr, temp_file_path_ptr)) {
+            fprintf(stderr, "error: could not move file %s to temp dir (%s)\n", Tcl_GetString(file_path_ptr), Tcl_GetString(temp_file_path_ptr));
             Tcl_DecrRefCount(file_path_ptr);
             Tcl_DecrRefCount(temp_package_dir_ptr);
             Tcl_DecrRefCount(temp_file_path_ptr);
             return TCL_ERROR;
         }
         Tcl_DecrRefCount(file_path_ptr);
-        Tcl_DecrRefCount(temp_package_dir_ptr);
         Tcl_DecrRefCount(temp_file_path_ptr);
     }
 
