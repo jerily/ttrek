@@ -43,12 +43,16 @@ error:
 
 int main(int argc, char *argv[]) {
 
+    Tcl_Interp *interp = Tcl_CreateInterp();
+
     if (argc <= 1) {
-        fprintf(stderr, "Usage: ttrek <subcommand> [options]\n");
-        return 1;
+        goto tclshell;
     }
 
-    Tcl_Interp *interp = Tcl_CreateInterp();
+    if (argc == 3 && strcmp(argv[2], "help") == 0) {
+        goto tclshell;
+    }
+
     Tcl_Size objc = argc;
     Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);
     for (int i = 0; i < argc; i++) {
@@ -90,6 +94,8 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
+
+tclshell:
 
     TclZipfs_AppHook(&argc, &argv);
     Tcl_MainEx(argc, argv, ttrek_Startup, interp);
