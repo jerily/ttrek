@@ -347,7 +347,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
-        std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl;
+        DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
         resolvo::SolvableId locked_candidate_id{};
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
