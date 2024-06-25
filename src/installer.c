@@ -364,6 +364,7 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         cJSON *file = cJSON_GetArrayItem(files, i);
         const char *file_path = file->valuestring;
         ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
+        fprintf(stderr, "deleting... file_path: %s\n", Tcl_GetString(file_path_ptr));
         if (TCL_OK != Tcl_FSDeleteFile(file_path_ptr)) {
             fprintf(stderr, "error: could not delete file %s\n", file_path);
             Tcl_DecrRefCount(file_path_ptr);
