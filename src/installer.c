@@ -54,8 +54,8 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         cJSON *dep_item = cJSON_GetArrayItem(deps_node, i);
         const char *dep_name = dep_item->string;
         const char *dep_version_requirement = dep_item->valuestring;
-        fprintf(stderr, "dep_name: %s\n", dep_name);
-        fprintf(stderr, "dep_version_requirement: %s\n", dep_version_requirement);
+        DBG(fprintf(stderr, "AddPackageToLock: dep_name: %s\n", dep_name));
+        DBG(fprintf(stderr, "AddPackageToLock: dep_version_requirement: %s\n", dep_version_requirement));
         cJSON_AddItemToObject(reqs_node, dep_name, cJSON_CreateString(dep_version_requirement));
     }
     cJSON_AddItemToObject(item_node, "requires", reqs_node);
