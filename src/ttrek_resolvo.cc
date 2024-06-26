@@ -62,6 +62,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_stat
             std::map<std::string, std::string> &requirements,
             std::vector<std::string> &installs) {
     PackageDatabase db;
+    db.set_strategy(state_ptr->strategy);
 
     ttrek_ParseRequirements(objc, objv, requirements);
     // Parse additional requirements from spec file

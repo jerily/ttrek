@@ -69,6 +69,12 @@ typedef enum {
     MODE_GLOBAL
 } ttrek_mode_t;
 
+typedef enum {
+    STRATEGY_LATEST,
+    STRATEGY_FAVORED,
+    STRATEGY_LOCKED
+} ttrek_strategy_t;
+
 typedef struct {
     Tcl_Obj *project_home_dir_ptr;
     Tcl_Obj *project_venv_dir_ptr;
@@ -80,6 +86,7 @@ typedef struct {
     cJSON *spec_root;
     cJSON *lock_root;
     ttrek_mode_t mode;
+    ttrek_strategy_t strategy;
 } ttrek_state_t;
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
@@ -103,8 +110,10 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
 //cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
 
 Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode);
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_strategy_t strategy);
 void ttrek_DestroyState(ttrek_state_t *state_ptr);
+
+ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str);
 
 #ifdef __cplusplus
 }

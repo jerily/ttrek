@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include <string.h>
 #include "cjson/cJSON.h"
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
@@ -318,7 +319,7 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     return lock_root;
 }
 
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_strategy_t strategy) {
     ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
     if (!state_ptr) {
         return NULL;
@@ -353,6 +354,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
     state_ptr->mode = mode;
+    state_ptr->strategy = strategy;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
     state_ptr->project_venv_dir_ptr = project_venv_dir_ptr;
     state_ptr->project_install_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, INSTALL_DIR);
@@ -364,13 +366,13 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
 
     // print all refCount for all dir_ptr in state_ptr
-    fprintf(stderr, "project_home_dir_ptr refCount: %d\n", state_ptr->project_home_dir_ptr->refCount);
-    fprintf(stderr, "project_venv_dir_ptr refCount: %d\n", state_ptr->project_venv_dir_ptr->refCount);
-    fprintf(stderr, "project_install_dir_ptr refCount: %d\n", state_ptr->project_install_dir_ptr->refCount);
-    fprintf(stderr, "project_build_dir_ptr refCount: %d\n", state_ptr->project_build_dir_ptr->refCount);
-    fprintf(stderr, "project_temp_dir_ptr refCount: %d\n", state_ptr->project_temp_dir_ptr->refCount);
-    fprintf(stderr, "spec_json_path_ptr refCount: %d\n", state_ptr->spec_json_path_ptr->refCount);
-    fprintf(stderr, "lock_json_path_ptr refCount: %d\n", state_ptr->lock_json_path_ptr->refCount);
+    DBG(fprintf(stderr, "project_home_dir_ptr refCount: %d\n", state_ptr->project_home_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_venv_dir_ptr refCount: %d\n", state_ptr->project_venv_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_install_dir_ptr refCount: %d\n", state_ptr->project_install_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_build_dir_ptr refCount: %d\n", state_ptr->project_build_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_temp_dir_ptr refCount: %d\n", state_ptr->project_temp_dir_ptr->refCount));
+    DBG(fprintf(stderr, "spec_json_path_ptr refCount: %d\n", state_ptr->spec_json_path_ptr->refCount));
+    DBG(fprintf(stderr, "lock_json_path_ptr refCount: %d\n", state_ptr->lock_json_path_ptr->refCount));
 
 
     return state_ptr;
@@ -387,4 +389,20 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     cJSON_Delete(state_ptr->spec_root);
     cJSON_Delete(state_ptr->lock_root);
     Tcl_Free((char *) state_ptr);
+}
+
+#define MAX_STRATEGY_LEN 7
+ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str) {
+    if (strategy_str == NULL) {
+        return STRATEGY_LATEST;
+    }
+
+    if (strncmp(strategy_str, "latest", MAX_STRATEGY_LEN) == 0) {
+        return STRATEGY_LATEST;
+    } else if (strncmp(strategy_str, "favored", MAX_STRATEGY_LEN) == 0) {
+        return STRATEGY_FAVORED;
+    } else if (strncmp(strategy_str, "locked", MAX_STRATEGY_LEN) == 0) {
+        return STRATEGY_LOCKED;
+    }
+    return STRATEGY_LATEST;
 }

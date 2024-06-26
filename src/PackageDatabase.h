@@ -253,6 +253,11 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     std::set<std::string> candidate_names;
     std::map<std::string, std::string> locked_packages;
+    ttrek_strategy_t the_strategy;
+
+    void set_strategy(ttrek_strategy_t strategy) {
+        the_strategy = strategy;
+    }
 
     /**
      * Allocates a new requirement and return the id of the requirement.
@@ -382,8 +387,13 @@ struct PackageDatabase : public resolvo::DependencyProvider {
             }
 
             if (set_locked_p && locked_candidate_id == candidate.id) {
-//                result.locked = &candidate.id;
-                result.favored = &candidate.id;
+                if (the_strategy == STRATEGY_LOCKED) {
+                    result.locked = &candidate.id;
+                } else if (the_strategy == STRATEGY_FAVORED) {
+                    result.favored = &candidate.id;
+                } else {
+                    // do nothing
+                }
             }
 
             result.candidates.push_back(resolvo::SolvableId{i});
