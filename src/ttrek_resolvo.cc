@@ -253,30 +253,37 @@ struct InstallSpec {
     int package_name_exists_in_lock_p;
 };
 
-static void ttrek_ComputeReverseDependencies(const std::vector<InstallSpec> &execution_plan,
+static void ttrek_ComputeReverseDependencies(const std::vector<std::string> &installs,
                                              const std::map<std::string, std::vector<ReverseDependency>> &reverse_dependencies,
                                              std::vector<std::string> &rdep_installs) {
 
+    auto list_of_packages = installs;
     bool changed = false;
-    for (const auto &install_spec: execution_plan) {
-        auto package_name = install_spec.package_name;
-        auto package_version = install_spec.package_version;
-        if (reverse_dependencies.find(package_name) != reverse_dependencies.end()) {
-            for (const auto &rdep: reverse_dependencies.at(package_name)) {
-                std::string rdep_install = rdep.package_name + "=" + rdep.package_version;
-                if (std::find(rdep_installs.begin(), rdep_installs.end(), rdep_install) == rdep_installs.end()) {
-                    // if not already in the list, add the direct reverse dependency
-                    rdep_installs.push_back(rdep_install);
+    while (rdep_installs.empty() || changed) {
+        changed = false;
+        for (const auto &install: list_of_packages) {
+            auto index = install.find('='); // package_name=package_version
+            auto package_name = install.substr(0, index);
+            auto package_version = install.substr(index + 1);
+            if (reverse_dependencies.find(package_name) != reverse_dependencies.end()) {
+                for (const auto &rdep: reverse_dependencies.at(package_name)) {
+                    std::string rdep_install = rdep.package_name + "=" + rdep.package_version;
+                    if (std::find(rdep_installs.begin(), rdep_installs.end(), rdep_install) == rdep_installs.end()) {
+                        std::cout << "adding rdep... " << rdep_install << " due to " << package_name << std::endl;
+                        // if not already in the list, add the direct reverse dependency
+                        rdep_installs.push_back(rdep_install);
 
-                    changed = true;
+                        changed = true;
+                    }
                 }
             }
         }
-    }
 
-    if (changed) {
-        ttrek_ComputeReverseDependencies(execution_plan, reverse_dependencies, rdep_installs);
-    }
+        if (!changed) {
+            break;
+        }
+        list_of_packages = rdep_installs;
+    };
 }
 
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install, std::map<std::string, std::string> &requirements,
@@ -331,18 +338,27 @@ static void ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vec
                                        std::map<std::string, std::string> &requirements,
                                        std::vector<InstallSpec> &execution_plan) {
 
+    std::vector<std::string> filtered_installs;
+    std::copy_if(installs.begin(), installs.end(), std::back_inserter(filtered_installs), [&state_ptr](const std::string &install) -> bool {
+        auto index = install.find('='); // package_name=package_version
+        auto package_name = install.substr(0, index);
+        auto package_version = install.substr(index + 1);
+        int package_name_exists_in_lock_p;
+        return !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
+    });
+
     // get all reverse dependencies from lock file
     std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies;
     ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies);
 
-    // add installs to execution plan
-    for (const auto &install: installs) {
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, requirements, execution_plan);
-    }
-
     // compute reverse dependencies for all installs
     std::vector<std::string> rdep_installs;
-    ttrek_ComputeReverseDependencies(execution_plan, reverse_dependencies, rdep_installs);
+    ttrek_ComputeReverseDependencies(filtered_installs, reverse_dependencies, rdep_installs);
+
+    // add installs to execution plan
+    for (const auto &install: filtered_installs) {
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, requirements, execution_plan);
+    }
 
     // add reverse dependencies to execution plan
     for (const auto &install: rdep_installs) {
