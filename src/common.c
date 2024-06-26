@@ -60,7 +60,6 @@ static int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr
 }
 
 int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
-
     if (TCL_OK != ttrek_EnsureDirectoryExists(interp, state_ptr->project_home_dir_ptr)) {
         fprintf(stderr, "error: could not ensure project home directory exists\n");
         return TCL_ERROR;
@@ -203,6 +202,7 @@ Tcl_Obj *ttrek_GetProjectDirForLocalMode(Tcl_Interp *interp) {
         if (ttrek_CheckFileExists(path_project_file_ptr) == TCL_OK) {
             Tcl_DecrRefCount(project_filename_ptr);
             Tcl_DecrRefCount(path_project_file_ptr);
+            Tcl_IncrRefCount(project_homedir_ptr);
             return project_homedir_ptr;
         }
         Tcl_DecrRefCount(path_project_file_ptr);
@@ -362,6 +362,15 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode) {
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
+
+    // print all refCount for all dir_ptr in state_ptr
+    fprintf(stderr, "project_home_dir_ptr refCount: %d\n", state_ptr->project_home_dir_ptr->refCount);
+    fprintf(stderr, "project_venv_dir_ptr refCount: %d\n", state_ptr->project_venv_dir_ptr->refCount);
+    fprintf(stderr, "project_install_dir_ptr refCount: %d\n", state_ptr->project_install_dir_ptr->refCount);
+    fprintf(stderr, "project_build_dir_ptr refCount: %d\n", state_ptr->project_build_dir_ptr->refCount);
+    fprintf(stderr, "project_temp_dir_ptr refCount: %d\n", state_ptr->project_temp_dir_ptr->refCount);
+    fprintf(stderr, "spec_json_path_ptr refCount: %d\n", state_ptr->spec_json_path_ptr->refCount);
+    fprintf(stderr, "lock_json_path_ptr refCount: %d\n", state_ptr->lock_json_path_ptr->refCount);
 
 
     return state_ptr;
