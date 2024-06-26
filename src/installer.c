@@ -419,6 +419,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
         fprintf(stderr, "error: installing script & patches failed\n");
 
         if (package_name_exists_in_lock_p) {
+            fprintf(stderr, "restoring package files from old installation\n");
             if (TCL_OK != ttrek_RestoreTempFiles(interp, state_ptr, package_name)) {
                 fprintf(stderr, "error: could not restore package files from old installation\n");
             }
