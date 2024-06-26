@@ -218,34 +218,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     return TCL_OK;
 }
 
-static int ttrek_ExistsInLock(cJSON *lock_root, const char *package_name, const char *package_version, int *package_name_exists_in_lock_p) {
-
-    *package_name_exists_in_lock_p = 0;
-
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
-    if (!packages) {
-        return 0;
-    }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
-    if (!package) {
-        return 0;
-    }
-
-    *package_name_exists_in_lock_p = 1;
-
-    cJSON *version = cJSON_GetObjectItem(package, "version");
-    if (!version) {
-        return 0;
-    }
-
-    if (strcmp(version->valuestring, package_version) != 0) {
-        return 0;
-    }
-
-    return 1;
-}
-
 static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_path_ptr) {
     Tcl_Size len;
     Tcl_Obj *list_ptr = Tcl_FSSplitPath(file_path_ptr, &len);
@@ -330,7 +302,7 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         }
 
         if (TCL_OK != Tcl_FSCopyFile(file_path_ptr, temp_file_path_ptr)) {
-            fprintf(stderr, "error: could not move file %s to temp dir (%s)\n", Tcl_GetString(file_path_ptr), Tcl_GetString(temp_file_path_ptr));
+            fprintf(stderr, "error: could not copy file %s to temp dir (%s)\n", Tcl_GetString(file_path_ptr), Tcl_GetString(temp_file_path_ptr));
             Tcl_DecrRefCount(file_path_ptr);
             Tcl_DecrRefCount(temp_package_dir_ptr);
             Tcl_DecrRefCount(temp_file_path_ptr);
@@ -403,7 +375,7 @@ static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, 
         Tcl_Obj *file_path_ptr;
         ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
         if (TCL_OK != Tcl_FSRenameFile(temp_file_path_ptr, file_path_ptr)) {
-            fprintf(stderr, "error: could not move file %s to temp dir\n", file_path);
+            fprintf(stderr, "error: could not move file %s to install dir\n", file_path);
             Tcl_DecrRefCount(temp_package_dir_ptr);
             Tcl_DecrRefCount(temp_file_path_ptr);
             Tcl_DecrRefCount(file_path_ptr);
@@ -427,13 +399,7 @@ static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, c
 }
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name, const char *package_version,
-                         const char *direct_version_requirement) {
-
-    int package_name_exists_in_lock_p;
-    if (ttrek_ExistsInLock(state_ptr->lock_root, package_name, package_version, &package_name_exists_in_lock_p)) {
-        fprintf(stderr, "info: %s@%s already installed\n", package_name, package_version);
-        return TCL_OK;
-    }
+                         const char *direct_version_requirement, int package_name_exists_in_lock_p) {
 
     if (package_name_exists_in_lock_p) {
         if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {

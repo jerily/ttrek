@@ -14,7 +14,8 @@ extern "C" {
 #endif
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
-                         const char *package_version, const char *direct_version_requirement);
+                         const char *package_version, const char *direct_version_requirement,
+                         int package_name_exists_in_lock_p);
 
 #ifdef __cplusplus
 }
