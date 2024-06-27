@@ -283,7 +283,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
 
-    if (exact_package_exists_in_lock_p) {
+    if (!state_ptr->option_force && exact_package_exists_in_lock_p) {
         fprintf(stderr, "info: %s@%s already installed\n", package_name.c_str(), package_version.c_str());
         return;
     }
@@ -325,7 +325,7 @@ static void ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vec
         auto package_name = install.substr(0, index);
         auto package_version = install.substr(index + 1);
         int package_name_exists_in_lock_p;
-        return !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
+        return state_ptr->option_force || !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
     });
 
     // get all reverse dependencies from lock file

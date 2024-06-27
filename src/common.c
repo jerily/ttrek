@@ -319,7 +319,7 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     return lock_root;
 }
 
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, ttrek_mode_t mode, ttrek_strategy_t strategy) {
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy) {
     ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
     if (!state_ptr) {
         return NULL;
@@ -354,6 +354,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, ttrek_mode_
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
     state_ptr->option_yes = option_yes;
+    state_ptr->option_force = option_force;
     state_ptr->mode = mode;
     state_ptr->strategy = strategy;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
