@@ -16,7 +16,7 @@ static const char *subcommands[] = {
         "install",
         "uninstall",
         "run",
-        "pretend",
+        "update",
         NULL
 };
 
@@ -25,7 +25,7 @@ enum subcommand {
     SUBCMD_INSTALL,
     SUBCMD_UNINSTALL,
     SUBCMD_RUN,
-    SUBCMD_PRETEND
+    SUBCMD_UPDATE
 };
 
 static int ttrek_Startup(Tcl_Interp *interp) {
@@ -78,6 +78,17 @@ int main(int argc, char *argv[]) {
                 curl_global_cleanup();
                 return 0;
                 break;
+            case SUBCMD_UPDATE:
+                curl_global_init(CURL_GLOBAL_ALL);
+                fprintf(stderr, "install\n");
+                if (TCL_OK != ttrek_UpdateSubCmd(interp, objc-1, &objv[1])) {
+                    fprintf(stderr, "error: update subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                    curl_global_cleanup();
+                    return 1;
+                }
+                curl_global_cleanup();
+                return 0;
+                break;
             case SUBCMD_UNINSTALL:
                 fprintf(stderr, "uninstall\n");
                 return 0;
@@ -85,14 +96,6 @@ int main(int argc, char *argv[]) {
             case SUBCMD_RUN:
                 if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
                     fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                    return 1;
-                }
-                return 0;
-                break;
-            case SUBCMD_PRETEND:
-                fprintf(stderr, "pretend\n");
-                if (TCL_OK != ttrek_PretendSubCmd(interp, objc-2, &objv[2])) {
-                    fprintf(stderr, "error: pretend subcommand failed: %s\n", Tcl_GetStringResult(interp));
                     return 1;
                 }
                 return 0;

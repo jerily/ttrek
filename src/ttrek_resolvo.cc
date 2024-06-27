@@ -101,26 +101,6 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_stat
     return TCL_OK;
 }
 
-int ttrek_pretend(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
-
-    std::map<std::string, std::string> requirements;
-    std::vector<std::string> installs;
-    std::string message;
-    if (TCL_OK != ttrek_Solve(interp, objc, objv, state_ptr, message, requirements, installs)) {
-        return TCL_ERROR;
-    }
-    if (installs.empty()) {
-        std::cout << message << std::endl;
-    } else {
-        std::reverse(installs.begin(), installs.end());
-        for (const auto &install: installs) {
-            std::cout << "install: " << install << std::endl;
-        }
-    }
-    return TCL_OK;
-}
-
-
 static int ttrek_UpdateSpecFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
     // write spec file
     if (TCL_OK != ttrek_WriteJsonFile(interp, state_ptr->spec_json_path_ptr, state_ptr->spec_root)) {
@@ -367,7 +347,7 @@ static void ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vec
     }
 }
 
-int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
+int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
 
 
     std::map<std::string, std::string> requirements;

@@ -407,3 +407,37 @@ ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strate
     }
     return STRATEGY_LATEST;
 }
+
+
+int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
+    cJSON *deps = cJSON_GetObjectItem(spec_root, "dependencies");
+    if (!deps) {
+        return TCL_ERROR;
+    }
+
+    cJSON *dep = NULL;
+    for (int i = 0; i < cJSON_GetArraySize(deps); i++) {
+        dep = cJSON_GetArrayItem(deps, i);
+        char spec[256];
+        snprintf(spec, 256, "%s@%s", dep->string, dep->valuestring);
+        DBG(fprintf(stderr, "spec: %s\n", spec));
+        if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, Tcl_NewStringObj(dep->string, -1))) {
+            return TCL_ERROR;
+        }
+    }
+    return TCL_OK;
+}
+
+int ttrek_IncrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv) {
+    for (int i = 0; i < objc; i++) {
+        Tcl_IncrRefCount(objv[i]);
+    }
+    return TCL_OK;
+}
+
+int ttrek_DecrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv) {
+    for (int i = 0; i < objc; i++) {
+        Tcl_DecrRefCount(objv[i]);
+    }
+    return TCL_OK;
+}

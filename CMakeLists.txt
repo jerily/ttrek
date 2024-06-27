@@ -59,7 +59,7 @@ add_executable(${TARGET}
         src/initSubCmd.c
         src/installSubCmd.c
         src/runSubCmd.c
-        src/pretendSubCmd.c
+        src/updateSubCmd.c
         src/ttrek.c
         src/common.c
         src/common.h
