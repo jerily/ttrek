@@ -378,7 +378,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
         resolvo::Candidates result;
         result.favored = nullptr;
-        result.locked = nullptr; // currently installed package
+        result.locked = nullptr;
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
             const auto& candidate = candidates[i];
@@ -399,7 +399,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
             result.candidates.push_back(resolvo::SolvableId{i});
             result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
         }
-
+        DBG(std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl);
         return result;
     }
 

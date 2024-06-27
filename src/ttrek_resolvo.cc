@@ -24,7 +24,7 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
             package_name = arg.substr(0, arg.find('@'));
             version_requirement = arg.substr(arg.find('@') + 1);
         }
-        std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement << std::endl;
+        DBG(std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement << std::endl);
         requirements[package_name] = version_requirement;
     }
     return TCL_OK;

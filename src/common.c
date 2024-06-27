@@ -330,7 +330,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         return NULL;
     }
 
-    fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr));
+    DBG(fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr)));
 
     Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
 
