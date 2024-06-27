@@ -9,7 +9,7 @@
 
 int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, MODE_LOCAL, STRATEGY_LATEST);
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, 1, MODE_LOCAL, STRATEGY_LATEST);
 
     Tcl_Obj *filename_ptr = Tcl_NewStringObj("bin/", -1);
     Tcl_IncrRefCount(filename_ptr);

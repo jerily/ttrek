@@ -319,7 +319,7 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     return lock_root;
 }
 
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_strategy_t strategy) {
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, ttrek_mode_t mode, ttrek_strategy_t strategy) {
     ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
     if (!state_ptr) {
         return NULL;
@@ -353,6 +353,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_st
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
+    state_ptr->option_yes = option_yes;
     state_ptr->mode = mode;
     state_ptr->strategy = strategy;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
@@ -392,9 +393,9 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
 }
 
 #define MAX_STRATEGY_LEN 7
-ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str) {
+ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy) {
     if (strategy_str == NULL) {
-        return STRATEGY_LATEST;
+        return default_strategy;
     }
 
     if (strncmp(strategy_str, "latest", MAX_STRATEGY_LEN) == 0) {

@@ -406,12 +406,14 @@ int ttrek_install(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttre
         }
 
 
-        // get yes/no from user
-        std::string answer;
-        std::cout << "Do you want to proceed? [y/N] ";
-        std::getline(std::cin, answer);
-        if (answer != "y") {
-            return TCL_OK;
+        if (!state_ptr->option_yes) {
+            // get yes/no from user
+            std::string answer;
+            std::cout << "Do you want to proceed? [y/N] ";
+            std::getline(std::cin, answer);
+            if (answer != "y") {
+                return TCL_OK;
+            }
         }
 
         // perform the installation

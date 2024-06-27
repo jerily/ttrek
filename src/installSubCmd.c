@@ -19,9 +19,11 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     int option_save_dev = 0;
     int option_user = 0;
     int option_global = 0;
+    int option_yes = 0;
     const char *option_strategy = NULL;
     Tcl_ArgvInfo ArgTable[] = {
 //            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
+            {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes, "answer yes to all questions", NULL},
             {TCL_ARGV_CONSTANT, "-u", INT2PTR(1), &option_user, "install as a user package", NULL},
             {TCL_ARGV_CONSTANT, "-g", INT2PTR(1), &option_global, "install as a global package", NULL},
             {TCL_ARGV_STRING, "-strategy", NULL, &option_strategy, "strategy used for resolving dependencies (latest, favored, locked)", NULL},
@@ -35,7 +37,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     DBG(fprintf(stderr, "strategy: %s\n", option_strategy));
 
     ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, mode, ttrek_StrategyFromString(option_strategy));
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, mode, ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         ckfree(remObjv);
