@@ -39,6 +39,7 @@ static char *install_script_common =
     L("PATCH_DIR=\"$ROOT_BUILD_DIR/source\"")
     L("BUILD_LOG_DIR=\"$ROOT_BUILD_DIR/logs/${PACKAGE}-${VERSION}\"")
     L("")
+    L("mkdir -p \"$DOWNLOAD_DIR\"")
     L("mkdir -p \"$SOURCE_DIR\"")
     L("mkdir -p \"$BUILD_LOG_DIR\"")
     L("")
