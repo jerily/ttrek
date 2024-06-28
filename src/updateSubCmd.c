@@ -4,17 +4,10 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#include <string.h>
 #include "subCmdDecls.h"
-#include "common.h"
-#include "base64.h"
-#include "registry.h"
-#include "semver/semver.h"
 #include "ttrek_resolvo.h"
 
-#define MAX_INSTALL_SCRIPT_LEN 1048576
-
-int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     int option_save_dev = 0;
     int option_user = 0;
@@ -25,8 +18,8 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_ArgvInfo ArgTable[] = {
 //            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
             {TCL_ARGV_CONSTANT, "-y",        INT2PTR(1), &option_yes,      "answer yes to all questions",                                        NULL},
-            {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "install as a user package",                                          NULL},
-            {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "install as a global package",                                        NULL},
+            {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "update user directory tree",                                         NULL},
+            {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "update global directory tree",                                       NULL},
             {TCL_ARGV_CONSTANT, "-force",    INT2PTR(1), &option_force,    "force installation of already installed packages",                   NULL},
             {TCL_ARGV_STRING,   "-strategy", NULL,       &option_strategy, "strategy used for resolving dependencies (latest, favored, locked)", NULL},
             {TCL_ARGV_END, NULL,             NULL, NULL, NULL}
@@ -43,23 +36,22 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         ckfree(remObjv);
         return TCL_ERROR;
     }
-
     ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, mode,
-                                                 ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
+                                                 ttrek_StrategyFromString(option_strategy, STRATEGY_LATEST));
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         ckfree(remObjv);
         return TCL_ERROR;
     }
 
-    Tcl_Size installObjc = objc - 1;
-    Tcl_Obj **installObjv = NULL;
+    Tcl_Size updateObjc = objc - 1;
+    Tcl_Obj **updateObjv = NULL;
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(list_ptr);
-    if (installObjc == 0) {
-        // add direct dependencies from state_ptr->spec_root to installObjv
+    if (updateObjc == 0) {
+        // add direct dependencies from state_ptr->spec_root to updateObjv
         if (TCL_OK != ttrek_GetDirectDependencies(interp, state_ptr->spec_root, list_ptr)) {
             fprintf(stderr, "error: getting direct dependencies failed\n");
             Tcl_DecrRefCount(list_ptr);
@@ -68,7 +60,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
             return TCL_ERROR;
         }
 
-        if (TCL_OK != Tcl_ListObjGetElements(interp, list_ptr, &installObjc, &installObjv)) {
+        if (TCL_OK != Tcl_ListObjGetElements(interp, list_ptr, &updateObjc, &updateObjv)) {
             fprintf(stderr, "error: getting list elements failed\n");
             Tcl_DecrRefCount(list_ptr);
             ttrek_DestroyState(state_ptr);
@@ -77,10 +69,10 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         }
 
     } else {
-        installObjv = &remObjv[1];
+        updateObjv = &remObjv[1];
     }
 
-    if (TCL_OK != ttrek_InstallOrUpdate(interp, installObjc, installObjv, state_ptr)) {
+    if (TCL_OK != ttrek_InstallOrUpdate(interp, updateObjc, updateObjv, state_ptr)) {
         Tcl_DecrRefCount(list_ptr);
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);
@@ -90,5 +82,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_DecrRefCount(list_ptr);
     ttrek_DestroyState(state_ptr);
     ckfree(remObjv);
+
     return TCL_OK;
 }
+

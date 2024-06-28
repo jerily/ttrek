@@ -16,7 +16,7 @@ extern "C" {
 SubCmdProc(ttrek_InitSubCmd);
 SubCmdProc(ttrek_InstallSubCmd);
 SubCmdProc(ttrek_RunSubCmd);
-SubCmdProc(ttrek_PretendSubCmd);
+SubCmdProc(ttrek_UpdateSubCmd);
 
 #ifdef __cplusplus
 }

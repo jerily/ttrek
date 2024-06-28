@@ -85,6 +85,8 @@ typedef struct {
     Tcl_Obj *lock_json_path_ptr;
     cJSON *spec_root;
     cJSON *lock_root;
+    int option_yes;
+    int option_force;
     ttrek_mode_t mode;
     ttrek_strategy_t strategy;
 } ttrek_state_t;
@@ -110,10 +112,13 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
 //cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
 
 Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_strategy_t strategy);
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy);
 void ttrek_DestroyState(ttrek_state_t *state_ptr);
 
-ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str);
+ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy);
+int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
+int ttrek_IncrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv);
+int ttrek_DecrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv);
 
 #ifdef __cplusplus
 }

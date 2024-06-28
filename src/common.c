@@ -319,7 +319,7 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     return lock_root;
 }
 
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_strategy_t strategy) {
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy) {
     ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
     if (!state_ptr) {
         return NULL;
@@ -330,7 +330,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_st
         return NULL;
     }
 
-    fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr));
+    DBG(fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr)));
 
     Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
 
@@ -353,6 +353,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, ttrek_mode_t mode, ttrek_st
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
+    state_ptr->option_yes = option_yes;
+    state_ptr->option_force = option_force;
     state_ptr->mode = mode;
     state_ptr->strategy = strategy;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
@@ -392,9 +394,9 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
 }
 
 #define MAX_STRATEGY_LEN 7
-ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str) {
+ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy) {
     if (strategy_str == NULL) {
-        return STRATEGY_LATEST;
+        return default_strategy;
     }
 
     if (strncmp(strategy_str, "latest", MAX_STRATEGY_LEN) == 0) {
@@ -405,4 +407,38 @@ ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str) {
         return STRATEGY_LOCKED;
     }
     return STRATEGY_LATEST;
+}
+
+
+int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
+    cJSON *deps = cJSON_GetObjectItem(spec_root, "dependencies");
+    if (!deps) {
+        return TCL_ERROR;
+    }
+
+    cJSON *dep = NULL;
+    for (int i = 0; i < cJSON_GetArraySize(deps); i++) {
+        dep = cJSON_GetArrayItem(deps, i);
+        char spec[256];
+        snprintf(spec, 256, "%s@%s", dep->string, dep->valuestring);
+        DBG(fprintf(stderr, "spec: %s\n", spec));
+        if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, Tcl_NewStringObj(dep->string, -1))) {
+            return TCL_ERROR;
+        }
+    }
+    return TCL_OK;
+}
+
+int ttrek_IncrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv) {
+    for (int i = 0; i < objc; i++) {
+        Tcl_IncrRefCount(objv[i]);
+    }
+    return TCL_OK;
+}
+
+int ttrek_DecrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv) {
+    for (int i = 0; i < objc; i++) {
+        Tcl_DecrRefCount(objv[i]);
+    }
+    return TCL_OK;
 }
