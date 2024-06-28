@@ -42,7 +42,7 @@ static char *install_script_common =
     L("mkdir -p \"$SOURCE_DIR\"")
     L("mkdir -p \"$BUILD_LOG_DIR\"")
     L("")
-    L("LD_LIBRARY_PATH=\"$INSTALL_DIR/lib\"")
+    L("LD_LIBRARY_PATH=\"$INSTALL_DIR/lib:$INSTALL_DIR/lib64\"")
     L("PKG_CONFIG_PATH=\"$INSTALL_DIR/lib/pkgconfig\"")
     L("export LD_LIBRARY_PATH")
     L("export PKG_CONFIG_PATH")
