@@ -96,6 +96,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_stat
         for (auto solvable: result) {
             installs.emplace_back(db.display_solvable(solvable));
         }
+        db.topological_sort(installs);
     }
 
     return TCL_OK;
@@ -361,9 +362,6 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
     if (installs.empty()) {
         std::cout << message << std::endl;
     } else {
-
-        // reverse the installs vector so that we start from the bottom of the dependency tree
-        std::reverse(installs.begin(), installs.end());
 
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;

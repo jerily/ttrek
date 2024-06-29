@@ -20,6 +20,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <queue>
 #include "semver/semver.h"
 #include "Range.h"
 #include "registry.h"
@@ -252,6 +253,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     std::vector<Requirement> requirements;
 
     std::set<std::string> candidate_names;
+    std::map<std::string, std::set<std::string>> dependencies_map;
     std::map<std::string, std::string> locked_packages;
     ttrek_strategy_t the_strategy;
 
@@ -262,15 +264,6 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     /**
      * Allocates a new requirement and return the id of the requirement.
      */
-    resolvo::VersionSetId alloc_requirement(std::string_view package, const std::string& version_start,
-                                            const std::string& version_end) {
-        auto name_id = names.alloc(package);
-        auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
-        auto versions = Range<Pack>::between(Pack(version_start), Pack(version_end));
-        requirements.push_back(Requirement{name_id, versions});
-        return id;
-    }
-
     resolvo::VersionSetId alloc_requirement_from_str(const std::string_view &package_name, const std::string_view &package_versions) {
         auto spec_name = names.alloc(package_name);
         auto spec_versions = version_range(package_versions.empty() ? std::nullopt : std::optional(package_versions));
@@ -290,9 +283,20 @@ struct PackageDatabase : public resolvo::DependencyProvider {
      */
     resolvo::SolvableId alloc_candidate(std::string_view name, const std::string& version,
                                         resolvo::Dependencies dependencies) {
+        // check if the candidate already exists
+        auto package_name = std::string(name);
+        auto install = package_name + "=" + version;
+//        if (candidate_to_solvable_map.find(install) != candidate_to_solvable_map.end()) {
+//            return candidate_to_solvable_map.at(install);
+//        }
+
         auto name_id = names.alloc(name);
         auto id = resolvo::SolvableId{static_cast<uint32_t>(candidates.size())};
         candidates.push_back(Candidate{name_id, Pack(version), std::move(dependencies), id});
+//        candidate_to_solvable_map[install] = id;
+        if (candidate_names.find(package_name) == candidate_names.end()) {
+            candidate_names.insert(package_name);
+        }
         return id;
     }
 
@@ -352,11 +356,12 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
-        DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
+        std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl;
         resolvo::SolvableId locked_candidate_id{};
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
             DBG(std::cout << "fetching from remote: " << names[package] << std::endl);
+            dependencies_map[package_name] = std::set<std::string>();
             auto package_versions = fetch_package_versions(package_name);
             for (const auto & it : package_versions) {
                 auto package_version = std::string(it.first);
@@ -366,9 +371,11 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 //                    auto dep_name = names.alloc(dep.first);
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
                     dependencies.requirements.push_back(dep_version_set);
+                    std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl;
+                    dependencies_map[package_name].insert(std::string(dep.first));
                 }
                 auto id = alloc_candidate(package_name, package_version, dependencies);
-                DBG(std::cout << "candidate: " << package_name << "=" << package_version << std::endl);
+                std::cout << "candidate: " << package_name << "=" << package_version << std::endl;
                 if (set_locked_p && locked_packages[package_name] == package_version) {
                     DBG(std::cout << "locked package: " << package_name << "=" << package_version << std::endl);
                     locked_candidate_id = id;
@@ -399,7 +406,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
             result.candidates.push_back(resolvo::SolvableId{i});
             result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
         }
-        DBG(std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl);
+        std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl;
         return result;
     }
 
@@ -430,6 +437,55 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         return candidate.dependencies;
     }
 
+    void topological_sort(std::vector<std::string> &installs) {
+        std::map<std::string, std::set<std::string>> graph;
+        std::map<std::string, int> indegree;
+        std::set<std::string> visited;
+        std::vector<std::string> result;
+        for (const auto &install : installs) {
+            auto package_name = install.substr(0, install.find('='));
+            auto package_version = install.substr(install.find('=') + 1);
+            auto package_deps = dependencies_map[package_name];
+            for (const auto &dep : package_deps) {
+                graph[dep].insert(package_name);
+                indegree[package_name]++;
+            }
+        }
+        std::queue<std::string> q;
+        for (const auto &install : installs) {
+            auto package_name = install.substr(0, install.find('='));
+            if (indegree[package_name] == 0) {
+                q.push(package_name);
+            }
+        }
+        while (!q.empty()) {
+            auto package_name = q.front();
+            q.pop();
+            result.push_back(package_name);
+            for (const auto &dep : graph[package_name]) {
+                indegree[dep]--;
+                if (indegree[dep] == 0) {
+                    q.push(dep);
+                }
+            }
+        }
+
+//        std::cout << "--------------------------- Topological sort:" << std::endl;
+//        for (const auto &package_name : result) {
+//            std::cout << package_name << std::endl;
+//        }
+//        std::cout << "---------------------------" << std::endl;
+
+        // now sort the installs based on the topological sort
+        std::map<std::string, uint32_t> package_to_index;
+        for (uint32_t i = 0; i < result.size(); i++) {
+            package_to_index[result[i]] = i;
+        }
+
+        std::sort(installs.begin(), installs.end(), [&package_to_index](const std::string &a, const std::string &b) {
+            return package_to_index[a.substr(0, a.find('='))] < package_to_index[b.substr(0, b.find('='))];
+        });
+    }
 };
 
 #endif //TTREK_PACKAGE_DATABASE_H
