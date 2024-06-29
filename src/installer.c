@@ -14,6 +14,13 @@
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 #define MAX_PATCH_FILE_SIZE 1048576
 
+static char STRING_VERSION[] = "version";
+static char STRING_REQUIRES[] = "requires";
+static char STRING_DEPENDENCIES[] = "dependencies";
+static char STRING_PACKAGES[] = "packages";
+static char STRING_FILES[] = "files";
+
+
 // Below we assume that the printf placeholders in this template are enclosed
 // in single quotes in the shell script. Double quotes cannot be used here.
 // If any placeholder must be enclosed in double quotes, a function other
@@ -57,10 +64,10 @@ static char *install_script_common =
 
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
-    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
+    cJSON *dependencies = cJSON_GetObjectItem(spec_root, STRING_DEPENDENCIES);
     if (!dependencies) {
         dependencies = cJSON_CreateObject();
-        cJSON_AddItemToObject(spec_root, "dependencies", dependencies);
+        cJSON_AddItemToObject(spec_root, STRING_DEPENDENCIES, dependencies);
     }
 
     if (cJSON_HasObjectItem(dependencies, package_name)) {
@@ -75,12 +82,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 
     // add direct requirement to dependencies
     if (direct_version_requirement != NULL) {
-        if (!cJSON_IsObject(lock_root)) {
-            printf("lock_root is not a cJSON object\n");
-        } else if (!cJSON_HasObjectItem(lock_root, "dependencies")) {
-            printf("dependencies field does not exist in lock_root\n");
-        }
-        cJSON *deps = cJSON_GetObjectItem(lock_root, "dependencies");
+        cJSON *deps = cJSON_GetObjectItem(lock_root, STRING_DEPENDENCIES);
         if (cJSON_HasObjectItem(deps, package_name)) {
             // modify the value
             cJSON_ReplaceItemInObject(deps, package_name, cJSON_CreateString(direct_version_requirement));
@@ -92,7 +94,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     // add the package to the packages list together with its dependencies
 
     cJSON *item_node = cJSON_CreateObject();
-    cJSON_AddItemToObject(item_node, "version", cJSON_CreateString(package_version));
+    cJSON_AddStringToObject(item_node, STRING_VERSION, package_version);
     cJSON *reqs_node = cJSON_CreateObject();
 
     for (int i = 0; i < cJSON_GetArraySize(deps_node); i++) {
@@ -101,9 +103,9 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         const char *dep_version_requirement = dep_item->valuestring;
         DBG(fprintf(stderr, "AddPackageToLock: dep_name: %s\n", dep_name));
         DBG(fprintf(stderr, "AddPackageToLock: dep_version_requirement: %s\n", dep_version_requirement));
-        cJSON_AddItemToObject(reqs_node, dep_name, cJSON_CreateString(dep_version_requirement));
+        cJSON_AddStringToObject(reqs_node, dep_name, dep_version_requirement);
     }
-    cJSON_AddItemToObject(item_node, "requires", reqs_node);
+    cJSON_AddItemToObject(item_node, STRING_REQUIRES, reqs_node);
 
     // add the files that were added to the package
     cJSON *files_node = cJSON_CreateArray();
@@ -114,12 +116,12 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         Tcl_ListObjIndex(NULL, files_diff, i, &file_diff_ptr);
         cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
     }
-    cJSON_AddItemToObject(item_node, "files", files_node);
+    cJSON_AddItemToObject(item_node, STRING_FILES, files_node);
 
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    cJSON *packages = cJSON_GetObjectItem(lock_root, STRING_PACKAGES);
     if (!packages) {
         packages = cJSON_CreateObject();
-        cJSON_AddItemToObject(lock_root, "packages", packages);
+        cJSON_AddItemToObject(lock_root, STRING_PACKAGES, packages);
     }
 
     if (cJSON_HasObjectItem(packages, package_name)) {
@@ -301,7 +303,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 //        fprintf(stderr, "file_diff: %s\n", Tcl_GetString(file_diff_ptr));
 //    }
 
-    cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, "dependencies");
+    cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
     if (direct_version_requirement != NULL) {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
@@ -362,7 +364,7 @@ static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_pat
 }
 
 static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
     if (!packages) {
         return TCL_OK;
     }
@@ -372,7 +374,7 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         return TCL_OK;
     }
 
-    cJSON *files = cJSON_GetObjectItem(package, "files");
+    cJSON *files = cJSON_GetObjectItem(package, STRING_FILES);
     if (!files) {
         return TCL_OK;
     }
@@ -433,7 +435,7 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 }
 
 static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
     if (!packages) {
         return TCL_OK;
     }
@@ -443,7 +445,7 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         return TCL_OK;
     }
 
-    cJSON *files = cJSON_GetObjectItem(package, "files");
+    cJSON *files = cJSON_GetObjectItem(package, STRING_FILES);
     if (!files) {
         return TCL_OK;
     }
@@ -466,7 +468,7 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 }
 
 static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
     if (!packages) {
         return TCL_OK;
     }
@@ -476,7 +478,7 @@ static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, 
         return TCL_OK;
     }
 
-    cJSON *files = cJSON_GetObjectItem(package, "files");
+    cJSON *files = cJSON_GetObjectItem(package, STRING_FILES);
     if (!files) {
         return TCL_OK;
     }
