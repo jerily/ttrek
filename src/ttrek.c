@@ -34,6 +34,12 @@ int main(int argc, char *argv[]) {
         goto usage;
     }
 
+    cJSON_Hooks hooks = {
+            .malloc_fn = Tcl_Alloc,
+            .free_fn = Tcl_Free
+    };
+    cJSON_InitHooks(&hooks);
+
     Tcl_Interp *interp = Tcl_CreateInterp();
     Tcl_Size objc = argc;
     Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);

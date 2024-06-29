@@ -102,7 +102,13 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
     int prebuffer = 1024 * 1024;
-    return ttrek_WriteChars(interp, path_ptr, Tcl_NewStringObj(cJSON_PrintBuffered(root, prebuffer, 1), -1), 0666);
+    const char *buffer = cJSON_PrintBuffered(root, prebuffer, 1);
+    Tcl_Obj *contents_ptr = Tcl_NewStringObj(buffer, -1);
+    Tcl_IncrRefCount(contents_ptr);
+    int result = ttrek_WriteChars(interp, path_ptr, contents_ptr, 0666);
+    Tcl_DecrRefCount(contents_ptr);
+    Tcl_Free((char *) buffer);
+    return result;
 }
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {

@@ -75,6 +75,11 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 
     // add direct requirement to dependencies
     if (direct_version_requirement != NULL) {
+        if (!cJSON_IsObject(lock_root)) {
+            printf("lock_root is not a cJSON object\n");
+        } else if (!cJSON_HasObjectItem(lock_root, "dependencies")) {
+            printf("dependencies field does not exist in lock_root\n");
+        }
         cJSON *deps = cJSON_GetObjectItem(lock_root, "dependencies");
         if (cJSON_HasObjectItem(deps, package_name)) {
             // modify the value
