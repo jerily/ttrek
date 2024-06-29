@@ -28,31 +28,13 @@ enum subcommand {
     SUBCMD_UPDATE
 };
 
-static int ttrek_Startup(Tcl_Interp *interp) {
-
-    if (Tcl_Init(interp) != TCL_OK) {
-        goto error;
-    }
-
-    return TCL_OK;
-
-error:
-    return TCL_ERROR;
-
-}
-
 int main(int argc, char *argv[]) {
 
-    Tcl_Interp *interp = Tcl_CreateInterp();
-
     if (argc <= 1) {
-        goto tclshell;
+        goto usage;
     }
 
-    if (argc == 3 && strcmp(argv[2], "help") == 0) {
-        goto tclshell;
-    }
-
+    Tcl_Interp *interp = Tcl_CreateInterp();
     Tcl_Size objc = argc;
     Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);
     for (int i = 0; i < argc; i++) {
@@ -60,51 +42,48 @@ int main(int argc, char *argv[]) {
     }
 
     int sub_cmd_index;
-    if (TCL_OK == Tcl_GetIndexFromObj(interp, objv[1], subcommands, "subcommand", 0, &sub_cmd_index)) {
-        switch ((enum subcommand) sub_cmd_index) {
-            case SUBCMD_INIT:
-                fprintf(stderr, "init\n");
-                ttrek_InitSubCmd(interp, objc-1, &objv[1]);
-                return 0;
-                break;
-            case SUBCMD_INSTALL:
-                curl_global_init(CURL_GLOBAL_ALL);
-                if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
-                    fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                    curl_global_cleanup();
-                    return 1;
-                }
-                curl_global_cleanup();
-                return 0;
-                break;
-            case SUBCMD_UPDATE:
-                curl_global_init(CURL_GLOBAL_ALL);
-                if (TCL_OK != ttrek_UpdateSubCmd(interp, objc-1, &objv[1])) {
-                    fprintf(stderr, "error: update subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                    curl_global_cleanup();
-                    return 1;
-                }
-                curl_global_cleanup();
-                return 0;
-                break;
-            case SUBCMD_UNINSTALL:
-                fprintf(stderr, "uninstall\n");
-                return 0;
-                break;
-            case SUBCMD_RUN:
-                if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
-                    fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                    return 1;
-                }
-                return 0;
-                break;
-        }
+    if (Tcl_GetIndexFromObj(interp, objv[1], subcommands, "subcommand", 0, &sub_cmd_index) != TCL_OK) {
+        fprintf(stderr, "Error: unknown subcommand \"%s\"\n\n", Tcl_GetString(objv[1]));
+        goto usage;
     }
 
-tclshell:
-
-    TclZipfs_AppHook(&argc, &argv);
-    Tcl_MainEx(argc, argv, ttrek_Startup, interp);
+    switch ((enum subcommand) sub_cmd_index) {
+        case SUBCMD_INIT:
+            fprintf(stderr, "init\n");
+            ttrek_InitSubCmd(interp, objc-1, &objv[1]);
+            break;
+        case SUBCMD_INSTALL:
+            curl_global_init(CURL_GLOBAL_ALL);
+            if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                curl_global_cleanup();
+                return 1;
+            }
+            curl_global_cleanup();
+            break;
+        case SUBCMD_UPDATE:
+            curl_global_init(CURL_GLOBAL_ALL);
+            if (TCL_OK != ttrek_UpdateSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: update subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                curl_global_cleanup();
+                return 1;
+            }
+            curl_global_cleanup();
+            break;
+        case SUBCMD_UNINSTALL:
+            fprintf(stderr, "uninstall\n");
+            break;
+        case SUBCMD_RUN:
+            if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
+                fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                return 1;
+            }
+            break;
+    }
 
     return 0;
+
+usage:
+    fprintf(stderr, "Usage: ttrek <subcommand> [options]\n");
+    return 1;
 }
