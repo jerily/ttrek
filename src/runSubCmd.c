@@ -23,8 +23,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_IncrRefCount(path_to_file_ptr);
 
     char ld_library_path_str[1024];
-    snprintf(ld_library_path_str, 1024, "LD_LIBRARY_PATH=%s/lib;%s/lib64",
-             Tcl_GetString(state_ptr->project_install_dir_ptr), Tcl_GetString(state_ptr->project_install_dir_ptr));
+    snprintf(ld_library_path_str, 1024, "%s/lib", Tcl_GetString(state_ptr->project_install_dir_ptr));
 
     Tcl_Size argc = objc;
     const char *argv[objc];

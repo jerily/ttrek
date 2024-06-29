@@ -320,12 +320,12 @@ static void ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vec
                                        std::vector<InstallSpec> &execution_plan) {
 
     std::vector<std::string> filtered_installs;
-    std::copy_if(installs.begin(), installs.end(), std::back_inserter(filtered_installs), [&state_ptr](const std::string &install) -> bool {
+    std::copy_if(installs.begin(), installs.end(), std::back_inserter(filtered_installs), [&state_ptr,&requirements](const std::string &install) -> bool {
         auto index = install.find('='); // package_name=package_version
         auto package_name = install.substr(0, index);
         auto package_version = install.substr(index + 1);
         int package_name_exists_in_lock_p;
-        return state_ptr->option_force || !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
+        return (state_ptr->option_force && requirements.find(package_name) != requirements.end()) || !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
     });
 
     // get all reverse dependencies from lock file
