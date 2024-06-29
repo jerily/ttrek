@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <sys/utsname.h>
 #include "installer.h"
 #include "registry.h"
 #include "base64.h"
@@ -68,7 +69,8 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     }
 }
 
-static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name, const char *package_version, cJSON *deps_node, Tcl_Obj *files_diff) {
+static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
+                                   const char *package_version, cJSON *deps_node, Tcl_Obj *files_diff) {
 
     // add direct requirement to dependencies
     if (direct_version_requirement != NULL) {
@@ -157,8 +159,15 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         return TCL_ERROR;
     }
 
+    struct utsname sysinfo;
+    if (uname(&sysinfo)) {
+        fprintf(stderr, "error: could not get system information\n");
+        return TCL_ERROR;
+    }
+
     char install_spec_url[256];
-    snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s", REGISTRY_URL, package_name, package_version);
+    snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version,
+             sysinfo.sysname, sysinfo.machine);
 
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
@@ -188,13 +197,16 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
             char patch_diff[1024 * 1024];
             Tcl_Size patch_diff_len;
-            base64_decode(base64_patch_diff, strnlen(base64_patch_diff, MAX_PATCH_FILE_SIZE), patch_diff, &patch_diff_len);
+            base64_decode(base64_patch_diff, strnlen(base64_patch_diff, MAX_PATCH_FILE_SIZE), patch_diff,
+                          &patch_diff_len);
 
             char patch_filename[256];
-            snprintf(patch_filename, sizeof(patch_filename), "source/patch-%s-%s-%s", package_name, package_version, patch_name);
+            snprintf(patch_filename, sizeof(patch_filename), "source/patch-%s-%s-%s", package_name, package_version,
+                     patch_name);
 
             Tcl_Obj *patch_file_path_ptr;
-            ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1), &patch_file_path_ptr);
+            ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1),
+                              &patch_file_path_ptr);
             ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0644);
         }
     }
@@ -233,19 +245,21 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     snprintf(install_filename, sizeof(install_filename), "install-%s-%s.sh", package_name, package_version);
 
     Tcl_Obj *path_to_install_file_ptr;
-    ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(install_filename, -1), &path_to_install_file_ptr);
+    ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(install_filename, -1),
+                      &path_to_install_file_ptr);
     ttrek_WriteChars(interp, path_to_install_file_ptr, install_script_full, 0744);
 
     Tcl_DecrRefCount(install_script_full);
 
     Tcl_Size argc = 1;
     const char *argv[2] = {
-        Tcl_GetString(path_to_install_file_ptr),
-        NULL
+            Tcl_GetString(path_to_install_file_ptr),
+            NULL
     };
     fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
 
-    ttrek_fsmonitor_state_t *fsmonitor_state_ptr = (ttrek_fsmonitor_state_t *) Tcl_Alloc(sizeof(ttrek_fsmonitor_state_t));
+    ttrek_fsmonitor_state_t *fsmonitor_state_ptr = (ttrek_fsmonitor_state_t *) Tcl_Alloc(
+            sizeof(ttrek_fsmonitor_state_t));
     fsmonitor_state_ptr->files_before = NULL;
     fsmonitor_state_ptr->files_diff = NULL;
     if (TCL_OK != ttrek_FSMonitor_AddWatch(interp, state_ptr->project_install_dir_ptr, fsmonitor_state_ptr)) {
@@ -287,15 +301,18 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     if (direct_version_requirement != NULL) {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
-            ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version, deps_node, fsmonitor_state_ptr->files_diff);
+            ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
+                                   deps_node, fsmonitor_state_ptr->files_diff);
         } else {
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, package_version_with_caret_op);
-            ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version, deps_node, fsmonitor_state_ptr->files_diff);
+            ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version,
+                                   deps_node, fsmonitor_state_ptr->files_diff);
         }
     } else {
-        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node, fsmonitor_state_ptr->files_diff);
+        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node,
+                               fsmonitor_state_ptr->files_diff);
     }
 
     if (TCL_OK != ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr)) {
@@ -357,7 +374,8 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
     }
 
     Tcl_Obj *temp_package_dir_ptr;
-    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1),
+                      &temp_package_dir_ptr);
 
     if (ttrek_CheckFileExists(temp_package_dir_ptr) == TCL_OK) {
         Tcl_Obj *error_ptr;
@@ -396,7 +414,8 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         }
 
         if (TCL_OK != Tcl_FSCopyFile(file_path_ptr, temp_file_path_ptr)) {
-            fprintf(stderr, "error: could not copy file %s to temp dir (%s)\n", Tcl_GetString(file_path_ptr), Tcl_GetString(temp_file_path_ptr));
+            fprintf(stderr, "error: could not copy file %s to temp dir (%s)\n", Tcl_GetString(file_path_ptr),
+                    Tcl_GetString(temp_file_path_ptr));
             Tcl_DecrRefCount(file_path_ptr);
             Tcl_DecrRefCount(temp_package_dir_ptr);
             Tcl_DecrRefCount(temp_file_path_ptr);
@@ -463,7 +482,8 @@ static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, 
         const char *file_path = file->valuestring;
         // move the file from temp dir to install dir
         Tcl_Obj *temp_package_dir_ptr;
-        ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+        ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1),
+                          &temp_package_dir_ptr);
         Tcl_Obj *temp_file_path_ptr;
         ttrek_ResolvePath(interp, temp_package_dir_ptr, Tcl_NewStringObj(file_path, -1), &temp_file_path_ptr);
         Tcl_Obj *file_path_ptr;
@@ -484,7 +504,8 @@ static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, 
 
 static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
     Tcl_Obj *temp_package_dir_ptr;
-    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1), &temp_package_dir_ptr);
+    ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1),
+                      &temp_package_dir_ptr);
     Tcl_Obj *error_ptr;
     int result = Tcl_FSRemoveDirectory(temp_package_dir_ptr, 1, &error_ptr);
     Tcl_DecrRefCount(error_ptr);
@@ -492,7 +513,8 @@ static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, c
     return result;
 }
 
-int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name, const char *package_version,
+int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
+                         const char *package_version,
                          const char *direct_version_requirement, int package_name_exists_in_lock_p) {
 
     if (package_name_exists_in_lock_p) {
