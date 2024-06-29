@@ -63,8 +63,7 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
         cJSON_AddItemToObject(spec_root, "dependencies", dependencies);
     }
 
-    cJSON *package = cJSON_GetObjectItem(dependencies, package_name);
-    if (package) {
+    if (cJSON_HasObjectItem(dependencies, package_name)) {
         cJSON_ReplaceItemInObject(dependencies, package_name, cJSON_CreateString(version_requirement));
     } else {
         cJSON_AddStringToObject(dependencies, package_name, version_requirement);
@@ -77,8 +76,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     // add direct requirement to dependencies
     if (direct_version_requirement != NULL) {
         cJSON *deps = cJSON_GetObjectItem(lock_root, "dependencies");
-        cJSON *dep = cJSON_GetObjectItem(deps, package_name);
-        if (dep) {
+        if (cJSON_HasObjectItem(deps, package_name)) {
             // modify the value
             cJSON_ReplaceItemInObject(deps, package_name, cJSON_CreateString(direct_version_requirement));
         } else {
