@@ -117,8 +117,6 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr);
 
 ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy);
 int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
-int ttrek_IncrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv);
-int ttrek_DecrRefCountObjv(Tcl_Size objc, Tcl_Obj **objv);
 
 #ifdef __cplusplus
 }
