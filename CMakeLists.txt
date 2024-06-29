@@ -91,24 +91,24 @@ if (NOT APPLE)
     target_link_options(${TARGET} PRIVATE -static)
 endif()
 
-add_custom_command(
-        OUTPUT ttrek.img
-        COMMAND ${CMAKE_INSTALL_PREFIX}/bin/tclsh9.0 ${CMAKE_CURRENT_SOURCE_DIR}/mkimg.tcl -o ttrek.img
-        DEPENDS mkimg.tcl
-        scripts/main.tcl
-        scripts/tcl_library/ttrek/pkgIndex.tcl
-        scripts/tcl_library/ttrek/ttrek_helper.tcl
-        scripts/tcl_library/ttrek/ttrek.tcl
-        VERBATIM
-)
-add_custom_target(generate_ttrek_image DEPENDS ttrek.img)
-add_dependencies(${TARGET} generate_ttrek_image)
-set_target_properties(${TARGET} PROPERTIES LINK_DEPENDS ttrek.img)
-add_custom_command(TARGET ${TARGET}
-    POST_BUILD
-    COMMAND cat ttrek.img >> ${TARGET}
-    VERBATIM
-)
+#add_custom_command(
+#        OUTPUT ttrek.img
+#        COMMAND ${CMAKE_INSTALL_PREFIX}/bin/tclsh9.0 ${CMAKE_CURRENT_SOURCE_DIR}/mkimg.tcl -o ttrek.img
+#        DEPENDS mkimg.tcl
+#        scripts/main.tcl
+#        scripts/tcl_library/ttrek/pkgIndex.tcl
+#        scripts/tcl_library/ttrek/ttrek_helper.tcl
+#        scripts/tcl_library/ttrek/ttrek.tcl
+#        VERBATIM
+#)
+#add_custom_target(generate_ttrek_image DEPENDS ttrek.img)
+#add_dependencies(${TARGET} generate_ttrek_image)
+#set_target_properties(${TARGET} PROPERTIES LINK_DEPENDS ttrek.img)
+#add_custom_command(TARGET ${TARGET}
+#    POST_BUILD
+#    COMMAND cat ttrek.img >> ${TARGET}
+#    VERBATIM
+#)
 
 install(TARGETS ${TARGET}
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}

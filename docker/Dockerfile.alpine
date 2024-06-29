@@ -1,0 +1,31 @@
+FROM alpine:latest
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apk add \
+    linux-headers \
+    bsd-compat-headers \
+    bash \
+    perl \
+    gcc \
+    g++ \
+    binutils-gold \
+    cmake \
+    make \
+    patch \
+    pkgconfig \
+    cvs \
+    git \
+    curl \
+    zip \
+    unzip \
+    gdb \
+    libunwind-dev
+
+COPY src /var/ttrek/src
+COPY CMakeLists.txt /var/ttrek/CMakeLists.txt
+COPY build-ttrek.sh /var/ttrek/build-ttrek.sh
+
+ENV LD_LIBRARY_PATH="/var/www/sample-project/local/lib:/var/www/sample-project/local/lib64"
+
+RUN chmod +x /var/ttrek/build-ttrek.sh
+RUN /var/ttrek/build-ttrek.sh

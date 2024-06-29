@@ -9,6 +9,8 @@ INSTALL_DIR=$SCRIPT_DIR/local-static
 GNUMAKEFLAGS=-j9
 export GNUMAKEFLAGS
 
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 curl -L -o zlib-1.3.1.tar.gz --output-dir $BUILD_DIR https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
