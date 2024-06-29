@@ -41,7 +41,7 @@ static char *install_script_common =
     L("BUILD_LOG_DIR=\"$ROOT_BUILD_DIR/logs/${PACKAGE}-${VERSION}\"")
     L("")
     L("mkdir -p \"$DOWNLOAD_DIR\"")
-    L("[ ! -e \"$SOURCE_DIR\" ] || rm -rf \"$SOURCE_DIR\"")
+    L("rm -rf \"$SOURCE_DIR\"")
     L("mkdir -p \"$SOURCE_DIR\"")
     L("mkdir -p \"$BUILD_DIR\"")
     L("mkdir -p \"$BUILD_LOG_DIR\"")
