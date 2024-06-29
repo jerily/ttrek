@@ -356,7 +356,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
-        std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl;
+        DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
         resolvo::SolvableId locked_candidate_id{};
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
@@ -371,11 +371,15 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 //                    auto dep_name = names.alloc(dep.first);
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
                     dependencies.requirements.push_back(dep_version_set);
-                    std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl;
+                    DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
+
+                    // keep track of the dependencies for each package
+                    // so that we can later sort the installs based on
+                    // the topological sort of the dependencies
                     dependencies_map[package_name].insert(std::string(dep.first));
                 }
                 auto id = alloc_candidate(package_name, package_version, dependencies);
-                std::cout << "candidate: " << package_name << "=" << package_version << std::endl;
+                DBG(std::cout << "candidate: " << package_name << "=" << package_version << std::endl);
                 if (set_locked_p && locked_packages[package_name] == package_version) {
                     DBG(std::cout << "locked package: " << package_name << "=" << package_version << std::endl);
                     locked_candidate_id = id;
@@ -406,7 +410,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
             result.candidates.push_back(resolvo::SolvableId{i});
             result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
         }
-        std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl;
+        DBG(std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl);
         return result;
     }
 
