@@ -117,8 +117,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         cJSON_AddItemToObject(lock_root, "packages", packages);
     }
 
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
-    if (package) {
+    if (cJSON_HasObjectItem(packages, package_name)) {
         // modify the value
         cJSON_ReplaceItemInObject(packages, package_name, item_node);
     } else {
