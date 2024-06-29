@@ -255,7 +255,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             Tcl_GetString(path_to_install_file_ptr),
             NULL
     };
-    fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr));
+    DBG(fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr)));
 
     ttrek_fsmonitor_state_t *fsmonitor_state_ptr = (ttrek_fsmonitor_state_t *) Tcl_Alloc(
             sizeof(ttrek_fsmonitor_state_t));
