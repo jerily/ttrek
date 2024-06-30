@@ -17,6 +17,7 @@ SubCmdProc(ttrek_InitSubCmd);
 SubCmdProc(ttrek_InstallSubCmd);
 SubCmdProc(ttrek_RunSubCmd);
 SubCmdProc(ttrek_UpdateSubCmd);
+SubCmdProc(ttrek_ListSubCmd);
 
 #ifdef __cplusplus
 }

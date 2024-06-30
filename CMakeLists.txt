@@ -80,6 +80,7 @@ add_executable(${TARGET}
         src/installer.c
         src/fsmonitor/fsmonitor.h
         src/fsmonitor/fsmonitor.c
+        src/listSubCmd.c
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:

@@ -17,6 +17,7 @@ static const char *subcommands[] = {
         "uninstall",
         "run",
         "update",
+        "ls",
         NULL
 };
 
@@ -25,7 +26,8 @@ enum subcommand {
     SUBCMD_INSTALL,
     SUBCMD_UNINSTALL,
     SUBCMD_RUN,
-    SUBCMD_UPDATE
+    SUBCMD_UPDATE,
+    SUBCMD_LIST
 };
 
 int main(int argc, char *argv[]) {
@@ -88,6 +90,11 @@ int main(int argc, char *argv[]) {
                 exitcode = 1;
             }
             break;
+        case SUBCMD_LIST:
+            if (TCL_OK != ttrek_ListSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: list subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
     }
 
     goto done;
