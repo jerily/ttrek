@@ -176,47 +176,6 @@ static int ttrek_ExistsInLock(cJSON *lock_root, const char *package_name, const 
     return 1;
 }
 
-static int
-ttrek_HasChangedDependencyVersion(cJSON *lock_root, const std::map<std::string, std::string> &installed_packages_map,
-                                  const char *package_name, const char *package_version) {
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
-    if (!packages) {
-        return 0;
-    }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
-    if (!package) {
-        return 0;
-    }
-
-    cJSON *version = cJSON_GetObjectItem(package, "version");
-    if (!version) {
-        return 0;
-    }
-
-    if (strcmp(version->valuestring, package_version) != 0) {
-        return 0;
-    }
-
-    cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
-    if (!dependencies) {
-        return 0;
-    }
-
-    for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
-        cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
-        std::string dep_package_name = dep_item->string;
-        std::string dep_package_version = cJSON_GetStringValue(dep_item);
-        if (installed_packages_map.find(dep_package_name) != installed_packages_map.end()) {
-            if (installed_packages_map.at(dep_package_name) != dep_package_version) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
 typedef enum {
     DIRECT_INSTALL,
     RDEP_INSTALL
