@@ -231,7 +231,7 @@ struct InstallSpec {
     ttrek_install_type_t install_type;
     std::string package_name;
     std::string package_version;
-    const char *direct_version_requirement;
+    std::string direct_version_requirement;
     int package_name_exists_in_lock_p;
 };
 
@@ -285,8 +285,8 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     }
 
     auto direct_version_requirement =
-            requirements.find(package_name) != requirements.end() && requirements.at(package_name).size() > 0 ? requirements.at(package_name).c_str()
-                                                                  : nullptr;
+            requirements.find(package_name) != requirements.end() ? requirements.at(package_name)
+                                                                  : "";
 
     auto install_spec = InstallSpec{DIRECT_INSTALL, package_name, package_version, direct_version_requirement, package_name_exists_in_lock_p};
     execution_plan.push_back(install_spec);
@@ -299,8 +299,8 @@ static void ttrek_AddReverseDependencyToExecutionPlan(ttrek_state_t *state_ptr, 
     auto package_version = rdep_install.substr(index + 1);
 
     auto direct_version_requirement =
-            requirements.find(package_name) != requirements.end() ? requirements.at(package_name).c_str()
-                                                                  : nullptr;
+            requirements.find(package_name) != requirements.end() ? requirements.at(package_name)
+                                                                  : "";
 
     int package_name_exists_in_lock_p;
     int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
@@ -404,7 +404,7 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
 
             if (TCL_OK !=
                 ttrek_InstallPackage(interp, state_ptr, package_name.c_str(), package_version.c_str(),
-                                     direct_version_requirement, package_name_exists_in_lock_p)) {
+                                     direct_version_requirement.c_str(), package_name_exists_in_lock_p)) {
                 return TCL_ERROR;
             }
         }

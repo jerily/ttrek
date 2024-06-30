@@ -304,7 +304,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 //    }
 
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
-    if (direct_version_requirement != NULL) {
+    if (direct_version_requirement != NULL && direct_version_requirement[0] != '\0') {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
             ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
