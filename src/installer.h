@@ -17,6 +17,8 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
                          const char *package_version, const char *direct_version_requirement,
                          int package_name_exists_in_lock_p);
 
+int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
+
 #ifdef __cplusplus
 }
 #endif

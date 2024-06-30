@@ -559,3 +559,60 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
 
     return TCL_OK;
 }
+
+
+static int ttrek_RemovePackageFromLockRoot(cJSON *lock_root, const char *package_name) {
+    // remove it from "packages" in the lock root
+    if (!cJSON_HasObjectItem(lock_root, "packages")) {
+        return TCL_ERROR;
+    }
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (!cJSON_HasObjectItem(packages, package_name)) {
+        return TCL_ERROR;
+    }
+    cJSON_DeleteItemFromObject(packages, package_name);
+
+    // remove it from "dependencies" as well
+    if (!cJSON_HasObjectItem(lock_root, "dependencies")) {
+        return TCL_ERROR;
+    }
+    cJSON *dependencies = cJSON_GetObjectItem(lock_root, "dependencies");
+    if (cJSON_HasObjectItem(dependencies, package_name)) {
+        cJSON_DeleteItemFromObject(dependencies, package_name);
+    }
+
+    return TCL_OK;
+}
+
+static int ttrek_RemovePackageFromSpecRoot(cJSON *spec_root, const char *package_name) {
+    if (!cJSON_HasObjectItem(spec_root, "dependencies")) {
+        return TCL_ERROR;
+    }
+    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
+    if (cJSON_HasObjectItem(dependencies, package_name)) {
+        cJSON_DeleteItemFromObject(dependencies, package_name);
+    }
+    return TCL_OK;
+}
+
+int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+
+    // remove it from the lock root
+    if (TCL_OK != ttrek_RemovePackageFromLockRoot(state_ptr->lock_root, package_name)) {
+        fprintf(stderr, "error: could not remove %s from lock file\n", package_name);
+        return TCL_ERROR;
+    }
+
+    // remove it from the spec root
+    if (TCL_OK != ttrek_RemovePackageFromSpecRoot(state_ptr->spec_root, package_name)) {
+        fprintf(stderr, "error: could not remove %s from spec file\n", package_name);
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_DeletePackageFiles(interp, state_ptr, package_name)) {
+        fprintf(stderr, "error: could not delete package files from existing installation\n");
+        return TCL_ERROR;
+    }
+
+    return TCL_OK;
+}
