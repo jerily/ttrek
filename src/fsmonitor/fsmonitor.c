@@ -20,7 +20,7 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
         return TCL_ERROR;
     }
 
-    for (int i = 0; i < list1_len; i++) {
+    for (Tcl_Size i = 0; i < list1_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, list1, i, &elem)) {
             fprintf(stderr, "error: could not get element %d of list1\n", i);
@@ -43,7 +43,7 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
         return TCL_ERROR;
     }
 
-    for (int i = 0; i < list2_len; i++) {
+    for (Tcl_Size i = 0; i < list2_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, list2, i, &elem)) {
             fprintf(stderr, "error: could not get element %d of list2\n", i);

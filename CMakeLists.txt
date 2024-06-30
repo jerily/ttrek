@@ -81,6 +81,7 @@ add_executable(${TARGET}
         src/fsmonitor/fsmonitor.h
         src/fsmonitor/fsmonitor.c
         src/listSubCmd.c
+        src/uninstallSubCmd.c
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:

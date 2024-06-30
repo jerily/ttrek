@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#include <stdlib.h>
 #include "subCmdDecls.h"
 
 
@@ -73,7 +72,7 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             return TCL_ERROR;
         }
     } else {
-        for (int i = 1; i < objc; i++) {
+        for (Tcl_Size i = 1; i < objc; i++) {
             if (TCL_OK != ttrek_GetLockPackagesThatMatch(interp, state_ptr->lock_root, objv[i], list_ptr)) {
                 fprintf(stderr, "error: getting direct dependencies failed\n");
                 Tcl_DecrRefCount(list_ptr);
@@ -92,7 +91,7 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
-    for (int i = 0; i < list_len; i++) {
+    for (Tcl_Size i = 0; i < list_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, list_ptr, i, &elem)) {
             fprintf(stderr, "error: getting list element failed\n");

@@ -55,10 +55,10 @@ static void ttrek_ParseReverseDependencies(cJSON *lock_root,
         cJSON *package = cJSON_GetArrayItem(packages, i);
         std::string package_name = package->string;
         std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
-        cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
-        if (!dependencies) {
+        if (!cJSON_HasObjectItem(package, "requires")) {
             continue;
         }
+        cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
         for (int j = 0; j < cJSON_GetArraySize(dependencies); j++) {
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, j);
             std::string dep_package_name = dep_item->string;
@@ -338,5 +338,54 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
         }
 
     }
+    return TCL_OK;
+}
+
+int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
+
+    std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies_map;
+    ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
+
+    std::unordered_set<std::string> uninstalls;
+
+    // prepare the initial list of packages to uninstall
+    for (Tcl_Size i = 0; i < objc; i++) {
+        std::string package_name = Tcl_GetString(objv[i]);
+        uninstalls.insert(package_name);
+    }
+
+    // prepare the list of reverse dependencies to uninstall
+    bool changed;
+    do {
+        changed = false;
+        for (const auto &uninstall: uninstalls) {
+            auto it = reverse_dependencies_map.find(uninstall);
+            if (it != reverse_dependencies_map.end()) {
+                for (const auto &rdep: it->second) {
+                    if (uninstalls.find(rdep.package_name) == uninstalls.end()) {
+                        uninstalls.insert(rdep.package_name);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    } while (changed);
+
+    // print the list of packages to uninstall
+    std::cout << "The following packages will be uninstalled:" << std::endl;
+    for (const auto &uninstall: uninstalls) {
+        std::cout << uninstall << std::endl;
+    }
+
+    // get user confirmation
+    if (!state_ptr->option_yes) {
+        std::string answer;
+        std::cout << "Do you want to proceed? [y/N] ";
+        std::getline(std::cin, answer);
+        if (answer != "y") {
+            return TCL_OK;
+        }
+    }
+
     return TCL_OK;
 }

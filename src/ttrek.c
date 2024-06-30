@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     interp = Tcl_CreateInterp();
     objc = argc;
     objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
-    for (int i = 0; i < argc; i++) {
+    for (Tcl_Size i = 0; i < argc; i++) {
         objv[i] = Tcl_NewStringObj(argv[i], -1);
         Tcl_IncrRefCount(objv[i]);
     }
@@ -82,7 +82,10 @@ int main(int argc, char *argv[]) {
             }
             break;
         case SUBCMD_UNINSTALL:
-            fprintf(stderr, "uninstall\n");
+            if (TCL_OK != ttrek_UninstallSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: uninstall subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
             break;
         case SUBCMD_RUN:
             if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
@@ -108,7 +111,7 @@ done:
         curl_global_cleanup();
     }
     if (objc) {
-        for (int i = 0; i < objc; i++) {
+        for (Tcl_Size i = 0; i < objc; i++) {
             Tcl_DecrRefCount(objv[i]);
         }
         ckfree(objv);

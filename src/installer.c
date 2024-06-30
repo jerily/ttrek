@@ -111,7 +111,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     cJSON *files_node = cJSON_CreateArray();
     Tcl_Size files_diff_len;
     Tcl_ListObjLength(NULL, files_diff, &files_diff_len);
-    for (int i = 0; i < files_diff_len; i++) {
+    for (Tcl_Size i = 0; i < files_diff_len; i++) {
         Tcl_Obj *file_diff_ptr;
         Tcl_ListObjIndex(NULL, files_diff, i, &file_diff_ptr);
         cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
@@ -340,7 +340,7 @@ static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_pat
     Tcl_Obj *list_ptr = Tcl_FSSplitPath(file_path_ptr, &len);
     Tcl_Obj *dir_path_ptr = Tcl_NewObj();
     Tcl_IncrRefCount(dir_path_ptr);
-    for (int i = 0; i < len - 1; i++) {
+    for (Tcl_Size i = 0; i < len - 1; i++) {
         Tcl_Obj *part_ptr;
         Tcl_ListObjIndex(interp, list_ptr, i, &part_ptr);
         Tcl_Obj *dir_path_ptr_copy;

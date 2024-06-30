@@ -4,16 +4,11 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#include <string.h>
 #include "subCmdDecls.h"
 #include "common.h"
 #include "ttrek_resolvo.h"
 
-#define MAX_INSTALL_SCRIPT_LEN 1048576
-
-int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-
-    int option_save_dev = 0;
+int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int option_user = 0;
     int option_global = 0;
     int option_yes = 0;
@@ -50,42 +45,21 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         return TCL_ERROR;
     }
 
-    Tcl_Size installObjc = objc - 1;
-    Tcl_Obj **installObjv = NULL;
-
-    Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
-    Tcl_IncrRefCount(list_ptr);
-    if (installObjc == 0) {
-        // add direct dependencies from state_ptr->spec_root to installObjv
-        if (TCL_OK != ttrek_GetDirectDependencies(interp, state_ptr->spec_root, list_ptr)) {
-            fprintf(stderr, "error: getting direct dependencies failed\n");
-            Tcl_DecrRefCount(list_ptr);
-            ttrek_DestroyState(state_ptr);
-            ckfree(remObjv);
-            return TCL_ERROR;
-        }
-
-        if (TCL_OK != Tcl_ListObjGetElements(interp, list_ptr, &installObjc, &installObjv)) {
-            fprintf(stderr, "error: getting list elements failed\n");
-            Tcl_DecrRefCount(list_ptr);
-            ttrek_DestroyState(state_ptr);
-            ckfree(remObjv);
-            return TCL_ERROR;
-        }
-
-    } else {
-        installObjv = &remObjv[1];
-    }
-
-    if (TCL_OK != ttrek_InstallOrUpdate(interp, installObjc, installObjv, state_ptr)) {
-        Tcl_DecrRefCount(list_ptr);
+    if (objc - 1 == 0) {
+        fprintf(stderr, "error: missing package names\n");
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
     }
 
-    Tcl_DecrRefCount(list_ptr);
+    if (TCL_OK != ttrek_Uninstall(interp, objc-1, &remObjv[1], state_ptr)) {
+        ttrek_DestroyState(state_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     ttrek_DestroyState(state_ptr);
     ckfree(remObjv);
+
     return TCL_OK;
 }
