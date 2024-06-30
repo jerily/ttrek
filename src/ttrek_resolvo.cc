@@ -294,31 +294,6 @@ static void ttrek_AddInstallToExecutionPlan(PackageDatabase &db, ttrek_state_t *
     execution_plan.push_back(install_spec);
 }
 
-static void ttrek_AddReverseDependencyToExecutionPlan(ttrek_state_t *state_ptr, const std::string &rdep_install,
-                                                      std::map<std::string, std::string> &requirements,
-                                                      std::vector<InstallSpec> &execution_plan) {
-    auto index = rdep_install.find('='); // package_name=package_version
-    auto package_name = rdep_install.substr(0, index);
-    auto package_version = rdep_install.substr(index + 1);
-
-    auto direct_version_requirement =
-            requirements.find(package_name) != requirements.end() ? requirements.at(package_name)
-                                                                  : "";
-
-    int package_name_exists_in_lock_p;
-    int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
-                                                            package_version.c_str(),
-                                                            &package_name_exists_in_lock_p);
-
-    if (exact_package_exists_in_lock_p) {
-        // we deliberately reinstall in this case
-    }
-
-    auto install_spec = InstallSpec{RDEP_INSTALL, package_name, package_version, direct_version_requirement,
-                                    package_name_exists_in_lock_p};
-    execution_plan.push_back(install_spec);
-}
-
 static void ttrek_CleanupReverseDependencies(PackageDatabase &db, std::vector<InstallSpec> &execution_plan) {
 
     // get the set of direct installs
