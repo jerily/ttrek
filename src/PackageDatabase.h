@@ -256,6 +256,13 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         reverse_dependencies_map = rdeps_map;
     }
 
+    const std::set<std::string> get_dependent_package_names(const std::string &package_name) {
+        if (dependencies_map.find(package_name) != dependencies_map.end()) {
+            return dependencies_map.at(package_name);
+        }
+        return std::set<std::string>();
+    }
+
     bool is_rdep(const std::string &package_name) {
         return rdeps.find(package_name) != rdeps.end();
     }
