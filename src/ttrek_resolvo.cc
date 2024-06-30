@@ -322,36 +322,40 @@ static void ttrek_AddReverseDependencyToExecutionPlan(ttrek_state_t *state_ptr, 
 static void ttrek_CleanupReverseDependencies(PackageDatabase &db, std::vector<InstallSpec> &execution_plan) {
 
     // get the set of direct installs
-    std::unordered_set<std::string> direct_installs;
+    std::unordered_set<std::string> filtered_installs;
     for (const auto &install: execution_plan) {
         if (install.install_type == DIRECT_INSTALL) {
-            direct_installs.insert(install.package_name);
+            filtered_installs.insert(install.package_name);
         }
     }
 
-    // get the set of reverse dependencies that are reverse dependencies of direct installs
-    std::unordered_set<std::string> real_reverse_deps;
-    for (const auto &spec: execution_plan) {
-        if (spec.install_type == RDEP_INSTALL) {
-            auto deps = db.get_dependent_package_names(spec.package_name);
-            bool found = false;
-            for (const auto &dep: deps) {
-                if (direct_installs.find(dep) != direct_installs.end()) {
-                    found = true;
-                    break;
+    // get the set of reverse dependencies that are reverse dependencies of direct installs or transitive
+    auto changed = true;
+    do {
+        changed = false;
+        for (const auto &spec: execution_plan) {
+            if (spec.install_type == RDEP_INSTALL && filtered_installs.find(spec.package_name) == filtered_installs.end()) {
+                auto deps = db.get_dependent_package_names(spec.package_name);
+                bool found = false;
+                for (const auto &dep: deps) {
+                    if (filtered_installs.find(dep) != filtered_installs.end()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    filtered_installs.insert(spec.package_name);
+                    changed = true;
                 }
             }
-            if (found) {
-                real_reverse_deps.insert(spec.package_name);
-            }
         }
-    }
+    } while (changed);
 
-    // remove reverse dependencies that are not reverse dependencies of direct installs
+    // remove reverse dependencies that are not reverse dependencies of direct installs or transitive
     execution_plan.erase(std::remove_if(execution_plan.begin(), execution_plan.end(),
-                                        [&real_reverse_deps](const InstallSpec &spec) -> bool {
+                                        [&filtered_installs](const InstallSpec &spec) -> bool {
                                             return spec.install_type == RDEP_INSTALL &&
-                                                   real_reverse_deps.find(spec.package_name) == real_reverse_deps.end();
+                                                   filtered_installs.find(spec.package_name) == filtered_installs.end();
                                         }), execution_plan.end());
 }
 
