@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(ttrek VERSION 1.0.0 LANGUAGES C CXX)
 
+if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
+
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
 set(TARGET ${PROJECT_NAME})
 set(CMAKE_C_STANDARD   11)
 set(CMAKE_C_STANDARD_REQUIRED true)
@@ -13,8 +19,7 @@ set(BUILD_SHARED_LIBS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if (NOT APPLE)
-    find_library(MATH_LIB NAMES libm.a)
-    set(EXTRA_LIBS ${MATH_LIB})
+    set(EXTRA_LIBS "-lm")
 else()
     find_library(CORE_FOUNDATION CoreFoundation)
     message(STATUS "CORE_FOUNDATION: ${CORE_FOUNDATION}")
@@ -22,8 +27,14 @@ else()
 endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_C_FLAGS "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_C_FLAGS}")
-set(CMAKE_CXX_FLAGS  "-g -DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
+set(CMAKE_C_FLAGS "-DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS  "-DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
+set(CMAKE_C_FLAGS_DEBUG "-fPIE -g -fsanitize=undefined -fsanitize=address")
+set(CMAKE_CXX_FLAGS_DEBUG  "-fPIE -g -fsanitize=undefined -fsanitize=address")
+set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE  "-DNDEBUG")
+
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=undefined -fsanitize=address")
 
 #add_library(foo STATIC IMPORTED)
 #
@@ -86,9 +97,11 @@ find_library(TCL_LIBRARY NAMES libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" N
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 target_include_directories(${TARGET} PRIVATE "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
-target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} stdc++ ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
+target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES})
 if (NOT APPLE)
-    target_link_options(${TARGET} PRIVATE -static)
+    if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
+        target_link_options(${TARGET} PRIVATE -static)
+    endif()
 endif()
 
 install(TARGETS ${TARGET}
