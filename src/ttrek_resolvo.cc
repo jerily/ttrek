@@ -230,39 +230,6 @@ struct InstallSpec {
     int package_name_exists_in_lock_p;
 };
 
-static void ttrek_ComputeReverseDependencies(const std::vector<std::string> &installs,
-                                             const std::map<std::string, std::vector<ReverseDependency>> &reverse_dependencies,
-                                             std::vector<std::string> &rdep_installs) {
-
-    auto list_of_packages = installs;
-    bool changed = false;
-    while (rdep_installs.empty() || changed) {
-        changed = false;
-        for (const auto &install: list_of_packages) {
-            auto index = install.find('='); // package_name=package_version
-            auto package_name = install.substr(0, index);
-            auto package_version = install.substr(index + 1);
-            if (reverse_dependencies.find(package_name) != reverse_dependencies.end()) {
-                for (const auto &rdep: reverse_dependencies.at(package_name)) {
-                    std::string rdep_install = rdep.package_name + "=" + rdep.package_version;
-                    if (std::find(rdep_installs.begin(), rdep_installs.end(), rdep_install) == rdep_installs.end()) {
-                        std::cout << "adding rdep... " << rdep_install << " due to " << package_name << std::endl;
-                        // if not already in the list, add the direct reverse dependency
-                        rdep_installs.push_back(rdep_install);
-
-                        changed = true;
-                    }
-                }
-            }
-        }
-
-        if (!changed) {
-            break;
-        }
-        list_of_packages = rdep_installs;
-    };
-}
-
 static void ttrek_AddInstallToExecutionPlan(PackageDatabase &db, ttrek_state_t *state_ptr, const std::string &install,
                                             std::map<std::string, std::string> &requirements,
                                             std::vector<InstallSpec> &execution_plan) {
