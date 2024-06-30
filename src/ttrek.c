@@ -30,6 +30,12 @@ enum subcommand {
 
 int main(int argc, char *argv[]) {
 
+    int exitcode = 0;
+    Tcl_Interp *interp = NULL;
+    Tcl_Size objc = 0;
+    Tcl_Obj **objv;
+    CURLcode isCurlInitialized = CURLE_FAILED_INIT;
+
     if (argc <= 1) {
         goto usage;
     }
@@ -40,11 +46,12 @@ int main(int argc, char *argv[]) {
     };
     cJSON_InitHooks(&hooks);
 
-    Tcl_Interp *interp = Tcl_CreateInterp();
-    Tcl_Size objc = argc;
-    Tcl_Obj **objv = (Tcl_Obj **) Tcl_Alloc(sizeof(Tcl_Obj *) * argc);
+    interp = Tcl_CreateInterp();
+    objc = argc;
+    objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
     for (int i = 0; i < argc; i++) {
         objv[i] = Tcl_NewStringObj(argv[i], -1);
+        Tcl_IncrRefCount(objv[i]);
     }
 
     int sub_cmd_index;
@@ -59,22 +66,18 @@ int main(int argc, char *argv[]) {
             ttrek_InitSubCmd(interp, objc-1, &objv[1]);
             break;
         case SUBCMD_INSTALL:
-            curl_global_init(CURL_GLOBAL_ALL);
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                curl_global_cleanup();
-                return 1;
+                exitcode = 1;
             }
-            curl_global_cleanup();
             break;
         case SUBCMD_UPDATE:
-            curl_global_init(CURL_GLOBAL_ALL);
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (TCL_OK != ttrek_UpdateSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: update subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                curl_global_cleanup();
-                return 1;
+                exitcode = 1;
             }
-            curl_global_cleanup();
             break;
         case SUBCMD_UNINSTALL:
             fprintf(stderr, "uninstall\n");
@@ -82,14 +85,29 @@ int main(int argc, char *argv[]) {
         case SUBCMD_RUN:
             if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
                 fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
-                return 1;
+                exitcode = 1;
             }
             break;
     }
 
-    return 0;
+    goto done;
 
 usage:
     fprintf(stderr, "Usage: ttrek <subcommand> [options]\n");
-    return 1;
+    exitcode = 1;
+
+done:
+    if (isCurlInitialized == CURLE_OK) {
+        curl_global_cleanup();
+    }
+    if (objc) {
+        for (int i = 0; i < objc; i++) {
+            Tcl_DecrRefCount(objv[i]);
+        }
+        ckfree(objv);
+    }
+    if (interp != NULL) {
+        Tcl_DeleteInterp(interp);
+    }
+    return exitcode;
 }
