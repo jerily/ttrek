@@ -110,10 +110,10 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     // add the files that were added to the package
     cJSON *files_node = cJSON_CreateArray();
     Tcl_Size files_diff_len;
-    Tcl_ListObjLength(NULL, files_diff, &files_diff_len);
+    Tcl_ListObjLength(interp, files_diff, &files_diff_len);
     for (int i = 0; i < files_diff_len; i++) {
         Tcl_Obj *file_diff_ptr;
-        Tcl_ListObjIndex(NULL, files_diff, i, &file_diff_ptr);
+        Tcl_ListObjIndex(interp, files_diff, i, &file_diff_ptr);
         cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
     }
     cJSON_AddItemToObject(item_node, STRING_FILES, files_node);
