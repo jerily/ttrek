@@ -265,23 +265,17 @@ static void ttrek_AddInstallToExecutionPlan(PackageDatabase &db, ttrek_state_t *
                                             std::vector<InstallSpec> &execution_plan) {
     auto index = install.find('='); // package_name=package_version
     auto package_name = install.substr(0, index);
-
-    // if package_name starts with "rdep:" it is a reverse dependency
-    auto reverse_dependency_p = false;
-    if (package_name.find("rdep:") == 0) {
-        package_name = package_name.substr(5);
-        reverse_dependency_p = true;
-        std::cout << "reverse dependency: " << package_name << std::endl;
-    } else if (db.is_rdep(package_name)) {
-        reverse_dependency_p = true;
-    }
-
     auto package_version = install.substr(index + 1);
 
     int package_name_exists_in_lock_p;
     int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
+
+    auto reverse_dependency_p = false;
+    if (exact_package_exists_in_lock_p && db.is_rdep(package_name)) {
+        reverse_dependency_p = true;
+    }
 
     if (!state_ptr->option_force && !reverse_dependency_p && exact_package_exists_in_lock_p) {
         fprintf(stderr, "info: %s@%s already installed\n", package_name.c_str(), package_version.c_str());
