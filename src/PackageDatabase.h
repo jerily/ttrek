@@ -21,26 +21,24 @@
 #include <set>
 #include <map>
 #include <queue>
+#include <unordered_set>
 #include "semver/semver.h"
 #include "Range.h"
 #include "registry.h"
 #include "cjson/cJSON.h"
 
-std::map<std::string_view, std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>>> repository = {
-        {"a", {
-                      {"1.0.0", {{"b", ">=1.0.0,<4.0.0"}}},
-                      {"2.0.0", {{"b", ">=1.0.0,<4.0.0"}}},
-                      {"3.0.0", {{"b", ">=4.0.0,<7.0.0"}}},
-              }},
-        {"b", {
-                      {"8.0.0", {}},
-                      {"9.0.0", {}},
-                      {"10.0.0", {}},
-              }},
-        {"c", {
-                      {"1.0.0", {}},
-              }}
-};
+std::vector<resolvo::String> split_string(const std::string_view &str, const char *split_str) {
+    std::vector<resolvo::String> split;
+    size_t start = 0;
+    size_t end = str.find(split_str);
+    while (end != std::string::npos) {
+        split.push_back(std::string_view(str.substr(start, end - start)));
+        start = end + 1;
+        end = str.find(split_str, start);
+    }
+    split.push_back(std::string_view(str.substr(start, end)));
+    return split;
+}
 
 std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(const std::string& package_name) {
     std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> result;
@@ -164,25 +162,16 @@ struct Candidate {
  * A requirement for a package.
  */
 
-
-std::vector<resolvo::String> split_string(const std::string_view &str, const char *split_str) {
-    std::vector<resolvo::String> split;
-    size_t start = 0;
-    size_t end = str.find(split_str);
-    while (end != std::string::npos) {
-        split.push_back(std::string_view(str.substr(start, end - start)));
-        start = end + 1;
-        end = str.find(split_str, start);
-    }
-    split.push_back(std::string_view(str.substr(start, end)));
-    return split;
-}
-
 struct Requirement {
     resolvo::NameId name;
 //    uint32_t version_start;
 //    uint32_t version_end;
     Range<Pack> versions;
+};
+
+struct ReverseDependency {
+    std::string package_name;
+    std::string package_version;
 };
 
 static std::pair<std::string_view, std::string_view> parse_operator(const std::string_view &s) {
@@ -254,11 +243,21 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     std::set<std::string> candidate_names;
     std::map<std::string, std::set<std::string>> dependencies_map;
+    std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies_map;
+    std::unordered_set<std::string> rdeps;
     std::map<std::string, std::string> locked_packages;
     ttrek_strategy_t the_strategy;
 
     void set_strategy(ttrek_strategy_t strategy) {
         the_strategy = strategy;
+    }
+
+    void set_reverse_dependencies_map(const std::map<std::string, std::vector<ReverseDependency>> &rdeps_map) {
+        reverse_dependencies_map = rdeps_map;
+    }
+
+    bool is_rdep(const std::string &package_name) {
+        return rdeps.find(package_name) != rdeps.end();
     }
 
     /**
@@ -355,6 +354,12 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
+        // if package_name starts with "rdep:" it is a reverse dependency
+        // strip out the prefix and return the candidates for the package
+        if (package_name.find("rdep:") == 0) {
+            package_name = package_name.substr(5);
+            package = names.alloc(std::string_view(package_name));
+        }
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
         DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
         resolvo::SolvableId locked_candidate_id{};
@@ -366,9 +371,11 @@ struct PackageDatabase : public resolvo::DependencyProvider {
             for (const auto & it : package_versions) {
                 auto package_version = std::string(it.first);
                 auto package_version_deps = it.second;
+
                 auto dependencies = resolvo::Dependencies();
+
+                // add the dependencies for the package
                 for (const auto &dep : package_version_deps) {
-//                    auto dep_name = names.alloc(dep.first);
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
                     dependencies.requirements.push_back(dep_version_set);
                     DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
@@ -378,6 +385,20 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                     // the topological sort of the dependencies
                     dependencies_map[package_name].insert(std::string(dep.first));
                 }
+
+                // add the reverse dependencies for the package
+                if (reverse_dependencies_map.find(package_name) != reverse_dependencies_map.end()) {
+                    for (const auto &rdep: reverse_dependencies_map.at(package_name)) {
+                        // we deliberately do not pass rdep.package_version here
+                        // we just want to denote the reverse dependency
+                        auto dep_version_set = alloc_requirement_from_str("rdep:" + rdep.package_name, "");
+                        dependencies.requirements.push_back(dep_version_set);
+                        DBG(std::cout << "reverse dependency for " << package_name << ": " << rdep
+                                      << std::endl);
+                        rdeps.insert(rdep.package_name);
+                    }
+                }
+
                 auto id = alloc_candidate(package_name, package_version, dependencies);
                 DBG(std::cout << "candidate: " << package_name << "=" << package_version << std::endl);
                 if (set_locked_p && locked_packages[package_name] == package_version) {
@@ -449,6 +470,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         for (const auto &install : installs) {
             auto package_name = install.substr(0, install.find('='));
             auto package_version = install.substr(install.find('=') + 1);
+
             auto package_deps = dependencies_map[package_name];
             for (const auto &dep : package_deps) {
                 graph[dep].insert(package_name);

@@ -57,12 +57,37 @@ void ttrek_ParseLockedPackages(ttrek_state_t *state_ptr, PackageDatabase &db) {
     }
 }
 
+static void ttrek_ParseReverseDependencies(cJSON *lock_root,
+                                           std::map<std::string, std::vector<ReverseDependency>> &reverse_dependencies) {
+
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (!packages) {
+        return;
+    }
+
+    for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
+        cJSON *package = cJSON_GetArrayItem(packages, i);
+        std::string package_name = package->string;
+        std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
+        cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
+        if (!dependencies) {
+            continue;
+        }
+        for (int j = 0; j < cJSON_GetArraySize(dependencies); j++) {
+            cJSON *dep_item = cJSON_GetArrayItem(dependencies, j);
+            std::string dep_package_name = dep_item->string;
+            if (reverse_dependencies.find(dep_package_name) == reverse_dependencies.end()) {
+                reverse_dependencies[dep_package_name] = std::vector<ReverseDependency>();
+            }
+            reverse_dependencies[dep_package_name].push_back(ReverseDependency{package_name, package_version});
+        }
+    }
+}
+
 int
-ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, std::string &message,
+ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDatabase &db, ttrek_state_t *state_ptr, std::string &message,
             std::map<std::string, std::string> &requirements,
             std::vector<std::string> &installs) {
-    PackageDatabase db;
-    db.set_strategy(state_ptr->strategy);
 
     ttrek_ParseRequirements(objc, objv, requirements);
     // Parse additional requirements from spec file
@@ -190,38 +215,6 @@ ttrek_HasChangedDependencyVersion(cJSON *lock_root, const std::map<std::string, 
     return 0;
 }
 
-struct ReverseDependency {
-    std::string package_name;
-    std::string package_version;
-};
-
-static void ttrek_ParseReverseDependencies(cJSON *lock_root,
-                                          std::map<std::string, std::vector<ReverseDependency>> &reverse_dependencies) {
-
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
-    if (!packages) {
-        return;
-    }
-
-    for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
-        cJSON *package = cJSON_GetArrayItem(packages, i);
-        std::string package_name = package->string;
-        std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
-        cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
-        if (!dependencies) {
-            continue;
-        }
-        for (int j = 0; j < cJSON_GetArraySize(dependencies); j++) {
-            cJSON *dep_item = cJSON_GetArrayItem(dependencies, j);
-            std::string dep_package_name = dep_item->string;
-            if (reverse_dependencies.find(dep_package_name) == reverse_dependencies.end()) {
-                reverse_dependencies[dep_package_name] = std::vector<ReverseDependency>();
-            }
-            reverse_dependencies[dep_package_name].push_back(ReverseDependency{package_name, package_version});
-        }
-    }
-}
-
 typedef enum {
     DIRECT_INSTALL,
     RDEP_INSTALL
@@ -268,10 +261,21 @@ static void ttrek_ComputeReverseDependencies(const std::vector<std::string> &ins
     };
 }
 
-static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install, std::map<std::string, std::string> &requirements,
+static void ttrek_AddInstallToExecutionPlan(PackageDatabase &db, ttrek_state_t *state_ptr, const std::string &install, std::map<std::string, std::string> &requirements,
                                             std::vector<InstallSpec> &execution_plan) {
     auto index = install.find('='); // package_name=package_version
     auto package_name = install.substr(0, index);
+
+    // if package_name starts with "rdep:" it is a reverse dependency
+    auto reverse_dependency_p = false;
+    if (package_name.find("rdep:") == 0) {
+        package_name = package_name.substr(5);
+        reverse_dependency_p = true;
+        std::cout << "reverse dependency: " << package_name << std::endl;
+    } else if (db.is_rdep(package_name)) {
+        reverse_dependency_p = true;
+    }
+
     auto package_version = install.substr(index + 1);
 
     int package_name_exists_in_lock_p;
@@ -279,7 +283,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
 
-    if (!state_ptr->option_force && exact_package_exists_in_lock_p) {
+    if (!state_ptr->option_force && !reverse_dependency_p && exact_package_exists_in_lock_p) {
         fprintf(stderr, "info: %s@%s already installed\n", package_name.c_str(), package_version.c_str());
         return;
     }
@@ -288,7 +292,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
             requirements.find(package_name) != requirements.end() ? requirements.at(package_name)
                                                                   : "";
 
-    auto install_spec = InstallSpec{DIRECT_INSTALL, package_name, package_version, direct_version_requirement, package_name_exists_in_lock_p};
+    auto install_spec = InstallSpec{reverse_dependency_p ? RDEP_INSTALL : DIRECT_INSTALL, package_name, package_version, direct_version_requirement, package_name_exists_in_lock_p};
     execution_plan.push_back(install_spec);
 }
 
@@ -315,46 +319,41 @@ static void ttrek_AddReverseDependencyToExecutionPlan(ttrek_state_t *state_ptr, 
     execution_plan.push_back(install_spec);
 }
 
-static void ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
+static void ttrek_GenerateExecutionPlan(PackageDatabase &db, ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                                        std::map<std::string, std::string> &requirements,
                                        std::vector<InstallSpec> &execution_plan) {
 
-    std::vector<std::string> filtered_installs;
-    std::copy_if(installs.begin(), installs.end(), std::back_inserter(filtered_installs), [&state_ptr,&requirements](const std::string &install) -> bool {
-        auto index = install.find('='); // package_name=package_version
-        auto package_name = install.substr(0, index);
-        auto package_version = install.substr(index + 1);
-        int package_name_exists_in_lock_p;
-        return (state_ptr->option_force && requirements.find(package_name) != requirements.end()) || !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
-    });
-
-    // get all reverse dependencies from lock file
-    std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies;
-    ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies);
-
-    // compute reverse dependencies for all installs
-    std::vector<std::string> rdep_installs;
-    ttrek_ComputeReverseDependencies(filtered_installs, reverse_dependencies, rdep_installs);
+//    std::vector<std::string> filtered_installs;
+//    std::copy_if(installs.begin(), installs.end(), std::back_inserter(filtered_installs), [&state_ptr,&requirements](const std::string &install) -> bool {
+//        auto index = install.find('='); // package_name=package_version
+//        auto package_name = install.substr(0, index);
+//        auto package_version = install.substr(index + 1);
+//        int package_name_exists_in_lock_p;
+//        return (state_ptr->option_force && requirements.find(package_name) != requirements.end()) || !ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(), package_version.c_str(), &package_name_exists_in_lock_p);
+//    });
 
     // add installs to execution plan
-    for (const auto &install: filtered_installs) {
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, requirements, execution_plan);
+    for (const auto &install: installs) {
+        ttrek_AddInstallToExecutionPlan(db, state_ptr, install, requirements, execution_plan);
     }
 
-    // add reverse dependencies to execution plan
-    for (const auto &install: rdep_installs) {
-        ttrek_AddReverseDependencyToExecutionPlan(state_ptr, install, requirements, execution_plan);
-    }
 }
 
 int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
+
+    PackageDatabase db;
+    db.set_strategy(state_ptr->strategy);
+
+    std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies_map;
+    ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
+    db.set_reverse_dependencies_map(reverse_dependencies_map);
 
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;
     std::string message;
 
-    if (TCL_OK != ttrek_Solve(interp, objc, objv, state_ptr, message, requirements, installs)) {
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, db, state_ptr, message, requirements, installs)) {
         return TCL_ERROR;
     }
 
@@ -364,7 +363,7 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
 
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;
-        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, execution_plan);
+        ttrek_GenerateExecutionPlan(db, state_ptr, installs, requirements, execution_plan);
 
         // print the execution plan
 
