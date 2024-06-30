@@ -94,6 +94,7 @@ int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
 
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions) {
     Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", permissions);
+    Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8");
     if (!chan) {
         fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
@@ -120,6 +121,7 @@ int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {
     Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "r", 0666);
+    Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8");
     if (!chan) {
         fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
