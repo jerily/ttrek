@@ -597,6 +597,11 @@ static int ttrek_RemovePackageFromSpecRoot(cJSON *spec_root, const char *package
 
 int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
 
+    if (TCL_OK != ttrek_DeletePackageFiles(interp, state_ptr, package_name)) {
+        fprintf(stderr, "error: could not delete package files from existing installation\n");
+        return TCL_ERROR;
+    }
+
     // remove it from the lock root
     if (TCL_OK != ttrek_RemovePackageFromLockRoot(state_ptr->lock_root, package_name)) {
         fprintf(stderr, "error: could not remove %s from lock file\n", package_name);
@@ -606,11 +611,6 @@ int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const c
     // remove it from the spec root
     if (TCL_OK != ttrek_RemovePackageFromSpecRoot(state_ptr->spec_root, package_name)) {
         fprintf(stderr, "error: could not remove %s from spec file\n", package_name);
-        return TCL_ERROR;
-    }
-
-    if (TCL_OK != ttrek_DeletePackageFiles(interp, state_ptr, package_name)) {
-        fprintf(stderr, "error: could not delete package files from existing installation\n");
         return TCL_ERROR;
     }
 
