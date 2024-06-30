@@ -274,11 +274,6 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     auto package_name = install.substr(0, index);
     auto package_version = install.substr(index + 1);
 
-
-    auto direct_version_requirement =
-            requirements.find(package_name) != requirements.end() ? requirements.at(package_name).c_str()
-                                                                  : nullptr;
-
     int package_name_exists_in_lock_p;
     int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
                                                             package_version.c_str(),
@@ -288,6 +283,10 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
         fprintf(stderr, "info: %s@%s already installed\n", package_name.c_str(), package_version.c_str());
         return;
     }
+
+    auto direct_version_requirement =
+            requirements.find(package_name) != requirements.end() && requirements.at(package_name).size() > 0 ? requirements.at(package_name).c_str()
+                                                                  : nullptr;
 
     auto install_spec = InstallSpec{DIRECT_INSTALL, package_name, package_version, direct_version_requirement, package_name_exists_in_lock_p};
     execution_plan.push_back(install_spec);
