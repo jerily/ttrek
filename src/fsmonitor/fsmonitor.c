@@ -26,7 +26,12 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
             fprintf(stderr, "error: could not get element %d of list1\n", i);
             return TCL_ERROR;
         }
-        const char *elem_str = Tcl_GetString(elem);
+        Tcl_Size elem_len;
+        const char *elem_str = Tcl_GetStringFromObj(elem, &elem_len);
+        if (elem_len < ncut) {
+            fprintf(stderr, "error: element %d of list2 is shorter than ncut\n", i);
+            return TCL_ERROR;
+        }
         int dummyNewEntry;
         Tcl_CreateHashEntry(&ht, &elem_str[ncut], &dummyNewEntry);
     }
@@ -44,7 +49,12 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
             fprintf(stderr, "error: could not get element %d of list2\n", i);
             return TCL_ERROR;
         }
-        const char *elem_str = Tcl_GetString(elem);
+        Tcl_Size elem_len;
+        const char *elem_str = Tcl_GetStringFromObj(elem, &elem_len);
+        if (elem_len < ncut) {
+            fprintf(stderr, "error: element %d of list2 is shorter than ncut\n", i);
+            return TCL_ERROR;
+        }
         Tcl_HashEntry *entry = Tcl_FindHashEntry(&ht, &elem_str[ncut]);
         if (entry) {
             Tcl_DeleteHashEntry(entry);
