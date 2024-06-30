@@ -18,6 +18,8 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
                          int package_name_exists_in_lock_p);
 
 int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
+int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
+int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 
 #ifdef __cplusplus
 }

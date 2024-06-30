@@ -467,7 +467,7 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
     return TCL_OK;
 }
 
-static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
     cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
     if (!packages) {
         return TCL_OK;
@@ -508,7 +508,7 @@ static int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, 
     return TCL_OK;
 }
 
-static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
+int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
     Tcl_Obj *temp_package_dir_ptr;
     ttrek_ResolvePath(interp, state_ptr->project_temp_dir_ptr, Tcl_NewStringObj(package_name, -1),
                       &temp_package_dir_ptr);
@@ -543,18 +543,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
 
         fprintf(stderr, "error: installing script & patches failed\n");
 
-        if (package_name_exists_in_lock_p) {
-            fprintf(stderr, "restoring package files from old installation\n");
-            if (TCL_OK != ttrek_RestoreTempFiles(interp, state_ptr, package_name)) {
-                fprintf(stderr, "error: could not restore package files from old installation\n");
-            }
-        }
-
         return TCL_ERROR;
-    }
-
-    if (package_name_exists_in_lock_p) {
-        ttrek_DeleteTempFiles(interp, state_ptr, package_name);
     }
 
     return TCL_OK;

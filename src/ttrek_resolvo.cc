@@ -314,6 +314,7 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
         }
 
         // perform the installation
+        std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
             auto package_name = install_spec.package_name;
             auto package_version = install_spec.package_version;
@@ -325,7 +326,21 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
             if (TCL_OK !=
                 ttrek_InstallPackage(interp, state_ptr, package_name.c_str(), package_version.c_str(),
                                      direct_version_requirement.c_str(), package_name_exists_in_lock_p)) {
+
+                for (const auto &spec: installs_from_lock_file_sofar) {
+                    if (package_name_exists_in_lock_p) {
+                        fprintf(stderr, "restoring package files from old installation: %s\n", spec.package_name.c_str());
+                        if (TCL_OK != ttrek_RestoreTempFiles(interp, state_ptr, spec.package_name.c_str())) {
+                            fprintf(stderr, "error: could not restore package files from old installation\n");
+                        }
+                    }
+                }
+
                 return TCL_ERROR;
+            }
+
+            if (package_name_exists_in_lock_p) {
+                installs_from_lock_file_sofar.push_back(install_spec);
             }
         }
 
@@ -335,6 +350,10 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
 
         if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;
+        }
+
+        for (const auto &install_spec: installs_from_lock_file_sofar) {
+            ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
         }
 
     }
