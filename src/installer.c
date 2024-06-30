@@ -514,7 +514,7 @@ static int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, c
                       &temp_package_dir_ptr);
     Tcl_Obj *error_ptr;
     int result = Tcl_FSRemoveDirectory(temp_package_dir_ptr, 1, &error_ptr);
-    if (error_ptr) {
+    if (TCL_ERROR = result && error_ptr) {
         fprintf(stderr, "error: could not remove temp dir for package %s: %s\n", package_name, Tcl_GetString(error_ptr));
         Tcl_DecrRefCount(error_ptr);
     }
