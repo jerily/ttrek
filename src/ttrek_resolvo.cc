@@ -31,21 +31,6 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
     return TCL_OK;
 }
 
-static void
-ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::map<std::string, std::string> &requirements) {
-    cJSON *dependencies = cJSON_GetObjectItem(state_ptr->spec_root, "dependencies");
-    if (dependencies) {
-        for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
-            cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
-            std::string package_name = dep_item->string;
-            std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            DBG(std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
-                          << package_version_requirement << std::endl);
-            requirements[package_name] = package_version_requirement;
-        }
-    }
-}
-
 void ttrek_ParseLockedPackages(ttrek_state_t *state_ptr, PackageDatabase &db) {
     cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
     if (packages) {
