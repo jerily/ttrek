@@ -326,6 +326,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // print the execution plan
 
         if (execution_plan.empty()) {
+            *abort = 1;
             std::cout << "Nothing to install!" << std::endl;
             return TCL_OK;
         }
