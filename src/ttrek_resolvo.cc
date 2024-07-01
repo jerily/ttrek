@@ -278,6 +278,23 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
     } while (has_unknown);
 }
 
+static void
+ttrek_PrintExecutionPlan(std::vector<InstallSpec> execution_plan) {
+    for (const auto &install_spec: execution_plan) {
+        std::cout << install_spec.package_name << "@" << install_spec.package_version;
+
+        if (install_spec.exact_package_exists_in_lock_p && install_spec.install_type == DEP_INSTALL) {
+            std::cout << " (already installed)" << std::endl;
+            continue;
+        }
+
+        if (install_spec.install_type == RDEP_INSTALL) {
+            std::cout << " (reverse dependency)";
+        }
+        std::cout << std::endl;
+    }
+}
+
 int
 ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
 
@@ -313,20 +330,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
 
         std::cout << "The following packages will be installed:" << std::endl;
-        for (const auto &install_spec: execution_plan) {
-            std::cout << install_spec.package_name << "@" << install_spec.package_version;
-
-            if (install_spec.exact_package_exists_in_lock_p && install_spec.install_type == DEP_INSTALL) {
-                std::cout << " (already installed)" << std::endl;
-                continue;
-            }
-
-            if (install_spec.install_type == RDEP_INSTALL) {
-                std::cout << " (reverse dependency)";
-            }
-            std::cout << std::endl;
-        }
-
+        ttrek_PrintExecutionPlan(execution_plan);
 
         if (!state_ptr->option_yes) {
             // get yes/no from user
@@ -342,6 +346,9 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
+            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
+                continue;
+            }
             auto package_name = install_spec.package_name;
             auto package_version = install_spec.package_version;
             auto direct_version_requirement = install_spec.direct_version_requirement;
