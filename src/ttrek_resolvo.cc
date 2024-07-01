@@ -314,6 +314,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     }
 
     if (installs.empty()) {
+        *abort = 1;
         std::cout << message << std::endl;
     } else {
 
