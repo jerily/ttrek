@@ -90,6 +90,81 @@ int ttrek_GitInit(ttrek_state_t *state_ptr) {
     return TCL_ERROR;
 }
 
+int list_untracked(git_repository *repo, Tcl_Obj *untracked_files) {
+    git_status_options statusopt = GIT_STATUS_OPTIONS_INIT;
+    statusopt.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+//    statusopt.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
+    statusopt.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED;
+
+    git_status_list *status;
+    int error = git_status_list_new(&status, repo, &statusopt);
+    if (error < 0) {
+        return TCL_ERROR;
+    }
+
+    size_t i, count = git_status_list_entrycount(status);
+    for (i = 0; i < count; ++i) {
+        const git_status_entry *entry = git_status_byindex(status, i);
+        if (entry->status & GIT_STATUS_WT_NEW) {
+            if (TCL_OK != Tcl_ListObjAppendElement(NULL, untracked_files, Tcl_NewStringObj(entry->index_to_workdir->new_file.path, -1))) {
+                return TCL_ERROR;
+            }
+        }
+    }
+
+    git_status_list_free(status);
+    return 0;
+}
+
+int ttrek_GitClean(ttrek_state_t *state_ptr, git_repository *repo) {
+    Tcl_Obj *untracked_files = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(untracked_files);
+    if (TCL_OK != list_untracked(repo, untracked_files)) {
+        Tcl_DecrRefCount(untracked_files);
+        return TCL_ERROR;
+    }
+
+    Tcl_Size untracked_files_len;
+    if (TCL_OK != Tcl_ListObjLength(NULL, untracked_files, &untracked_files_len)) {
+        Tcl_DecrRefCount(untracked_files);
+        return TCL_ERROR;
+    }
+
+    for (size_t i = 0; i < untracked_files_len; ++i) {
+        Tcl_Obj *file_ptr;
+        if (TCL_OK != Tcl_ListObjIndex(NULL, untracked_files, i, &file_ptr)) {
+            Tcl_DecrRefCount(untracked_files);
+            return TCL_ERROR;
+        }
+
+        Tcl_Size file_len;
+        const char *file_str = Tcl_GetStringFromObj(file_ptr, &file_len);
+        int directory_p = file_str[file_len - 1] == '/';
+
+
+        Tcl_Obj *path_ptr;
+        ttrek_ResolvePath(NULL, state_ptr->project_venv_dir_ptr, file_ptr, &path_ptr);
+
+        if (directory_p) {
+            fprintf(stderr, "deleting directory: %s\n", Tcl_GetString(path_ptr));
+            Tcl_Obj *error;
+            if (TCL_OK != Tcl_FSRemoveDirectory(path_ptr, 1, &error)) {
+                Tcl_DecrRefCount(untracked_files);
+                Tcl_DecrRefCount(error);
+                return TCL_ERROR;
+            }
+        } else {
+            fprintf(stderr, "deleting file: %s\n", Tcl_GetString(path_ptr));
+            if (TCL_OK != Tcl_FSDeleteFile(path_ptr)) {
+                Tcl_DecrRefCount(untracked_files);
+                return TCL_ERROR;
+            }
+        }
+    }
+
+    Tcl_DecrRefCount(untracked_files);
+    return TCL_OK;
+}
 
 int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
     // git2
@@ -122,6 +197,15 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
         fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
     } else {
         printf("Hard reset to %s successful.\n", commit_sha);
+    }
+
+    // git clean -f -x
+    if (TCL_OK != ttrek_GitClean(state_ptr, repo)) {
+        fprintf(stderr, "error: cleaning untracked files failed\n");
+        git_commit_free(commit);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
     }
 
     // Clean up
