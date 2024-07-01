@@ -242,9 +242,8 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     std::vector<Requirement> requirements;
 
     std::set<std::string> candidate_names;
-    std::map<std::string, std::set<std::string>> dependencies_map;
-    std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies_map;
-    std::unordered_set<std::string> rdeps;
+    std::map<std::string, std::unordered_set<std::string>> dependencies_map;
+    std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     std::map<std::string, std::string> locked_packages;
     ttrek_strategy_t the_strategy;
 
@@ -252,19 +251,15 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         the_strategy = strategy;
     }
 
-    void set_reverse_dependencies_map(const std::map<std::string, std::vector<ReverseDependency>> &rdeps_map) {
-        reverse_dependencies_map = rdeps_map;
+    const std::map<std::string, std::unordered_set<std::string>>& get_dependencies_map() {
+        return dependencies_map;
     }
 
-    const std::set<std::string> get_dependent_package_names(const std::string &package_name) {
-        if (dependencies_map.find(package_name) != dependencies_map.end()) {
-            return dependencies_map.at(package_name);
+    const std::unordered_set<std::string> get_reverse_dependencies_of_package(const std::string &package_name) {
+        if (reverse_dependencies_map.find(package_name) != reverse_dependencies_map.end()) {
+            return reverse_dependencies_map.at(package_name);
         }
-        return std::set<std::string>();
-    }
-
-    bool is_rdep(const std::string &package_name) {
-        return rdeps.find(package_name) != rdeps.end();
+        return std::unordered_set<std::string>();
     }
 
     /**
@@ -373,7 +368,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 //        std::cout << "package=" << names[package] << std::endl;
         if (candidate_names.find(package_name) == candidate_names.end()) {
             DBG(std::cout << "fetching from remote: " << names[package] << std::endl);
-            dependencies_map[package_name] = std::set<std::string>();
+            dependencies_map[package_name] = std::unordered_set<std::string>();
             auto package_versions = fetch_package_versions(package_name);
             for (const auto & it : package_versions) {
                 auto package_version = std::string(it.first);
@@ -395,14 +390,13 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
                 // add the reverse dependencies for the package
                 if (reverse_dependencies_map.find(package_name) != reverse_dependencies_map.end()) {
-                    for (const auto &rdep: reverse_dependencies_map.at(package_name)) {
+                    for (const auto &reverse_dependency: reverse_dependencies_map.at(package_name)) {
                         // we deliberately do not pass rdep.package_version here
                         // we just want to denote the reverse dependency
-                        auto dep_version_set = alloc_requirement_from_str("rdep:" + rdep.package_name, "");
+                        auto dep_version_set = alloc_requirement_from_str("rdep:" + reverse_dependency, "");
                         dependencies.requirements.push_back(dep_version_set);
-                        DBG(std::cout << "reverse dependency for " << package_name << ": " << rdep
+                        DBG(std::cout << "reverse dependency for " << package_name << ": " << reverse_dependency
                                       << std::endl);
-                        rdeps.insert(rdep.package_name);
                     }
                 }
 
