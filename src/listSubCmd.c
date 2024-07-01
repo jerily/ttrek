@@ -5,7 +5,7 @@
  */
 
 #include "subCmdDecls.h"
-
+#include "ttrek_git.h"
 
 static int ttrek_GetLockPackages(Tcl_Interp *interp, cJSON *lock_root, Tcl_Obj *list_ptr) {
 
@@ -59,6 +59,14 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+        fprintf(stderr, "error: resetting git repository failed\n");
+        ttrek_DestroyState(state_ptr);
+//        ckfree(remObjv);
+        return TCL_ERROR;
+
     }
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);

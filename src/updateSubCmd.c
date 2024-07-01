@@ -6,6 +6,7 @@
 
 #include "subCmdDecls.h"
 #include "ttrek_resolvo.h"
+#include "ttrek_git.h"
 
 int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -45,6 +46,14 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         return TCL_ERROR;
     }
 
+    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+        fprintf(stderr, "error: resetting git repository failed\n");
+        ttrek_DestroyState(state_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+
+    }
+
     Tcl_Size updateObjc = objc - 1;
     Tcl_Obj **updateObjv = NULL;
 
@@ -72,17 +81,25 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         updateObjv = &remObjv[1];
     }
 
-    if (TCL_OK != ttrek_InstallOrUpdate(interp, updateObjc, updateObjv, state_ptr)) {
-        Tcl_DecrRefCount(list_ptr);
+    int abort = 0;
+    if (TCL_OK != ttrek_InstallOrUpdate(interp, updateObjc, updateObjv, state_ptr, &abort)) {
         ttrek_DestroyState(state_ptr);
+        Tcl_DecrRefCount(list_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
     }
-
     Tcl_DecrRefCount(list_ptr);
-    ttrek_DestroyState(state_ptr);
     ckfree(remObjv);
 
+    if (!abort) {
+        if (TCL_OK != ttrek_GitCommit(state_ptr, "update")) {
+            fprintf(stderr, "error: committing changes failed\n");
+            ttrek_DestroyState(state_ptr);
+            return TCL_ERROR;
+        }
+    }
+
+    ttrek_DestroyState(state_ptr);
     return TCL_OK;
 }
 

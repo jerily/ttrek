@@ -6,6 +6,8 @@
 
 #include <string.h>
 #include "subCmdDecls.h"
+#include "ttrek_git.h"
+
 
 int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -117,5 +119,26 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(spec_file_name_ptr);
     Tcl_DecrRefCount(lock_file_name_ptr);
     ckfree(remObjv);
+
+
+    // ensure skeleton directories exist
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, 0, MODE_LOCAL, STRATEGY_LATEST);
+    if (!state_ptr) {
+        fprintf(stderr, "error: initializing ttrek state failed\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
+        fprintf(stderr, "error: ensuring skeleton directories failed\n");
+        ttrek_DestroyState(state_ptr);
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_GitInit(state_ptr)) {
+        fprintf(stderr, "error: initializing git repository failed\n");
+        ttrek_DestroyState(state_ptr);
+        return TCL_ERROR;
+    }
+
     return TCL_OK;
 }

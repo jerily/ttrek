@@ -6,10 +6,23 @@
 
 #include <stdlib.h>
 #include "subCmdDecls.h"
+#include "ttrek_git.h"
 
 int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, 1, 1, MODE_LOCAL, STRATEGY_LATEST);
+    if (!state_ptr) {
+        fprintf(stderr, "error: initializing ttrek state failed\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+        fprintf(stderr, "error: resetting git repository failed\n");
+        ttrek_DestroyState(state_ptr);
+//        ckfree(remObjv);
+        return TCL_ERROR;
+
+    }
 
     Tcl_Obj *filename_ptr = Tcl_NewStringObj("bin/", -1);
     Tcl_IncrRefCount(filename_ptr);

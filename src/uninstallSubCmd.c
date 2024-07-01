@@ -7,6 +7,7 @@
 #include "subCmdDecls.h"
 #include "common.h"
 #include "ttrek_resolvo.h"
+#include "ttrek_git.h"
 
 int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int option_user = 0;
@@ -45,6 +46,14 @@ int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
         return TCL_ERROR;
     }
 
+    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+        fprintf(stderr, "error: resetting git repository failed\n");
+        ttrek_DestroyState(state_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+
+    }
+
     if (objc - 1 == 0) {
         fprintf(stderr, "error: missing package names\n");
         ttrek_DestroyState(state_ptr);
@@ -52,14 +61,22 @@ int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_Uninstall(interp, objc-1, &remObjv[1], state_ptr)) {
+    int abort = 0;
+    if (TCL_OK != ttrek_Uninstall(interp, objc-1, &remObjv[1], state_ptr, &abort)) {
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
     }
-
-    ttrek_DestroyState(state_ptr);
     ckfree(remObjv);
 
+    if (!abort) {
+        if (TCL_OK != ttrek_GitCommit(state_ptr, "uninstall")) {
+            fprintf(stderr, "error: committing changes failed\n");
+            ttrek_DestroyState(state_ptr);
+            return TCL_ERROR;
+        }
+    }
+
+    ttrek_DestroyState(state_ptr);
     return TCL_OK;
 }
