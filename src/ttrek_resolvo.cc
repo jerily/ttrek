@@ -260,7 +260,7 @@ ttrek_GenerateExecutionPlan(PackageDatabase &db, ttrek_state_t *state_ptr, const
     ttrek_CleanupReverseDependencies(db, execution_plan);
 }
 
-int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
+int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
 
     PackageDatabase db;
     db.set_strategy(state_ptr->strategy);
@@ -309,6 +309,7 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
             std::cout << "Do you want to proceed? [y/N] ";
             std::getline(std::cin, answer);
             if (answer != "y") {
+                *abort = 1;
                 return TCL_OK;
             }
         }
@@ -360,7 +361,7 @@ int ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
     return TCL_OK;
 }
 
-int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr) {
+int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
 
     std::map<std::string, std::vector<ReverseDependency>> reverse_dependencies_map;
     ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
@@ -402,6 +403,7 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
         std::cout << "Do you want to proceed? [y/N] ";
         std::getline(std::cin, answer);
         if (answer != "y") {
+            *abort = 1;
             return TCL_OK;
         }
     }

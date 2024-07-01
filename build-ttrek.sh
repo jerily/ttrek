@@ -68,6 +68,16 @@ cd tcl-core-9-0-b2/unix
 make
 make install
 
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
+curl -L -o libgit2-1.8.1.tar.gz https://github.com/libgit2/libgit2/archive/refs/tags/v1.8.1.tar.gz
+tar -xzvf libgit2-1.8.1.tar.gz
+cd libgit2-1.8.1
+mkdir build
+cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DBUILD_CLI=OFF -DUSE_THREADS=OFF -DUSE_NSEC=OFF -DUSE_HTTPS=OFF -DREGEX_BACKEND=builtin
+cmake --build . --target install
+
 cd $BUILD_DIR
 cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR
 GNUMAKEFLAGS= make
