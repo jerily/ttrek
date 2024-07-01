@@ -212,7 +212,21 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         ttrek_AddInstallToExecutionPlan(state_ptr, install, requirements, execution_plan);
     }
 
-    // compute reverse dependencies of direct installs
+    // check there is at least one direct install
+    bool has_direct_install = false;
+    for (const auto &install_spec: execution_plan) {
+        if (install_spec.install_type == DIRECT_INSTALL) {
+            has_direct_install = true;
+            break;
+        }
+    }
+
+    if (!has_direct_install) {
+        execution_plan.clear();
+        return;
+    }
+
+    // compute dependencies and reverse dependencies of direct installs
     std::unordered_set<std::string> dependencies;
     std::unordered_set<std::string> reverse_dependencies;
     for (const auto &install_spec: execution_plan) {
