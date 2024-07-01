@@ -391,6 +391,10 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     DBG(fprintf(stderr, "spec_json_path_ptr refCount: %d\n", state_ptr->spec_json_path_ptr->refCount));
     DBG(fprintf(stderr, "lock_json_path_ptr refCount: %d\n", state_ptr->lock_json_path_ptr->refCount));
 
+    if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
+        fprintf(stderr, "error: could not ensure skeleton exists\n");
+        return NULL;
+    }
 
     return state_ptr;
 }
