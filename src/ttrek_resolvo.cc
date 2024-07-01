@@ -286,6 +286,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
+    db.set_reverse_dependencies_map(reverse_dependencies_map);
 
     std::map<std::string, std::string> requirements;
     std::vector<std::string> installs;

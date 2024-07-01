@@ -251,6 +251,10 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         the_strategy = strategy;
     }
 
+    void set_reverse_dependencies_map(const std::map<std::string, std::unordered_set<std::string>> &revdependencies_map) {
+        reverse_dependencies_map = revdependencies_map;
+    }
+
     const std::map<std::string, std::unordered_set<std::string>>& get_dependencies_map() {
         return dependencies_map;
     }
