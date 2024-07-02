@@ -294,7 +294,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 }
 
 static void
-ttrek_PrintExecutionPlan(std::vector<InstallSpec> execution_plan) {
+ttrek_PrintExecutionPlan(const std::vector<InstallSpec>& execution_plan) {
     for (const auto &install_spec: execution_plan) {
         std::cout << install_spec.package_name << "@" << install_spec.package_version;
 
