@@ -103,13 +103,6 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     cJSON *devDependencies = cJSON_CreateObject();
     cJSON_AddItemToObject(spec_root, "devDependencies", devDependencies);
 
-    Tcl_Obj *machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
-    if (machineIdObj != NULL) {
-        cJSON *machineId = cJSON_CreateString(Tcl_GetString(machineIdObj));
-        Tcl_BounceRefCount(machineIdObj);
-        cJSON_AddItemToObject(spec_root, "machineId", machineId);
-    }
-
     ttrek_WriteJsonFile(interp, path_to_spec_ptr, spec_root);
 
     cJSON *lock_root = cJSON_CreateObject();
@@ -127,6 +120,7 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(lock_file_name_ptr);
     ckfree(remObjv);
 
+    ttrek_TelemetrySaveMachineId(interp);
 
     // ensure skeleton directories exist
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, 0, MODE_LOCAL, STRATEGY_LATEST);

@@ -14,10 +14,13 @@ extern "C" {
 #endif
 
 void ttrek_TelemetryFree(void);
-Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp);
-void ttrek_TelemetrySetMachineId(const char *machineId);
-Tcl_Obj *ttrek_TelemetryGetMachineId();
+
 void ttrek_TelemetryRegisterEnvironment();
+
+Tcl_Obj *ttrek_TelemetryGetMachineId();
+
+void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp);
+void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp);
 
 #ifdef __cplusplus
 }

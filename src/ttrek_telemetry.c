@@ -12,6 +12,8 @@
 #if defined(__linux__)
 // For clock_gettime()
 #include <time.h>
+// For gnu_get_libc_version()
+#include <gnu/libc-version.h>
 // For uname()
 #include <sys/utsname.h>
 #endif
@@ -20,6 +22,25 @@
 
 static Tcl_Obj *machineIdObj = NULL;
 static int isEnvironmentRegistered = 0;
+static char *machineIdBaseFile = "machine-id";
+
+// While gathering environment information by function ttrek_TelemetryCollectEnvironmentInfo(),
+// we call ttrek_ExecuteCommand(), which uses Tcl_OpenCommandChannel(),
+// which requires a live Tcl interpreter.
+//
+// However, ttrek_TelemetryGetCompilerVersion() is called from ttrek_TelemetryRegisterEnvironment(),
+// which is called from ttrek_RegistryGet(). The last function does not have
+// a Tcl interpreter as a parameter. Furthermore, ttrek_RegistryGet() cannot
+// have a Tcl interpreter as a parameter because it is called from the resolver
+// CPP library, where a Tcl interpreter is not available.
+//
+// Thus, we are in conflict. A live Tcl interpreter is required, but we don't
+// have one.
+//
+// To resolve the conflict, we will save the current live Tcl interpreter into
+// the collect_info_interp variable during the machine ID discovery process.
+// This variable will be used in the function ttrek_TelemetryCollectEnvironmentInfo().
+static Tcl_Interp *collect_info_interp = NULL;
 
 static Tcl_Obj *ttrek_TelemetryReadFile(Tcl_Interp *interp, const char *path) {
    Tcl_Obj *rc = NULL;
@@ -80,7 +101,11 @@ static Tcl_Obj *ttrek_TelemetryGetSHA256(Tcl_Obj *data) {
     return rc;
 }
 
-Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp) {
+static int ttrek_TelemetryIsDockerEnvironment() {
+    return ttrek_TelemetryIsFileExist("/.dockerenv");
+}
+
+static Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp) {
     Tcl_Obj *machineIdRaw = NULL;
     DBG2(printf("enter ..."));
 
@@ -111,7 +136,7 @@ Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp) {
 #elif defined(__linux__)
     DBG2(printf("trying to detect machine id for linux ..."));
 
-    if (ttrek_TelemetryIsFileExist("/.dockerenv")) {
+    if (ttrek_TelemetryIsDockerEnvironment()) {
         DBG2(printf("docker environment detected, skip checking */machine-id"
             " files"));
         goto docker_detected;
@@ -152,6 +177,28 @@ docker_detected:
 #elif defined(__unix__)
     DBG2(printf("trying to detect machine id for BSD ..."));
 
+    DBG2(printf("read file: /etc/hostid"));
+    machineIdRaw = ttrek_TelemetryReadFile(interp, "/etc/hostid");
+    if (machineIdRaw != NULL) {
+        goto done;
+    }
+
+    {
+        Tcl_Size argc = 4;
+        const char *argv[5] = {
+            "/bin/kenv", "-q", "smbios.system.uuid", "2>@1", NULL
+        };
+        machineIdRaw = Tcl_NewObj();
+        DBG2(printf("exec /bin/kenv ..."));
+        if (ttrek_ExecuteCommand(interp, argc, argv, machineIdRaw) != TCL_OK
+            || !Tcl_GetCharLength(machineIdRaw))
+        {
+            Tcl_BounceRefCount(machineIdRaw);
+            machineIdRaw = NULL;
+            goto done;
+        }
+    }
+
 #else
     DBG2(printf("unknown OS"));
     goto done;
@@ -172,20 +219,49 @@ done:
     return rc;
 }
 
-void ttrek_TelemetrySetMachineId(const char *machineId) {
-    DBG2(printf("enter ..."));
-    ttrek_TelemetryFree();
-    if (machineId != NULL) {
-        machineIdObj = Tcl_NewStringObj(machineId, -1);
-        Tcl_IncrRefCount(machineIdObj);
-        DBG2(printf("machineId is %s", Tcl_GetString(machineIdObj)));
-    } else {
-        DBG2(printf("machineId is NULL"));
+Tcl_Obj *ttrek_TelemetryGetMachineIdFile(Tcl_Interp *interp) {
+    Tcl_Obj *machineIdFile;
+    if (ttrek_ResolvePathUserHome(interp, Tcl_NewStringObj(machineIdBaseFile, -1),
+        &machineIdFile) != TCL_OK)
+    {
+        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
+        return NULL;
     }
+    return machineIdFile;
 }
 
-Tcl_Obj *ttrek_TelemetryGetMachineId() {
-    return machineIdObj;
+void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp) {
+    if (machineIdObj == NULL) {
+        return;
+    }
+    Tcl_Obj *machineIdFile = ttrek_TelemetryGetMachineIdFile(interp);
+    if (machineIdFile == NULL) {
+        return;
+    }
+    if (ttrek_CheckFileExists(machineIdFile) == TCL_OK) {
+        DBG2(printf("the file already exists"));
+        goto done;
+    }
+    if (ttrek_WriteChars(interp, machineIdFile, machineIdObj, 0644) == TCL_OK) {
+        DBG2(printf("ok"));
+    } else {
+        DBG2(printf("ERROR: failed to write the machineId to the file"));
+    }
+done:
+    Tcl_DecrRefCount(machineIdFile);
+}
+
+void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp) {
+    collect_info_interp = interp;
+    Tcl_Obj *machineIdFile = ttrek_TelemetryGetMachineIdFile(interp);
+    machineIdObj = ttrek_TelemetryReadFile(interp, Tcl_GetString(machineIdFile));
+    Tcl_DecrRefCount(machineIdFile);
+    if (machineIdObj != NULL) {
+        DBG2(printf("successfully read the machine id from the home directory"));
+        return;
+    }
+    DBG2(printf("failed to read the machine id from the home directory"));
+    machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
 }
 
 void ttrek_TelemetryFree(void) {
@@ -196,29 +272,122 @@ void ttrek_TelemetryFree(void) {
     }
 }
 
+static cJSON *ttrek_TelemetryGetCompilerVersion(Tcl_Interp *interp,
+    const char *cc)
+{
+    Tcl_Obj *result = Tcl_NewObj();
+    Tcl_IncrRefCount(result);
+
+    Tcl_Size argc = 3;
+    const char *argv[4];
+    argv[0] = cc;
+    argv[2] = "2>@1";
+    argv[3] = NULL;
+
+    // In this function, we will try to get a short version of the compiler.
+    // We don't know what type of compiler we are testing or what command
+    // line option we can use to get the short version. We will try
+    // the following command line options until the compiler outputs
+    // something and exits with zero termination code:
+    //     -dumpfullversion, -dumpversion, --version
+
+    const char *compiler_opts[3] = {
+        "-dumpfullversion", "-dumpversion", "--version"
+    };
+
+    for (int i = 0; i < 3; i++) {
+        argv[1] = compiler_opts[i];
+        if (ttrek_ExecuteCommand(interp, argc, argv, result) == TCL_OK
+            && Tcl_GetCharLength(result))
+        {
+            break;
+        }
+    }
+
+    cJSON *rc = cJSON_CreateString(Tcl_GetString(result));
+    Tcl_DecrRefCount(result);
+
+    return rc;
+}
+
 static cJSON *ttrek_TelemetryCollectEnvironmentInfo() {
+    cJSON *val;
     cJSON *root = cJSON_CreateObject();
 #if defined(_WIN32)
-    cJSON *os = cJSON_CreateString("windows");
+    val = cJSON_CreateString("windows");
 #elif defined(__APPLE__)
-    cJSON *os = cJSON_CreateString("macos");
+    val = cJSON_CreateString("macos");
 #elif defined(__linux__)
-    cJSON *os = cJSON_CreateString("linux");
+    val = cJSON_CreateString("linux");
 #elif defined(__unix__)
-    cJSON *os = cJSON_CreateString("bsd");
+    val = cJSON_CreateString("bsd");
 #else
-    cJSON *os = cJSON_CreateString("unknown");
+    val = cJSON_CreateString("unknown");
 #endif
-    cJSON_AddItemToObject(root, "os", os);
+    cJSON_AddItemToObject(root, "os", val);
+
+    cJSON_AddItemToObject(root, "ttrek_version",
+        cJSON_CreateString(XSTR(PROJECT_VERSION)));
+
+#if defined(__linux__)
+    val = (ttrek_TelemetryIsDockerEnvironment() ? cJSON_CreateTrue() :
+        cJSON_CreateFalse());
+    cJSON_AddItemToObject(root, "is_docker_env", val);
+
+    struct utsname unamebuf;
+    if (uname(&unamebuf) == 0) {
+        cJSON *uname = cJSON_CreateObject();
+        cJSON_AddItemToObject(uname, "release",
+            cJSON_CreateString(unamebuf.release));
+        cJSON_AddItemToObject(uname, "version",
+            cJSON_CreateString(unamebuf.version));
+        cJSON_AddItemToObject(uname, "machine",
+            cJSON_CreateString(unamebuf.machine));
+        cJSON_AddItemToObject(root, "uname", uname);
+    }
+#endif
+
+    cJSON *versions = cJSON_CreateObject();
+    cJSON *environment = cJSON_CreateObject();
+
+    const char *env_var;
+
+    env_var = ttrek_EnvVarGet(collect_info_interp, "CC");
+    if (env_var != NULL) {
+        cJSON_AddItemToObject(environment, "CC", cJSON_CreateString(env_var));
+    }
+    cJSON_AddItemToObject(versions, "cc",
+        ttrek_TelemetryGetCompilerVersion(collect_info_interp,
+        (env_var == NULL ? "gcc" : env_var)));
+
+    env_var = ttrek_EnvVarGet(collect_info_interp, "CXX");
+    if (env_var != NULL) {
+        cJSON_AddItemToObject(environment, "CXX", cJSON_CreateString(env_var));
+    }
+    cJSON_AddItemToObject(versions, "cpp",
+        ttrek_TelemetryGetCompilerVersion(collect_info_interp,
+        (env_var == NULL ? "g++" : env_var)));
+
+#if defined(__linux__)
+    cJSON_AddItemToObject(versions, "glibc",
+        cJSON_CreateString(gnu_get_libc_version()));
+#endif
+
+    cJSON_AddItemToObject(root, "environment", environment);
+    cJSON_AddItemToObject(root, "versions", versions);
+
     return root;
 }
 
 void ttrek_TelemetryRegisterEnvironment() {
-    if (machineIdObj == NULL || isEnvironmentRegistered) {
-        DBG2(printf("already registered"));
+    if (isEnvironmentRegistered) {
         return;
     }
     isEnvironmentRegistered = 1;
+    if (machineIdObj == NULL) {
+        DBG2(printf("machine id is not defined"));
+        return;
+    }
     DBG2(printf("register the environment"));
     cJSON *env_info = ttrek_TelemetryCollectEnvironmentInfo();
     char register_env_url[256];
@@ -229,3 +398,6 @@ void ttrek_TelemetryRegisterEnvironment() {
     return;
 }
 
+Tcl_Obj *ttrek_TelemetryGetMachineId() {
+    return machineIdObj;
+}

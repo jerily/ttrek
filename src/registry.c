@@ -50,19 +50,16 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
         Tcl_DecrRefCount(machineIdHdr);
     }
 
-    char *postDataEncoded = NULL;
+    char *postDataStr = NULL;
     if (postData != NULL) {
         DBG2(printf("prepare POST request"));
         char *postDataStr = cJSON_PrintUnformatted(postData);
         if (postDataStr == NULL) {
             goto error;
         }
-        DBG2(printf("POST raw data [%s]", postDataStr));
-        postDataEncoded = curl_easy_escape(curl_handle, postDataStr, 0);
-        Tcl_Free(postDataStr);
-        curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, postDataEncoded);
-        DBG2(printf("POST data [%s]", postDataEncoded));
-        chunk = curl_slist_append(chunk, "Content-Type: application/x-www-form-urlencoded");
+        DBG2(printf("POST data [%s]", postDataStr));
+        curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, postDataStr);
+        chunk = curl_slist_append(chunk, "Content-Type: application/json");
     } else {
         DBG2(printf("prepare GET request"));
     }
@@ -79,6 +76,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
         goto error;
     }
 
+    DBG2(printf("ok"));
     goto done;
 
 error:
@@ -88,8 +86,8 @@ done:
     curl_easy_cleanup(curl_handle);
     // free the custom headers
     curl_slist_free_all(chunk);
-    if (postDataEncoded != NULL) {
-        curl_free(postDataEncoded);
+    if (postDataStr != NULL) {
+        Tcl_Free(postDataStr);
     }
     return rc;
 }

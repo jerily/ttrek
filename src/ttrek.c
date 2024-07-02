@@ -51,6 +51,8 @@ int main(int argc, char *argv[]) {
 
     interp = Tcl_CreateInterp();
 
+    ttrek_TelemetryLoadMachineId(interp);
+
     objc = argc;
     objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
     for (Tcl_Size i = 0; i < argc; i++) {

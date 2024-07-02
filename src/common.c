@@ -10,10 +10,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/stat.h>
 #include "cjson/cJSON.h"
 #include "ttrek_telemetry.h"
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
+
+const char *ttrek_EnvVarGet(Tcl_Interp *interp, const char *varname) {
+    return Tcl_GetVar2(interp, "env", varname, TCL_GLOBAL_ONLY);
+}
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
     Tcl_Obj *objv[1] = {filename_ptr};
@@ -27,6 +32,70 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_p
 //    *path_ptr = Tcl_FSGetNormalizedPath(interp, *path_ptr);
 
     return TCL_OK;
+}
+
+int ttrek_ResolvePathUserHome(Tcl_Interp *interp, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
+
+    int rc = TCL_OK;
+    const char *homeDir = ttrek_EnvVarGet(interp, "HOME");
+
+    if (homeDir == NULL) {
+        DBG2(printf("failed to get HOME env var"));
+        return TCL_ERROR;
+    }
+
+    Tcl_Obj *homeDirObj = Tcl_NewStringObj(homeDir, -1);
+    Tcl_Obj *objv[1] = {
+        Tcl_NewStringObj(".ttrek", -1)
+    };
+    homeDirObj = Tcl_FSJoinToPath(homeDirObj, 1, objv);
+    Tcl_IncrRefCount(homeDirObj);
+    DBG2(printf("ttrek home [%s]", Tcl_GetString(homeDirObj)));
+
+    // Make sure the ttrek home directory exists, and create it otherwise.
+    Tcl_StatBuf *sb = Tcl_AllocStatBuf();
+    if (sb == NULL) {
+        DBG2(printf("unable to alloc Tcl_StatBuf"));
+        goto error;
+    }
+    if (Tcl_FSStat(homeDirObj, sb) == 0) {
+        // The path exists. Make sure it is a directory.
+        if (!S_ISDIR(Tcl_GetModeFromStat(sb))) {
+            DBG2(printf("ERROR: the home dir is not a directory"));
+            // We must not return from here, because first we must free sb.
+            rc = TCL_ERROR;
+        }
+        // The path exists and it is a directory. Do nothing.
+    } else {
+        // The path doesn't exists. Try to create it.
+        if (Tcl_FSCreateDirectory(homeDirObj) != TCL_OK) {
+            DBG2(printf("ERROR: could not create the home directory"));
+            // We must not return from here, because first we must free sb.
+            rc = TCL_ERROR;
+        }
+    }
+    ckfree(sb);
+    if (rc == TCL_ERROR) {
+        goto error;
+    }
+
+    if (filename_ptr == NULL) {
+        *output_path_ptr = homeDirObj;
+        DBG2(printf("return the home directory"));
+        goto done;
+    }
+
+    rc = ttrek_ResolvePath(interp, homeDirObj, filename_ptr, output_path_ptr);
+    Tcl_DecrRefCount(homeDirObj);
+    DBG2(printf("return: %d", rc));
+    goto done;
+
+error:
+    Tcl_DecrRefCount(homeDirObj);
+    rc = TCL_ERROR;
+
+done:
+    return rc;
 }
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
@@ -345,12 +414,6 @@ cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
         return NULL;
     }
     Tcl_DecrRefCount(path_to_spec_file_ptr);
-
-    if (cJSON_HasObjectItem(spec_root, "machineId")) {
-        cJSON *machineId = cJSON_GetObjectItem(spec_root, "machineId");
-        ttrek_TelemetrySetMachineId(cJSON_GetStringValue(machineId));
-    }
-
     return spec_root;
 }
 
