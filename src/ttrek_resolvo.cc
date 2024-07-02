@@ -167,7 +167,7 @@ typedef enum {
     RDEP_INSTALL,
     DEP_INSTALL,
     ALREADY_INSTALLED,
-    RDEP_OF_ALREADY_INSTALLED
+    RDEP_OR_DEP_OF_ALREADY_INSTALLED
 } ttrek_install_type_t;
 
 struct InstallSpec {
@@ -206,7 +206,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
 static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                             std::map<std::string, std::string> &requirements,
-                            const std::map<std::string, std::unordered_set<std::string>> &dependencies_map,
+                            std::map<std::string, std::unordered_set<std::string>> dependencies_map,
                             std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map,
                             std::vector<InstallSpec> &execution_plan) {
 
@@ -229,6 +229,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         return;
     }
 
+    int max_depth = 10;
     std::unordered_set<std::string> dependencies;
     std::unordered_set<std::string> reverse_dependencies;
     bool changed;
@@ -296,25 +297,30 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
                         }
 
                     } else {
+                        std::cout << "unknown install: " << install_spec.package_name << std::endl;
                         // a dependency of a reverse dependency?
                         // or a reverse dependency of a dependency?
+//                        if (install_spec.exact_package_exists_in_lock_p) {
+//                            install_spec.install_type = RDEP_OR_DEP_OF_ALREADY_INSTALLED;
+//                        }
                         has_unknown = true;
                     }
                 }
             }
-
-        } while (has_unknown && !reverse_dependencies_map.empty());
+            max_depth--;
+        } while (has_unknown && max_depth > 0);
 
         // set ALREADY_INSTALLED if the package is already installed and it is a DEP_INSTALL
         for (auto &install_spec: execution_plan) {
             if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
                 install_spec.install_type = ALREADY_INSTALLED;
                 reverse_dependencies_map.erase(install_spec.package_name);
+                dependencies_map.erase(install_spec.package_name);
                 changed = true;
             }
         }
 
-    } while (changed);
+    } while (changed && max_depth > 0);
 }
 
 static void
@@ -398,7 +404,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == ALREADY_INSTALLED || install_spec.install_type == RDEP_OF_ALREADY_INSTALLED) {
+            if (install_spec.install_type == ALREADY_INSTALLED || install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
                 continue;
             }
             auto package_name = install_spec.package_name;
