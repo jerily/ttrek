@@ -13,7 +13,7 @@ extern "C" {
 
 #include "common.h"
 
-int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr);
+int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData);
 
 #ifdef __cplusplus
 }

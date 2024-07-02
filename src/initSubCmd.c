@@ -7,7 +7,7 @@
 #include <string.h>
 #include "subCmdDecls.h"
 #include "ttrek_git.h"
-
+#include "ttrek_telemetry.h"
 
 int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -102,6 +102,13 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     cJSON_AddItemToObject(spec_root, "dependencies", spec_dependencies);
     cJSON *devDependencies = cJSON_CreateObject();
     cJSON_AddItemToObject(spec_root, "devDependencies", devDependencies);
+
+    Tcl_Obj *machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
+    if (machineIdObj != NULL) {
+        cJSON *machineId = cJSON_CreateString(Tcl_GetString(machineIdObj));
+        Tcl_BounceRefCount(machineIdObj);
+        cJSON_AddItemToObject(spec_root, "machineId", machineId);
+    }
 
     ttrek_WriteJsonFile(interp, path_to_spec_ptr, spec_root);
 

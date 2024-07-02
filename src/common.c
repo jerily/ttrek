@@ -11,6 +11,7 @@
 #include <string.h>
 #include <math.h>
 #include "cjson/cJSON.h"
+#include "ttrek_telemetry.h"
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
 
@@ -144,46 +145,90 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root) {
     return TCL_OK;
 }
 
-int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]) {
+int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj) {
     void *handle;
+    Tcl_ResetResult(interp);
     Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT);
     if (!chan) {
         SetResult("could not open command channel");
         return TCL_ERROR;
     }
-    Tcl_Obj *resultPtr = Tcl_NewStringObj("", -1);
     if (Tcl_GetChannelHandle(chan, TCL_READABLE, &handle) != TCL_OK) {
         SetResult("could not get channel handle");
         return TCL_ERROR;
     }
+
+    if (resultObj != NULL) {
+        while (!Tcl_Eof(chan)) {
+            if (Tcl_ReadChars(chan, resultObj, -1, 0) < 0) {
+                goto read_error;
+            }
+        }
+        goto wait;
+    }
+
     // make "chan" non-blocking
     Tcl_SetChannelOption(interp, chan, "-blocking", "0");
     Tcl_SetChannelOption(interp, chan, "-buffering", "none");
 
+    resultObj = Tcl_NewObj();
+    Tcl_IncrRefCount(resultObj);
     while (!Tcl_Eof(chan)) {
-        if (Tcl_ReadChars(chan, resultPtr, -1, 0) < 0) {
-            fprintf(stderr, "error reading from channel: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
-            SetResult("error reading from channel");
-            return TCL_ERROR;
+        if (Tcl_ReadChars(chan, resultObj, -1, 0) < 0) {
+            Tcl_DecrRefCount(resultObj);
+            goto read_error;
         }
-        if (Tcl_GetCharLength(resultPtr) > 0) {
-            fprintf(stderr, "%s", Tcl_GetString(resultPtr));
+        if (Tcl_GetCharLength(resultObj) > 0) {
+            fprintf(stdout, "%s", Tcl_GetString(resultObj));
+        }
+    }
+    Tcl_DecrRefCount(resultObj);
+    resultObj = NULL;
+
+    // make "chan" blocking to properly detect a possible runtime error
+    // during Tcl_Close();
+    Tcl_SetChannelOption(interp, chan, "-blocking", "1");
+
+wait:
+    int rc = Tcl_Close(interp, chan);
+
+    // If we were called in a mode where we show the output of a command,
+    // try to show the exact reason why the command failed.
+    if (rc != TCL_OK && resultObj == NULL) {
+        fprintf(stderr, "Interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+        Tcl_Obj *options = Tcl_GetReturnOptions(interp, rc);
+        Tcl_Obj *key = Tcl_NewStringObj("-errorcode", -1);
+        Tcl_IncrRefCount(key);
+        Tcl_Obj *errorCode;
+        Tcl_DictObjGet(NULL, options, key, &errorCode);
+        Tcl_DecrRefCount(key);
+        fprintf(stderr, "Exit status: %s\n", Tcl_GetString(errorCode));
+        Tcl_DecrRefCount(options);
+    }
+
+    if (resultObj != NULL) {
+        Tcl_Size len;
+        char *str;
+        // If the process produced anything on stderr, it will have been
+        // returned in the interpreter result.  It needs to be appended to
+        // the result string.
+        str = Tcl_GetStringFromObj(Tcl_GetObjResult(interp), &len);
+        Tcl_AppendToObj(resultObj, str, len);
+        // If the last character of the result is a newline, then remove
+        // the newline character.
+        str = Tcl_GetStringFromObj(resultObj, &len);
+        if (len > 0 && str[len - 1] == '\n') {
+            Tcl_SetObjLength(resultObj, len - 1);
         }
     }
 
-    int status = 0;
-    waitpid(-1, &status, 0); // Replace -1 with the child process ID if known
-    if (WIFEXITED(status)) {
-        fprintf(stderr, "Exit status: %d\n", WEXITSTATUS(status));
-        if (WEXITSTATUS(status)) {
-            fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
-            SetResult("command failed");
-            return TCL_ERROR;
-        }
-    }
+    return rc;
 
-    Tcl_Close(interp, chan);
-    return TCL_OK;
+read_error:
+    Tcl_ResetResult(interp);
+    Tcl_AppendResult(interp, "error reading output from command: ",
+        Tcl_PosixError(interp), (char *) NULL);
+    return TCL_ERROR;
 }
 
 Tcl_Obj *ttrek_GetProjectDirForLocalMode(Tcl_Interp *interp) {
@@ -300,6 +345,12 @@ cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
         return NULL;
     }
     Tcl_DecrRefCount(path_to_spec_file_ptr);
+
+    if (cJSON_HasObjectItem(spec_root, "machineId")) {
+        cJSON *machineId = cJSON_GetObjectItem(spec_root, "machineId");
+        ttrek_TelemetrySetMachineId(cJSON_GetStringValue(machineId));
+    }
+
     return spec_root;
 }
 

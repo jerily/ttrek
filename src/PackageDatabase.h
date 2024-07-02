@@ -46,7 +46,7 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
     Tcl_DString versions_ds;
     Tcl_DStringInit(&versions_ds);
-    if (TCL_OK != ttrek_RegistryGet(package_versions_url, &versions_ds)) {
+    if (TCL_OK != ttrek_RegistryGet(package_versions_url, &versions_ds, NULL)) {
         fprintf(stderr, "error: could not get versions for %s\n", package_name.c_str());
         return result;
     }

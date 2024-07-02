@@ -173,7 +173,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
-    if (TCL_OK != ttrek_RegistryGet(install_spec_url, &ds)) {
+    if (TCL_OK != ttrek_RegistryGet(install_spec_url, &ds, NULL)) {
         fprintf(stderr, "error: could not get install spec for %s@%s\n", package_name, package_version);
         return TCL_ERROR;
     }
@@ -272,7 +272,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_ExecuteCommand(interp, argc, argv)) {
+    if (ttrek_ExecuteCommand(interp, argc, argv, NULL) != TCL_OK) {
         fprintf(stderr, "error: could not execute install script to completion: %s\n",
                 Tcl_GetString(path_to_install_file_ptr));
         (void) ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr);
@@ -281,6 +281,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
+    fprintf(stderr, "Exit status: OK\n");
 
     if (TCL_OK != ttrek_FSMonitor_ReadChanges(interp, state_ptr->project_install_dir_ptr, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not read changes from file system\n");
