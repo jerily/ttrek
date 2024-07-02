@@ -359,6 +359,12 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             }
         }
 
+        // ensure the directory skeleton exists
+        if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
+            fprintf(stderr, "error: could not ensure directory skeleton exists\n");
+            return TCL_ERROR;
+        }
+
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {

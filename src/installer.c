@@ -160,11 +160,6 @@ static Tcl_Obj *ttrek_StringToEscapedObj(const char *str, Tcl_Size len) {
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                                          const char *package_version, const char *direct_version_requirement) {
 
-    if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
-        fprintf(stderr, "error: could not ensure directory skeleton exists\n");
-        return TCL_ERROR;
-    }
-
     struct utsname sysinfo;
     if (uname(&sysinfo)) {
         fprintf(stderr, "error: could not get system information\n");
