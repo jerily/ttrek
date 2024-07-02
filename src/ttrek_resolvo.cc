@@ -165,7 +165,9 @@ typedef enum {
     UNKNOWN_INSTALL,
     DIRECT_INSTALL,
     RDEP_INSTALL,
-    DEP_INSTALL
+    DEP_INSTALL,
+    ALREADY_INSTALLED,
+    RDEP_OF_ALREADY_INSTALLED
 } ttrek_install_type_t;
 
 struct InstallSpec {
@@ -205,7 +207,7 @@ static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                             std::map<std::string, std::string> &requirements,
                             const std::map<std::string, std::unordered_set<std::string>> &dependencies_map,
-                            const std::map<std::string, std::unordered_set<std::string>> &reverse_dependencies_map,
+                            std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map,
                             std::vector<InstallSpec> &execution_plan) {
 
     // add installs to initial execution plan
@@ -227,78 +229,105 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         return;
     }
 
-    // compute dependencies and reverse dependencies of direct installs
     std::unordered_set<std::string> dependencies;
     std::unordered_set<std::string> reverse_dependencies;
-    for (const auto &install_spec: execution_plan) {
-        if (install_spec.install_type == DIRECT_INSTALL) {
-
-            if (reverse_dependencies_map.find(install_spec.package_name) !=
-                reverse_dependencies_map.end()) {
-
-                auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                reverse_dependencies.insert(rdeps.begin(), rdeps.end());
-            }
-
-            if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                auto deps = dependencies_map.at(install_spec.package_name);
-                dependencies.insert(deps.begin(), deps.end());
-            }
-
-        }
-    }
-
-    // every UNKNOWN_INSTALL that is a reverse dependency of a direct install is a reverse dependency
-    // and should be marked as RDEP_INSTALL
-    bool has_unknown;
+    bool changed;
     do {
-        has_unknown = false;
+        changed = false;
+        dependencies.clear();
+        reverse_dependencies.clear();
+
+        // compute dependencies and reverse dependencies of direct installs
         for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == UNKNOWN_INSTALL) {
-                if (reverse_dependencies.find(install_spec.package_name) != reverse_dependencies.end()) {
-                    install_spec.install_type = RDEP_INSTALL;
+            if (install_spec.install_type == DIRECT_INSTALL) {
 
-                    if (reverse_dependencies_map.find(install_spec.package_name) !=
-                        reverse_dependencies_map.end()) {
+                if (reverse_dependencies_map.find(install_spec.package_name) !=
+                    reverse_dependencies_map.end()) {
 
-                        auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                        reverse_dependencies.insert(rdeps.begin(), rdeps.end());
+                    auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
+                    reverse_dependencies.insert(rdeps.begin(), rdeps.end());
+                }
+
+                if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
+                    auto deps = dependencies_map.at(install_spec.package_name);
+                    dependencies.insert(deps.begin(), deps.end());
+                }
+
+            } else if (install_spec.install_type == RDEP_INSTALL) {
+                install_spec.install_type = UNKNOWN_INSTALL;
+            }
+        }
+
+        // every UNKNOWN_INSTALL that is a reverse dependency of a direct install is a reverse dependency
+        // and should be marked as RDEP_INSTALL
+        bool has_unknown;
+        do {
+            has_unknown = false;
+            for (auto &install_spec: execution_plan) {
+                if (install_spec.install_type == UNKNOWN_INSTALL) {
+                    if (reverse_dependencies.find(install_spec.package_name) != reverse_dependencies.end()) {
+                        install_spec.install_type = RDEP_INSTALL;
+
+                        if (reverse_dependencies_map.find(install_spec.package_name) !=
+                            reverse_dependencies_map.end()) {
+
+                            auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
+                            reverse_dependencies.insert(rdeps.begin(), rdeps.end());
+                        }
+
+                        if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
+                            auto deps = dependencies_map.at(install_spec.package_name);
+                            dependencies.insert(deps.begin(), deps.end());
+                        }
+
+                    } else if (dependencies.find(install_spec.package_name) != dependencies.end()) {
+                        install_spec.install_type = DEP_INSTALL;
+
+                        if (reverse_dependencies_map.find(install_spec.package_name) !=
+                            reverse_dependencies_map.end()) {
+
+                            auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
+                            reverse_dependencies.insert(rdeps.begin(), rdeps.end());
+                        }
+
+                        if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
+                            auto deps = dependencies_map.at(install_spec.package_name);
+                            dependencies.insert(deps.begin(), deps.end());
+                        }
+
+                    } else {
+                        // a dependency of a reverse dependency?
+                        // or a reverse dependency of a dependency?
+                        has_unknown = true;
                     }
-
-                    if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                        auto deps = dependencies_map.at(install_spec.package_name);
-                        dependencies.insert(deps.begin(), deps.end());
-                    }
-
-                } else if (dependencies.find(install_spec.package_name) != dependencies.end()) {
-                    install_spec.install_type = DEP_INSTALL;
-
-                    if (reverse_dependencies_map.find(install_spec.package_name) !=
-                        reverse_dependencies_map.end()) {
-
-                        auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                        reverse_dependencies.insert(rdeps.begin(), rdeps.end());
-                    }
-
-                    if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                        auto deps = dependencies_map.at(install_spec.package_name);
-                        dependencies.insert(deps.begin(), deps.end());
-                    }
-
-                } else {
-                    has_unknown = true;
                 }
             }
+
+        } while (has_unknown && !reverse_dependencies_map.empty());
+
+        // set ALREADY_INSTALLED if the package is already installed and it is a DEP_INSTALL
+        for (auto &install_spec: execution_plan) {
+            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
+                install_spec.install_type = ALREADY_INSTALLED;
+                reverse_dependencies_map.erase(install_spec.package_name);
+                changed = true;
+            }
         }
-    } while (has_unknown);
+
+    } while (changed);
 }
 
 static void
 ttrek_PrintExecutionPlan(const std::vector<InstallSpec>& execution_plan) {
     for (const auto &install_spec: execution_plan) {
+        if (install_spec.install_type == UNKNOWN_INSTALL) {
+            std::cout << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)" << std::endl;
+            continue;
+        }
+
         std::cout << install_spec.package_name << "@" << install_spec.package_version;
 
-        if (install_spec.exact_package_exists_in_lock_p && install_spec.install_type == DEP_INSTALL) {
+        if (install_spec.install_type == ALREADY_INSTALLED) {
             std::cout << " (already installed)" << std::endl;
             continue;
         }
@@ -369,7 +398,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
+            if (install_spec.install_type == ALREADY_INSTALLED || install_spec.install_type == RDEP_OF_ALREADY_INSTALLED) {
                 continue;
             }
             auto package_name = install_spec.package_name;
