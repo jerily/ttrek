@@ -194,7 +194,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                                   : "";
 
     int in_requirements_p = requirements.find(package_name) != requirements.end();
-    auto install_spec = InstallSpec{(!state_ptr->option_force || !in_requirements_p) && exact_package_exists_in_lock_p ? UNKNOWN_INSTALL : DIRECT_INSTALL, package_name,
+    auto install_spec = InstallSpec{(state_ptr->option_force && in_requirements_p) || (in_requirements_p && !exact_package_exists_in_lock_p) ? DIRECT_INSTALL : UNKNOWN_INSTALL, package_name,
                                     package_version,
                                     direct_version_requirement, package_name_exists_in_lock_p,
                                     exact_package_exists_in_lock_p};
