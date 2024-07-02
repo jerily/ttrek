@@ -91,18 +91,14 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
             std::map<std::string, std::string> &requirements,
             std::vector<std::string> &installs) {
 
-    ttrek_ParseRequirements(objc, objv, requirements);
     // Parse additional requirements from spec file
-    std::map<std::string, std::string> existing_requirements;
-    ttrek_ParseRequirementsFromSpecFile(state_ptr, existing_requirements);
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
+    ttrek_ParseRequirements(objc, objv, requirements);
 
     ttrek_ParseLockedPackages(state_ptr, db);
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
-    for (const auto &requirement: existing_requirements) {
-        requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
-    }
     for (const auto &requirement: requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
     }
