@@ -75,6 +75,7 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     } else {
         cJSON_AddStringToObject(dependencies, package_name, version_requirement);
     }
+    fprintf(stderr, "Added dependency %s to spec: %s\n", package_name, version_requirement);
 }
 
 static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
@@ -299,7 +300,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 //    }
 
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
-    if (direct_version_requirement != NULL && direct_version_requirement[0] != '\0') {
+    if (strncmp(direct_version_requirement, "none", 4) != 0) {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
             ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
