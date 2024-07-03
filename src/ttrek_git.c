@@ -78,6 +78,12 @@ int ttrek_GitInit(ttrek_state_t *state_ptr) {
 
     printf("Created initial commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
 
+    // Clean up
+    git_signature_free(sig);
+    git_tree_free(tree);
+    git_index_free(index);
+    git_repository_free(repo);
+    git_libgit2_shutdown();
     return TCL_OK;
 
     cleanup:
