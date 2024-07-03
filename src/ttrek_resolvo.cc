@@ -232,7 +232,7 @@ struct InstallSpec {
 };
 
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install,
-                                            std::map<std::string, std::string> &requirements,
+                                            const std::map<std::string, std::string> &requirements,
                                             std::vector<InstallSpec> &execution_plan) {
     auto index = install.find('='); // package_name=package_version
     auto package_name = install.substr(0, index);
@@ -259,14 +259,18 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
 
 static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
-                            std::map<std::string, std::string> &requirements,
+                            const std::map<std::string, std::string> &requirements,
                             std::map<std::string, std::unordered_set<std::string>> dependencies_map,
                             std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map,
                             std::vector<InstallSpec> &execution_plan) {
 
+    std::map<std::string, std::string> enhanced_requirements;
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
+    enhanced_requirements.insert(requirements.begin(), requirements.end());
+
     // add installs to initial execution plan
     for (const auto &install: installs) {
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, requirements, execution_plan);
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, execution_plan);
     }
 
     // check there is at least one direct install
