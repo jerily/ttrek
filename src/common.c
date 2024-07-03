@@ -180,6 +180,7 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root) {
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj) {
     void *handle;
+    int rc;
     Tcl_ResetResult(interp);
     Tcl_Channel chan = Tcl_OpenCommandChannel(interp, argc, argv, TCL_STDOUT);
     if (!chan) {
@@ -223,7 +224,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
     Tcl_SetChannelOption(interp, chan, "-blocking", "1");
 
 wait:
-    int rc = Tcl_Close(interp, chan);
+    rc = Tcl_Close(interp, chan);
 
     // If we were called in a mode where we show the output of a command,
     // try to show the exact reason why the command failed.
