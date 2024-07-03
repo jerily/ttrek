@@ -214,6 +214,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
         }
         if (Tcl_GetCharLength(resultObj) > 0) {
             fprintf(stdout, "%s", Tcl_GetString(resultObj));
+            fflush(stdout);
         }
     }
     Tcl_DecrRefCount(resultObj);
