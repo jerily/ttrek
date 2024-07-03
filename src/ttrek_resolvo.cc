@@ -408,9 +408,9 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
 
         std::cout << install_spec.package_name << "@" << install_spec.package_version;
 
-        if (install_spec.install_type == ALREADY_INSTALLED) {
-            DBG(std::cout << " (already installed)" << std::endl);
-            continue;
+//        if (install_spec.install_type == ALREADY_INSTALLED) {
+//            DBG(std::cout << " (already installed)" << std::endl);
+//            DBG(continue);
         }
 
         if (install_spec.install_type == RDEP_INSTALL) {
