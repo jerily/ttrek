@@ -411,7 +411,7 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
 //        if (install_spec.install_type == ALREADY_INSTALLED) {
 //            DBG(std::cout << " (already installed)" << std::endl);
 //            DBG(continue);
-        }
+//        }
 
         if (install_spec.install_type == RDEP_INSTALL) {
             std::cout << " (reverse dependency)";
