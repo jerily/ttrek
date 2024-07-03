@@ -243,16 +243,23 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
 
-    auto direct_version_requirement =
-            requirements.find(package_name) != requirements.end() ? requirements.at(package_name)
-                                                                  : "none";
-
     int in_requirements_p = requirements.find(package_name) != requirements.end();
+    auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
+
+    ttrek_install_type_t install_type;
+    if (state_ptr->option_force) {
+        install_type = DIRECT_INSTALL;
+    } else if (in_requirements_p && !exact_package_exists_in_lock_p) {
+        install_type = DIRECT_INSTALL;
+    } else {
+        install_type = UNKNOWN_INSTALL;
+    }
     auto install_spec = InstallSpec{
-            (state_ptr->option_force && in_requirements_p) || (in_requirements_p && !exact_package_exists_in_lock_p)
-            ? DIRECT_INSTALL : UNKNOWN_INSTALL, package_name,
+            install_type,
+            package_name,
             package_version,
-            direct_version_requirement, package_name_exists_in_lock_p,
+            direct_version_requirement,
+            package_name_exists_in_lock_p,
             exact_package_exists_in_lock_p};
     execution_plan.push_back(install_spec);
 }
@@ -260,13 +267,23 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
 static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                             const std::map<std::string, std::string> &requirements,
-                            std::map<std::string, std::unordered_set<std::string>> dependencies_map,
-                            std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map,
+                            const std::map<std::string, std::unordered_set<std::string>> &dependencies_from_solver_map,
                             std::vector<InstallSpec> &execution_plan) {
+
+    std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
+    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
+
+    std::map<std::string, std::unordered_set<std::string>> dependencies_map;
+    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
+    for (const auto &dependency: dependencies_from_solver_map) {
+        dependencies_map[dependency.first] = dependency.second;
+    }
 
     std::map<std::string, std::string> enhanced_requirements;
     ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
-    enhanced_requirements.insert(requirements.begin(), requirements.end());
+    for (const auto &requirement: requirements) {
+        enhanced_requirements[requirement.first] = requirement.second;
+    }
 
     // add installs to initial execution plan
     for (const auto &install: installs) {
@@ -356,9 +373,11 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
                     } else {
                         DBG(std::cout << "unknown install sofar: " << install_spec.package_name << std::endl);
-                        // a dependency of a reverse dependency?
-                        // or a reverse dependency of a dependency?
-                        has_unknown = true;
+                        if (enhanced_requirements.find(install_spec.package_name) != enhanced_requirements.end()) {
+                            install_spec.install_type = ALREADY_INSTALLED;
+                        } else {
+                            has_unknown = true;
+                        }
                     }
                 }
             }
@@ -426,8 +445,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;
-        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(),
-                                    reverse_dependencies_map, execution_plan);
+        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), execution_plan);
 
         // print the execution plan
 
