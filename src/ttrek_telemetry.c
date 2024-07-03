@@ -8,6 +8,7 @@
 #include "registry.h"
 #include "ttrek_telemetry.h"
 #include <unistd.h>
+#include <stdlib.h>
 
 #if defined(__linux__)
 // For clock_gettime()
@@ -219,25 +220,34 @@ done:
     return rc;
 }
 
-Tcl_Obj *ttrek_TelemetryGetMachineIdFile(Tcl_Interp *interp) {
-    Tcl_Obj *machineIdFile;
-    if (ttrek_ResolvePathUserHome(interp, Tcl_NewStringObj(machineIdBaseFile, -1),
-        &machineIdFile) != TCL_OK)
-    {
-        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
-        return NULL;
-    }
-    return machineIdFile;
-}
-
 void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp) {
     if (machineIdObj == NULL) {
         return;
     }
-    Tcl_Obj *machineIdFile = ttrek_TelemetryGetMachineIdFile(interp);
-    if (machineIdFile == NULL) {
+
+    Tcl_Obj *homeDirectoryObj = ttrek_GetHomeDirectory();
+    if (homeDirectoryObj == NULL) {
         return;
     }
+
+    Tcl_IncrRefCount(homeDirectoryObj);
+
+    if (ttrek_EnsureDirectoryExists(interp, homeDirectoryObj) != TCL_OK) {
+        Tcl_DecrRefCount(homeDirectoryObj);
+        return;
+    }
+
+    Tcl_Obj *machineIdFile;
+    if (ttrek_ResolvePath(interp, homeDirectoryObj,
+        Tcl_NewStringObj(machineIdBaseFile, -1), &machineIdFile) != TCL_OK)
+    {
+        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
+        Tcl_DecrRefCount(homeDirectoryObj);
+        return;
+    }
+
+    Tcl_DecrRefCount(homeDirectoryObj);
+
     if (ttrek_CheckFileExists(machineIdFile) == TCL_OK) {
         DBG2(printf("the file already exists"));
         goto done;
@@ -252,16 +262,48 @@ done:
 }
 
 void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp) {
+
     collect_info_interp = interp;
-    Tcl_Obj *machineIdFile = ttrek_TelemetryGetMachineIdFile(interp);
+
+    Tcl_Obj *homeDirectoryObj = ttrek_GetHomeDirectory();
+    if (homeDirectoryObj == NULL) {
+        goto generate;
+    }
+
+    Tcl_Obj *machineIdFile;
+    if (ttrek_ResolvePath(interp, homeDirectoryObj,
+        Tcl_NewStringObj(machineIdBaseFile, -1), &machineIdFile) != TCL_OK)
+    {
+        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
+        Tcl_BounceRefCount(homeDirectoryObj);
+        goto generate;
+    }
+
+    if (ttrek_CheckFileExists(machineIdFile) != TCL_OK) {
+        DBG2(printf("the machine-id file doesn't exist"));
+        Tcl_DecrRefCount(machineIdFile);
+        goto generate;
+    }
+
     machineIdObj = ttrek_TelemetryReadFile(interp, Tcl_GetString(machineIdFile));
     Tcl_DecrRefCount(machineIdFile);
+
     if (machineIdObj != NULL) {
         DBG2(printf("successfully read the machine id from the home directory"));
+        goto done;
+    }
+
+    DBG2(printf("failed to read the machine id from the home directory"));
+
+generate:
+    machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
+    if (machineIdObj == NULL) {
         return;
     }
-    DBG2(printf("failed to read the machine id from the home directory"));
-    machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
+
+done:
+    Tcl_IncrRefCount(machineIdObj);
+    return;
 }
 
 void ttrek_TelemetryFree(void) {
@@ -352,7 +394,7 @@ static cJSON *ttrek_TelemetryCollectEnvironmentInfo() {
 
     const char *env_var;
 
-    env_var = ttrek_EnvVarGet(collect_info_interp, "CC");
+    env_var = getenv("CC");
     if (env_var != NULL) {
         cJSON_AddItemToObject(environment, "CC", cJSON_CreateString(env_var));
     }
@@ -360,7 +402,7 @@ static cJSON *ttrek_TelemetryCollectEnvironmentInfo() {
         ttrek_TelemetryGetCompilerVersion(collect_info_interp,
         (env_var == NULL ? "gcc" : env_var)));
 
-    env_var = ttrek_EnvVarGet(collect_info_interp, "CXX");
+    env_var = getenv("CXX");
     if (env_var != NULL) {
         cJSON_AddItemToObject(environment, "CXX", cJSON_CreateString(env_var));
     }

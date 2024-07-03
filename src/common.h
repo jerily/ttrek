@@ -104,12 +104,12 @@ typedef struct {
     ttrek_strategy_t strategy;
 } ttrek_state_t;
 
-const char *ttrek_EnvVarGet(Tcl_Interp *interp, const char *varname);
-
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
-int ttrek_ResolvePathUserHome(Tcl_Interp *interp, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
+
+Tcl_Obj *ttrek_GetHomeDirectory();
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
+int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr);
 int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root);

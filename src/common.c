@@ -16,8 +16,19 @@
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
 
-const char *ttrek_EnvVarGet(Tcl_Interp *interp, const char *varname) {
-    return Tcl_GetVar2(interp, "env", varname, TCL_GLOBAL_ONLY);
+Tcl_Obj *ttrek_GetHomeDirectory() {
+    const char *homeDir = getenv("HOME");
+    if (homeDir == NULL) {
+        DBG2(printf("failed to get HOME env var"));
+        return NULL;
+    }
+    Tcl_Obj *homeDirObj = Tcl_NewStringObj(homeDir, -1);
+    Tcl_Obj *objv[1] = {
+        Tcl_NewStringObj(".ttrek", -1)
+    };
+    homeDirObj = Tcl_FSJoinToPath(homeDirObj, 1, objv);
+    DBG2(printf("return [%s]", Tcl_GetString(homeDirObj)));
+    return homeDirObj;
 }
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
@@ -32,70 +43,6 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_p
 //    *path_ptr = Tcl_FSGetNormalizedPath(interp, *path_ptr);
 
     return TCL_OK;
-}
-
-int ttrek_ResolvePathUserHome(Tcl_Interp *interp, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr) {
-
-    int rc = TCL_OK;
-    const char *homeDir = ttrek_EnvVarGet(interp, "HOME");
-
-    if (homeDir == NULL) {
-        DBG2(printf("failed to get HOME env var"));
-        return TCL_ERROR;
-    }
-
-    Tcl_Obj *homeDirObj = Tcl_NewStringObj(homeDir, -1);
-    Tcl_Obj *objv[1] = {
-        Tcl_NewStringObj(".ttrek", -1)
-    };
-    homeDirObj = Tcl_FSJoinToPath(homeDirObj, 1, objv);
-    Tcl_IncrRefCount(homeDirObj);
-    DBG2(printf("ttrek home [%s]", Tcl_GetString(homeDirObj)));
-
-    // Make sure the ttrek home directory exists, and create it otherwise.
-    Tcl_StatBuf *sb = Tcl_AllocStatBuf();
-    if (sb == NULL) {
-        DBG2(printf("unable to alloc Tcl_StatBuf"));
-        goto error;
-    }
-    if (Tcl_FSStat(homeDirObj, sb) == 0) {
-        // The path exists. Make sure it is a directory.
-        if (!S_ISDIR(Tcl_GetModeFromStat(sb))) {
-            DBG2(printf("ERROR: the home dir is not a directory"));
-            // We must not return from here, because first we must free sb.
-            rc = TCL_ERROR;
-        }
-        // The path exists and it is a directory. Do nothing.
-    } else {
-        // The path doesn't exists. Try to create it.
-        if (Tcl_FSCreateDirectory(homeDirObj) != TCL_OK) {
-            DBG2(printf("ERROR: could not create the home directory"));
-            // We must not return from here, because first we must free sb.
-            rc = TCL_ERROR;
-        }
-    }
-    ckfree(sb);
-    if (rc == TCL_ERROR) {
-        goto error;
-    }
-
-    if (filename_ptr == NULL) {
-        *output_path_ptr = homeDirObj;
-        DBG2(printf("return the home directory"));
-        goto done;
-    }
-
-    rc = ttrek_ResolvePath(interp, homeDirObj, filename_ptr, output_path_ptr);
-    Tcl_DecrRefCount(homeDirObj);
-    DBG2(printf("return: %d", rc));
-    goto done;
-
-error:
-    Tcl_DecrRefCount(homeDirObj);
-    rc = TCL_ERROR;
-
-done:
-    return rc;
 }
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
@@ -114,7 +61,7 @@ static int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) 
     return TCL_OK;
 }
 
-static int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
+int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
     int exists;
     if (TCL_OK != ttrek_FileExists(interp, dir_path_ptr, &exists)) {
         fprintf(stderr, "error: could not check if directory exists\n");
@@ -122,6 +69,23 @@ static int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr
     }
 
     if (exists) {
+        // Make sure the specified path is a directory.
+        Tcl_StatBuf *sb = Tcl_AllocStatBuf();
+        if (sb == NULL) {
+            DBG2(printf("unable to alloc Tcl_StatBuf"));
+            return TCL_ERROR;
+        }
+        if (Tcl_FSStat(dir_path_ptr, sb) != 0) {
+            ckfree(sb);
+            DBG2(printf("unable get stats for the path"));
+            return TCL_ERROR;
+        }
+        if (!S_ISDIR(Tcl_GetModeFromStat(sb))) {
+            ckfree(sb);
+            DBG2(printf("ERROR: the path is not a directory"));
+            return TCL_ERROR;
+        }
+        ckfree(sb);
         return TCL_OK;
     }
 
