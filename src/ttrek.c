@@ -10,6 +10,7 @@
 #include <curl/curl.h>
 #include "subCmdDecls.h"
 #include "common.h"
+#include "ttrek_telemetry.h"
 
 static const char *subcommands[] = {
         "init",
@@ -49,6 +50,9 @@ int main(int argc, char *argv[]) {
     cJSON_InitHooks(&hooks);
 
     interp = Tcl_CreateInterp();
+
+    ttrek_TelemetryLoadMachineId(interp);
+
     objc = argc;
     objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
     for (Tcl_Size i = 0; i < argc; i++) {
@@ -107,6 +111,8 @@ usage:
     exitcode = 1;
 
 done:
+    ttrek_TelemetryFree();
+
     if (isCurlInitialized == CURLE_OK) {
         curl_global_cleanup();
     }

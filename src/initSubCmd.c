@@ -7,7 +7,7 @@
 #include <string.h>
 #include "subCmdDecls.h"
 #include "ttrek_git.h"
-
+#include "ttrek_telemetry.h"
 
 int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -120,6 +120,7 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(lock_file_name_ptr);
     ckfree(remObjv);
 
+    ttrek_TelemetrySaveMachineId(interp);
 
     // ensure skeleton directories exist
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, 0, MODE_LOCAL, STRATEGY_LATEST);

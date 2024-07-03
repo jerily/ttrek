@@ -46,10 +46,10 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     for (Tcl_Size i = 1; i < objc; i++) {
         argv[i] = Tcl_GetString(objv[i]);
     }
-    if (TCL_OK != ttrek_ExecuteCommand(interp, argc, argv)) {
+    if (ttrek_ExecuteCommand(interp, argc, argv, NULL) != TCL_OK) {
         return TCL_ERROR;
     }
-    fprintf(stderr, "interp result: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+    fprintf(stderr, "Exit status: OK\n");
 
     Tcl_DecrRefCount(path_to_file_ptr);
 

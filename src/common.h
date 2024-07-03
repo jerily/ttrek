@@ -27,8 +27,17 @@ typedef int Tcl_Size;
 
 #ifdef DEBUG
 # define DBG(x) x
+#ifndef __FUNCTION_NAME__
+    #ifdef _WIN32   // WINDOWS
+        #define __FUNCTION_NAME__   __FUNCTION__
+    #else          // GCC
+        #define __FUNCTION_NAME__   __func__
+    #endif
+#endif
+# define DBG2(x) {printf("%s: ", __FUNCTION_NAME__); x; printf("\n"); fflush(stdout);}
 #else
 # define DBG(x)
+# define DBG2(x)
 #endif
 
 #define SetResult(str) Tcl_ResetResult(interp); \
@@ -55,7 +64,11 @@ typedef int Tcl_Size;
 
 static const char *VERSION = XSTR(PROJECT_VERSION);
 
-static const char *REGISTRY_URL = "http://localhost:8080/registry";
+
+#define TTREK_REGISTRY_BASE_URL "http://localhost:8080"
+
+static const char *REGISTRY_URL = TTREK_REGISTRY_BASE_URL "/registry";
+static const char *TELEMETRY_URL = TTREK_REGISTRY_BASE_URL "/telemetry";
 static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *VENV_DIR = "ttrek-venv";
@@ -93,7 +106,10 @@ typedef struct {
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
 
+Tcl_Obj *ttrek_GetHomeDirectory();
+
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
+int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr);
 int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root);
@@ -104,7 +120,7 @@ int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root);
 
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions);
 
-int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[]);
+int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj);
 
 //Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode);
 //Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp);
