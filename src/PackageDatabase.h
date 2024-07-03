@@ -360,12 +360,6 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
         auto package_name = std::string(names[package]);
-        // if package_name starts with "rdep:" it is a reverse dependency
-        // strip out the prefix and return the candidates for the package
-        if (package_name.find("rdep:") == 0) {
-            package_name = package_name.substr(5);
-            package = names.alloc(std::string_view(package_name));
-        }
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
         DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
         resolvo::SolvableId locked_candidate_id{};
@@ -390,18 +384,6 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                     // so that we can later sort the installs based on
                     // the topological sort of the dependencies
                     dependencies_map[package_name].insert(std::string(dep.first));
-                }
-
-                // add the reverse dependencies for the package
-                if (reverse_dependencies_map.find(package_name) != reverse_dependencies_map.end()) {
-                    for (const auto &reverse_dependency: reverse_dependencies_map.at(package_name)) {
-                        // we deliberately do not pass rdep.package_version here
-                        // we just want to denote the reverse dependency
-                        auto dep_version_set = alloc_requirement_from_str("rdep:" + reverse_dependency, "");
-                        dependencies.requirements.push_back(dep_version_set);
-                        DBG(std::cout << "reverse dependency for " << package_name << ": " << reverse_dependency
-                                      << std::endl);
-                    }
                 }
 
                 auto id = alloc_candidate(package_name, package_version, dependencies);
