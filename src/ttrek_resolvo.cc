@@ -39,9 +39,22 @@ ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::map<std::stri
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
             std::string package_name = dep_item->string;
             std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            DBG(std::cout << "(direct) package_name: " << package_name << " package_version_requirement: "
+            DBG(std::cout << "(direct from spec) package_name: " << package_name << " package_version_requirement: "
                           << package_version_requirement << std::endl);
             requirements[package_name] = package_version_requirement;
+        }
+    }
+}
+
+static void
+ttrek_ParseRequirementsFromLockFile(ttrek_state_t *state_ptr, std::map<std::string, std::string> &requirements) {
+    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+    if (packages) {
+        for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
+            cJSON *dep_item = cJSON_GetArrayItem(packages, i);
+            std::string package_name = dep_item->string;
+            requirements[package_name] = "";
+            DBG(std::cout << "(direct from lock without version) package_name: " << package_name << std::endl);
         }
     }
 }
@@ -92,6 +105,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
             std::vector<std::string> &installs) {
 
     // Parse additional requirements from spec file
+    ttrek_ParseRequirementsFromLockFile(state_ptr, requirements);
     ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
     ttrek_ParseRequirements(objc, objv, requirements);
 
@@ -308,12 +322,9 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
                         }
 
                     } else {
-                        std::cout << "unknown install: " << install_spec.package_name << std::endl;
+                        DBG(std::cout << "unknown install sofar: " << install_spec.package_name << std::endl);
                         // a dependency of a reverse dependency?
                         // or a reverse dependency of a dependency?
-//                        if (install_spec.exact_package_exists_in_lock_p) {
-//                            install_spec.install_type = RDEP_OR_DEP_OF_ALREADY_INSTALLED;
-//                        }
                         has_unknown = true;
                     }
                 }
