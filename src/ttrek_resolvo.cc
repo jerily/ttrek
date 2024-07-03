@@ -71,8 +71,8 @@ void ttrek_ParseLockedPackages(ttrek_state_t *state_ptr, PackageDatabase &db) {
     }
 }
 
-static void ttrek_ParseReverseDependencies(cJSON *lock_root,
-                                           std::map<std::string, std::unordered_set<std::string>> &reverse_dependencies) {
+static void ttrek_ParseReverseDependenciesFromLock(cJSON *lock_root,
+                                                   std::map<std::string, std::unordered_set<std::string>> &reverse_dependencies_map) {
 
     cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
     if (!packages) {
@@ -90,10 +90,37 @@ static void ttrek_ParseReverseDependencies(cJSON *lock_root,
         for (int j = 0; j < cJSON_GetArraySize(dependencies); j++) {
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, j);
             std::string dep_package_name = dep_item->string;
-            if (reverse_dependencies.find(dep_package_name) == reverse_dependencies.end()) {
-                reverse_dependencies[dep_package_name] = std::unordered_set<std::string>();
+            if (reverse_dependencies_map.find(dep_package_name) == reverse_dependencies_map.end()) {
+                reverse_dependencies_map[dep_package_name] = std::unordered_set<std::string>();
             }
-            reverse_dependencies[dep_package_name].insert(package_name);
+            reverse_dependencies_map[dep_package_name].insert(package_name);
+        }
+    }
+}
+
+static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
+                                            std::map<std::string, std::unordered_set<std::string>> &dependencies_map) {
+
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (!packages) {
+        return;
+    }
+
+    for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
+        cJSON *package = cJSON_GetArrayItem(packages, i);
+        std::string package_name = package->string;
+        std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
+        if (!cJSON_HasObjectItem(package, "requires")) {
+            continue;
+        }
+        cJSON *dependencies = cJSON_GetObjectItem(package, "requires");
+        for (int j = 0; j < cJSON_GetArraySize(dependencies); j++) {
+            cJSON *dep_item = cJSON_GetArrayItem(dependencies, j);
+            std::string dep_package_name = dep_item->string;
+            if (dependencies_map.find(package_name) == dependencies_map.end()) {
+                dependencies_map[package_name] = std::unordered_set<std::string>();
+            }
+            dependencies_map[package_name].insert(dep_package_name);
         }
     }
 }
@@ -221,10 +248,12 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                                   : "none";
 
     int in_requirements_p = requirements.find(package_name) != requirements.end();
-    auto install_spec = InstallSpec{(state_ptr->option_force && in_requirements_p) || (in_requirements_p && !exact_package_exists_in_lock_p) ? DIRECT_INSTALL : UNKNOWN_INSTALL, package_name,
-                                    package_version,
-                                    direct_version_requirement, package_name_exists_in_lock_p,
-                                    exact_package_exists_in_lock_p};
+    auto install_spec = InstallSpec{
+            (state_ptr->option_force && in_requirements_p) || (in_requirements_p && !exact_package_exists_in_lock_p)
+            ? DIRECT_INSTALL : UNKNOWN_INSTALL, package_name,
+            package_version,
+            direct_version_requirement, package_name_exists_in_lock_p,
+            exact_package_exists_in_lock_p};
     execution_plan.push_back(install_spec);
 }
 
@@ -346,10 +375,11 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 }
 
 static void
-ttrek_PrintExecutionPlan(const std::vector<InstallSpec>& execution_plan) {
+ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
     for (const auto &install_spec: execution_plan) {
         if (install_spec.install_type == UNKNOWN_INSTALL) {
-            std::cout << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)" << std::endl;
+            std::cout << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)"
+                      << std::endl;
             continue;
         }
 
@@ -374,7 +404,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     db.set_strategy(state_ptr->strategy);
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
+    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
     db.set_reverse_dependencies_map(reverse_dependencies_map);
 
     std::map<std::string, std::string> requirements;
@@ -426,7 +456,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == ALREADY_INSTALLED || install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
+            if (install_spec.install_type == ALREADY_INSTALLED ||
+                install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
                 continue;
             }
             auto package_name = install_spec.package_name;
@@ -476,9 +507,6 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
 int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
 
-    std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    ttrek_ParseReverseDependencies(state_ptr->lock_root, reverse_dependencies_map);
-
     std::unordered_set<std::string> uninstalls;
 
     // prepare the initial list of packages to uninstall
@@ -488,6 +516,10 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
     }
 
     // prepare the list of reverse dependencies to uninstall
+
+    std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
+    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
+
     bool changed;
     do {
         changed = false;
@@ -498,6 +530,44 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
                     if (uninstalls.find(rdep) == uninstalls.end()) {
                         uninstalls.insert(rdep);
                         changed = true;
+                    }
+                }
+            }
+        }
+    } while (changed);
+
+    std::map<std::string, std::unordered_set<std::string>> dependencies_map;
+    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
+
+    do {
+        changed = false;
+
+        // remove all uninstalls from reverse_dependencies_map lists
+        for (const auto &uninstall: uninstalls) {
+            auto it = dependencies_map.find(uninstall);
+            if (it != dependencies_map.end()) {
+                for (const auto &dep: it->second) {
+                    if (reverse_dependencies_map.find(dep) != reverse_dependencies_map.end() &&
+                        reverse_dependencies_map.at(dep).find(uninstall) != reverse_dependencies_map.at(dep).end()) {
+                        reverse_dependencies_map.at(dep).erase(uninstall);
+                        changed = true;
+                        DBG(std::cout << "erased " << uninstall << " from " << dep << " rdeps" << std::endl);
+                    }
+                }
+            }
+        }
+
+        // prepare the list of orphaned dependencies to uninstall
+        for (const auto &uninstall: uninstalls) {
+            auto it = dependencies_map.find(uninstall);
+            if (it != dependencies_map.end()) {
+                for (const auto &dep: it->second) {
+                    if (reverse_dependencies_map.find(dep) == reverse_dependencies_map.end() ||
+                        reverse_dependencies_map.at(dep).empty()) {
+                        if (uninstalls.find(dep) == uninstalls.end()) {
+                            uninstalls.insert(dep);
+                            changed = true;
+                        }
                     }
                 }
             }
