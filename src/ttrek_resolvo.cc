@@ -402,16 +402,17 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
     for (const auto &install_spec: execution_plan) {
         if (install_spec.install_type == UNKNOWN_INSTALL) {
             DBG(std::cout << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)"
-                      << std::endl);
+                          << std::endl);
+            continue;
+        }
+
+        if (install_spec.install_type == ALREADY_INSTALLED) {
+            DBG(std::cout << install_spec.package_name << "@" << install_spec.package_version << " (already installed)"
+                          << std::endl);
             continue;
         }
 
         std::cout << install_spec.package_name << "@" << install_spec.package_version;
-
-//        if (install_spec.install_type == ALREADY_INSTALLED) {
-//            DBG(std::cout << " (already installed)" << std::endl);
-//            DBG(continue);
-//        }
 
         if (install_spec.install_type == RDEP_INSTALL) {
             std::cout << " (reverse dependency)";
