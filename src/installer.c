@@ -5,7 +5,6 @@
  */
 
 #include <string.h>
-#include <sys/utsname.h>
 #include "installer.h"
 #include "registry.h"
 #include "base64.h"
@@ -159,17 +158,12 @@ static Tcl_Obj *ttrek_StringToEscapedObj(const char *str, Tcl_Size len) {
 }
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
-                                         const char *package_version, const char *direct_version_requirement) {
-
-    struct utsname sysinfo;
-    if (uname(&sysinfo)) {
-        fprintf(stderr, "error: could not get system information\n");
-        return TCL_ERROR;
-    }
+                                         const char *package_version, const char *os, const char *arch,
+                                         const char *direct_version_requirement) {
 
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version,
-             sysinfo.sysname, sysinfo.machine);
+             os, arch);
 
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
@@ -520,7 +514,7 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
 }
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
-                         const char *package_version,
+                         const char *package_version, const char *os, const char *arch,
                          const char *direct_version_requirement, int package_name_exists_in_lock_p) {
 
     if (package_name_exists_in_lock_p) {
@@ -535,7 +529,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
     }
 
     if (TCL_OK !=
-        ttrek_InstallScriptAndPatches(interp, state_ptr, package_name, package_version,
+        ttrek_InstallScriptAndPatches(interp, state_ptr, package_name, package_version, os, arch,
                                       direct_version_requirement)) {
 
         fprintf(stderr, "error: installing script & patches failed\n");
