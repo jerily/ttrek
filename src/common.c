@@ -52,7 +52,7 @@ int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
     return TCL_OK;
 }
 
-static int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) {
+int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) {
     if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
         *exists = 0;
     } else {
@@ -506,6 +506,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->project_install_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, INSTALL_DIR);
     state_ptr->project_build_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, BUILD_DIR);
     state_ptr->project_temp_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, TEMP_DIR);
+    state_ptr->project_dirty_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, DIRTY_DIR);
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->manifest_json_path_ptr = path_manifest_file_ptr;
@@ -524,10 +525,14 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         state_ptr->project_build_dir_ptr->refCount));
     DBG(fprintf(stderr, "project_temp_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->project_temp_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_dirty_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_dirty_dir_ptr->refCount));
     DBG(fprintf(stderr, "spec_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->spec_json_path_ptr->refCount));
     DBG(fprintf(stderr, "lock_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->lock_json_path_ptr->refCount));
+    DBG(fprintf(stderr, "manifest_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->manifest_json_path_ptr->refCount));
 
     if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
         fprintf(stderr, "error: could not ensure skeleton exists\n");
@@ -545,8 +550,10 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->project_temp_dir_ptr);
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
+    Tcl_DecrRefCount(state_ptr->manifest_json_path_ptr);
     cJSON_Delete(state_ptr->spec_root);
     cJSON_Delete(state_ptr->lock_root);
+    cJSON_Delete(state_ptr->manifest_root);
     Tcl_Free((char *) state_ptr);
 }
 

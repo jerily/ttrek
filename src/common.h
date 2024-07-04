@@ -77,6 +77,7 @@ static const char *VENV_DIR = "ttrek-venv";
 static const char *INSTALL_DIR = "local";
 static const char *BUILD_DIR = "build";
 static const char *TEMP_DIR = "tmp";
+static const char *DIRTY_DIR = ".dirty";
 
 typedef enum {
     MODE_LOCAL,
@@ -97,6 +98,7 @@ typedef struct {
     Tcl_Obj *project_install_dir_ptr;
     Tcl_Obj *project_build_dir_ptr;
     Tcl_Obj *project_temp_dir_ptr;
+    Tcl_Obj *project_dirty_dir_ptr;
     Tcl_Obj *spec_json_path_ptr;
     Tcl_Obj *lock_json_path_ptr;
     Tcl_Obj *manifest_json_path_ptr;
@@ -114,6 +116,7 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_p
 Tcl_Obj *ttrek_GetHomeDirectory();
 
 int ttrek_CheckFileExists(Tcl_Obj *path_ptr);
+int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists);
 int ttrek_DirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr, int *result_exists);
 int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr);
 int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
