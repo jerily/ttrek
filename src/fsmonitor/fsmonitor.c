@@ -23,13 +23,15 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
     for (Tcl_Size i = 0; i < list1_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, list1, i, &elem)) {
-            fprintf(stderr, "error: could not get element %d of list1\n", i);
+            fprintf(stderr, "error: could not get element %" TCL_SIZE_MODIFIER "d"
+                " of list1\n", i);
             return TCL_ERROR;
         }
         Tcl_Size elem_len;
         const char *elem_str = Tcl_GetStringFromObj(elem, &elem_len);
         if (elem_len < ncut) {
-            fprintf(stderr, "error: element %d of list2 is shorter than ncut\n", i);
+            fprintf(stderr, "error: element %" TCL_SIZE_MODIFIER "d of list2 is"
+                " shorter than ncut\n", i);
             return TCL_ERROR;
         }
         int dummyNewEntry;
@@ -46,13 +48,15 @@ int ttrek_DiffList(Tcl_Interp *interp, Tcl_Obj *list1, Tcl_Obj *list2, Tcl_Obj *
     for (Tcl_Size i = 0; i < list2_len; i++) {
         Tcl_Obj *elem;
         if (TCL_OK != Tcl_ListObjIndex(interp, list2, i, &elem)) {
-            fprintf(stderr, "error: could not get element %d of list2\n", i);
+            fprintf(stderr, "error: could not get element %" TCL_SIZE_MODIFIER "d"
+                " of list2\n", i);
             return TCL_ERROR;
         }
         Tcl_Size elem_len;
         const char *elem_str = Tcl_GetStringFromObj(elem, &elem_len);
         if (elem_len < ncut) {
-            fprintf(stderr, "error: element %d of list2 is shorter than ncut\n", i);
+            fprintf(stderr, "error: element %" TCL_SIZE_MODIFIER "d of list2 is"
+                " shorter than ncut\n", i);
             return TCL_ERROR;
         }
         Tcl_HashEntry *entry = Tcl_FindHashEntry(&ht, &elem_str[ncut]);
