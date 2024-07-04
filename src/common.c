@@ -419,6 +419,9 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     if (!state_ptr) {
         return NULL;
     }
+
+    state_ptr->interp = interp;
+
     Tcl_Obj *project_home_dir_ptr = ttrek_GetProjectHomeDir(interp, mode);
     if (!project_home_dir_ptr) {
         fprintf(stderr, "error: getting project home directory failed\n");

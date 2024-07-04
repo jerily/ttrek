@@ -7,6 +7,8 @@
 #include <git2.h>
 #include "ttrek_git.h"
 
+#define MAX_GIT_DEPTH 3
+
 int ttrek_GitInit(ttrek_state_t *state_ptr) {
     // initialize the libgit2 library
     git_libgit2_init();
@@ -221,6 +223,107 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
     return TCL_OK;
 }
 
+static int ttrek_GitSize(git_repository *repo, size_t *result) {
+    git_index *index = NULL;
+    int error = git_repository_index(&index, repo);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        return TCL_ERROR;
+    }
+
+    // count number of commits in current branch
+    git_oid oid;
+    error = git_reference_name_to_id(&oid, repo, "HEAD");
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        return TCL_ERROR;
+    }
+
+    git_commit *commit = NULL;
+    error = git_commit_lookup(&commit, repo, &oid);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        return TCL_ERROR;
+    }
+
+    size_t commit_count = 0;
+    while (commit != NULL) {
+        commit_count++;
+        error = git_commit_parent(&commit, commit, 0);
+        if (error < 0) {
+            break;
+        }
+    }
+
+    printf("Number of commits in current branch: %zu\n", commit_count);
+    *result = commit_count;
+    return TCL_OK;
+}
+
+static int ttrek_GetRevParseCommit(git_repository *repo, int num_commits_to_keep, git_commit **result_commit) {
+
+    git_oid oid;
+    int error = git_reference_name_to_id(&oid, repo, "HEAD");
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        return TCL_ERROR;
+    }
+
+    git_commit *commit = NULL;
+    error = git_commit_lookup(&commit, repo, &oid);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        return TCL_ERROR;
+    }
+
+    for (int i = 0; i < num_commits_to_keep; ++i) {
+        error = git_commit_parent(&commit, commit, 0);
+        if (error < 0) {
+            break;
+        }
+    }
+
+    *result_commit = commit;
+
+    return error;
+}
+
+int ttrek_GitKeepLastNCommits(ttrek_state_t *state_ptr, git_repository *repo, int num_commits_to_keep) {
+    if (num_commits_to_keep <= 0) {
+        return TCL_OK;
+    }
+
+    //git rev-parse HEAD~${num_commits_to_keep} > .git/info/grafts
+    //git filter-branch -- --all
+    //git prune
+    //git gc
+
+    // git rev-parse HEAD~${num_commits_to_keep}
+    git_commit *commit = NULL;
+    int error = ttrek_GetRevParseCommit(repo, num_commits_to_keep, &commit);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        return TCL_ERROR;
+    }
+    printf("Commit oid to keep: %s\n", git_oid_tostr_s(git_commit_id(commit)));
+
+    // git filter-branch -- --all
+
+    // git prune
+
+    // git gc
+
+    return TCL_OK;
+}
+
 int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
     // git2
     git_libgit2_init();
@@ -344,6 +447,33 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
 
     printf("Created commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
 
+    size_t commit_count = 0;
+    if (TCL_OK != ttrek_GitSize(repo, &commit_count)) {
+        fprintf(stderr, "error: cleaning untracked files failed\n");
+        git_signature_free(sig);
+        git_commit_free(parent);
+        git_tree_free(tree);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // keep last N commits
+    if (commit_count > MAX_GIT_DEPTH) {
+        int num_commits_to_keep = MAX_GIT_DEPTH <= commit_count ? MAX_GIT_DEPTH : commit_count;
+        if (TCL_OK != ttrek_GitKeepLastNCommits(state_ptr, repo, num_commits_to_keep)) {
+            fprintf(stderr, "error: keeping last %d commits failed\n", MAX_GIT_DEPTH);
+            git_signature_free(sig);
+            git_commit_free(parent);
+            git_tree_free(tree);
+            git_index_free(index);
+            git_repository_free(repo);
+            git_libgit2_shutdown();
+            return TCL_ERROR;
+        }
+    }
+
     // Clean up
     git_signature_free(sig);
     git_commit_free(parent);
@@ -351,5 +481,6 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
     git_index_free(index);
     git_repository_free(repo);
     git_libgit2_shutdown();
+
     return TCL_OK;
 }

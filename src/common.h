@@ -90,6 +90,7 @@ typedef enum {
 } ttrek_strategy_t;
 
 typedef struct {
+    Tcl_Interp *interp;
     Tcl_Obj *project_home_dir_ptr;
     Tcl_Obj *project_venv_dir_ptr;
     Tcl_Obj *project_install_dir_ptr;
