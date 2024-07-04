@@ -188,6 +188,8 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
         return TCL_ERROR;
     }
 
+    git_ignore_add_rule(repo, LOCKING_FILE_IGNORE_RULE);
+
     // Get the OID of the commit to reset to
     error = git_revparse_single((git_object **)&commit, repo, commit_sha);
     if (error < 0) {
