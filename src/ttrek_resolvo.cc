@@ -186,6 +186,15 @@ static int ttrek_UpdateLockFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *s
     return TCL_OK;
 }
 
+static int ttrek_UpdateManifestFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+    // write lock file
+    if (TCL_OK != ttrek_WriteJsonFile(interp, state_ptr->manifest_json_path_ptr, state_ptr->manifest_root)) {
+        fprintf(stderr, "error: could not write %s\n", Tcl_GetString(state_ptr->manifest_json_path_ptr));
+        return TCL_ERROR;
+    }
+    return TCL_OK;
+}
+
 static int ttrek_ExistsInLock(cJSON *lock_root, const char *package_name, const char *package_version,
                               int *package_name_exists_in_lock_p) {
 
@@ -535,6 +544,11 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
+            fprintf(stderr, "error: could not update manifest file\n");
+            return TCL_ERROR;
+        }
+
         for (const auto &install_spec: installs_from_lock_file_sofar) {
             ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
         }
@@ -635,7 +649,7 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
         }
     }
 
-    // update spec and lock files
+    // update spec, lock, and manifest files
     if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
         fprintf(stderr, "error: could not update spec file\n");
         return TCL_ERROR;
@@ -643,6 +657,11 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
 
     if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
         fprintf(stderr, "error: could not update lock file\n");
+        return TCL_ERROR;
+    }
+
+    if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
+        fprintf(stderr, "error: could not update manifest file\n");
         return TCL_ERROR;
     }
 

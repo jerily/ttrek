@@ -411,6 +411,19 @@ Tcl_Obj *ttrek_GetLockFilePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr
     return path_to_lock_file_ptr;
 }
 
+Tcl_Obj *ttrek_GetManifestFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
+    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(MANIFEST_JSON_FILE, -1);
+    Tcl_IncrRefCount(lock_filename_ptr);
+    Tcl_Obj *path_to_lock_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
+        Tcl_DecrRefCount(lock_filename_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(lock_filename_ptr);
+    Tcl_IncrRefCount(path_to_lock_file_ptr);
+    return path_to_lock_file_ptr;
+}
+
 cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
 
     Tcl_Obj *path_to_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
@@ -419,14 +432,32 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
         fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
         Tcl_DecrRefCount(path_to_lock_file_ptr);
-        Tcl_DecrRefCount(project_home_dir_ptr);
         return NULL;
     }
 
     Tcl_DecrRefCount(path_to_lock_file_ptr);
-    Tcl_DecrRefCount(project_home_dir_ptr);
 
     return lock_root;
+}
+
+cJSON *ttrek_GetManifestRoot(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
+
+    Tcl_Obj *path_to_manifest_file_ptr = ttrek_GetManifestFilePath(interp, project_venv_dir_ptr);
+
+    cJSON *manifest_root = NULL;
+    if (TCL_OK == ttrek_CheckFileExists(path_to_manifest_file_ptr)) {
+        if (TCL_OK != ttrek_FileToJson(interp, path_to_manifest_file_ptr, &manifest_root)) {
+            fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_manifest_file_ptr));
+            Tcl_DecrRefCount(path_to_manifest_file_ptr);
+            return NULL;
+        }
+    } else {
+        manifest_root = cJSON_CreateObject();
+    }
+
+    Tcl_DecrRefCount(path_to_manifest_file_ptr);
+
+    return manifest_root;
 }
 
 ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy) {
@@ -464,7 +495,12 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         return NULL;
     }
 
+
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
+
+    // we do not check if the manifest file exists here
+    // because it is not required to exist
+    Tcl_Obj *path_manifest_file_ptr = ttrek_GetManifestFilePath(interp, project_venv_dir_ptr);
 
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
@@ -477,8 +513,10 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->project_temp_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, TEMP_DIR);
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
+    state_ptr->manifest_json_path_ptr = path_manifest_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
+    state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
 
     // print all refCount for all dir_ptr in state_ptr
     DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",

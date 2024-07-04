@@ -77,8 +77,31 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     fprintf(stderr, "Added dependency %s to spec: %s\n", package_name, version_requirement);
 }
 
+static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package_name, Tcl_Obj *files_diff) {
+
+    // add the files that were added to the package
+    cJSON *item_node = cJSON_CreateObject();
+    cJSON *files_node = cJSON_CreateArray();
+    Tcl_Size files_diff_len;
+    Tcl_ListObjLength(NULL, files_diff, &files_diff_len);
+    for (Tcl_Size i = 0; i < files_diff_len; i++) {
+        Tcl_Obj *file_diff_ptr;
+        Tcl_ListObjIndex(NULL, files_diff, i, &file_diff_ptr);
+        cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
+    }
+    cJSON_AddItemToObject(item_node, STRING_FILES, files_node);
+
+    if (cJSON_HasObjectItem(manifest_root, package_name)) {
+        // modify the value
+        cJSON_ReplaceItemInObject(manifest_root, package_name, item_node);
+    } else {
+        cJSON_AddItemToObject(manifest_root, package_name, item_node);
+    }
+
+}
+
 static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
-                                   const char *package_version, cJSON *deps_node, Tcl_Obj *files_diff) {
+                                   const char *package_version, cJSON *deps_node) {
 
     // add direct requirement to dependencies
     if (direct_version_requirement != NULL) {
@@ -106,17 +129,6 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         cJSON_AddStringToObject(reqs_node, dep_name, dep_version_requirement);
     }
     cJSON_AddItemToObject(item_node, STRING_REQUIRES, reqs_node);
-
-    // add the files that were added to the package
-    cJSON *files_node = cJSON_CreateArray();
-    Tcl_Size files_diff_len;
-    Tcl_ListObjLength(NULL, files_diff, &files_diff_len);
-    for (Tcl_Size i = 0; i < files_diff_len; i++) {
-        Tcl_Obj *file_diff_ptr;
-        Tcl_ListObjIndex(NULL, files_diff, i, &file_diff_ptr);
-        cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
-    }
-    cJSON_AddItemToObject(item_node, STRING_FILES, files_node);
 
     cJSON *packages = cJSON_HasObjectItem(lock_root, STRING_PACKAGES) ? cJSON_GetObjectItem(lock_root, STRING_PACKAGES) : NULL;
     if (!packages) {
@@ -299,18 +311,18 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
             ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
-                                   deps_node, fsmonitor_state_ptr->files_diff);
+                                   deps_node);
         } else {
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, package_version_with_caret_op);
             ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version,
-                                   deps_node, fsmonitor_state_ptr->files_diff);
+                                   deps_node);
         }
     } else {
-        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node,
-                               fsmonitor_state_ptr->files_diff);
+        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node);
     }
+    ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, fsmonitor_state_ptr->files_diff);
 
     if (TCL_OK != ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not remove watch on install directory\n");
@@ -355,12 +367,7 @@ static int ttrek_EnsureDirectoryTreeExists(Tcl_Interp *interp, Tcl_Obj *file_pat
 }
 
 static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
-    if (!packages) {
-        return TCL_OK;
-    }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    cJSON *package = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     if (!package) {
         return TCL_OK;
     }
@@ -426,12 +433,7 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 }
 
 static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
-    if (!packages) {
-        return TCL_OK;
-    }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    cJSON *package = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     if (!package) {
         return TCL_OK;
     }
@@ -459,12 +461,7 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 }
 
 int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
-    cJSON *packages = cJSON_GetObjectItem(state_ptr->lock_root, STRING_PACKAGES);
-    if (!packages) {
-        return TCL_OK;
-    }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
+    cJSON *package = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     if (!package) {
         return TCL_OK;
     }
@@ -575,6 +572,14 @@ static int ttrek_RemovePackageFromSpecRoot(cJSON *spec_root, const char *package
     return TCL_OK;
 }
 
+static int ttrek_RemovePackageFromManifestRoot(cJSON *manifest_root, const char *package_name) {
+    if (!cJSON_HasObjectItem(manifest_root, package_name)) {
+        return TCL_ERROR;
+    }
+    cJSON_DeleteItemFromObject(manifest_root, package_name);
+    return TCL_OK;
+}
+
 int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
 
     if (TCL_OK != ttrek_DeletePackageFiles(interp, state_ptr, package_name)) {
@@ -593,6 +598,13 @@ int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const c
         fprintf(stderr, "error: could not remove %s from spec file\n", package_name);
         return TCL_ERROR;
     }
+
+    // remove it from the manifest root
+    if (TCL_OK != ttrek_RemovePackageFromManifestRoot(state_ptr->manifest_root, package_name)) {
+        fprintf(stderr, "error: could not remove %s from spec file\n", package_name);
+        return TCL_ERROR;
+    }
+
 
     return TCL_OK;
 }
