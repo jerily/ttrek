@@ -435,6 +435,8 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
             Tcl_DecrRefCount(path_to_lock_file_ptr);
             return NULL;
         }
+    } else {
+        lock_root = cJSON_CreateObject();
     }
 
     Tcl_DecrRefCount(path_to_lock_file_ptr);
