@@ -447,33 +447,6 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
 
     printf("Created commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
 
-    size_t commit_count = 0;
-    if (TCL_OK != ttrek_GitSize(repo, &commit_count)) {
-        fprintf(stderr, "error: cleaning untracked files failed\n");
-        git_signature_free(sig);
-        git_commit_free(parent);
-        git_tree_free(tree);
-        git_index_free(index);
-        git_repository_free(repo);
-        git_libgit2_shutdown();
-        return TCL_ERROR;
-    }
-
-    // keep last N commits
-    if (commit_count > MAX_GIT_DEPTH) {
-        int num_commits_to_keep = MAX_GIT_DEPTH <= commit_count ? MAX_GIT_DEPTH : commit_count;
-        if (TCL_OK != ttrek_GitKeepLastNCommits(state_ptr, repo, num_commits_to_keep)) {
-            fprintf(stderr, "error: keeping last %d commits failed\n", MAX_GIT_DEPTH);
-            git_signature_free(sig);
-            git_commit_free(parent);
-            git_tree_free(tree);
-            git_index_free(index);
-            git_repository_free(repo);
-            git_libgit2_shutdown();
-            return TCL_ERROR;
-        }
-    }
-
     // Clean up
     git_signature_free(sig);
     git_commit_free(parent);
@@ -483,4 +456,130 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
     git_libgit2_shutdown();
 
     return TCL_OK;
+}
+
+int ttrek_GitAmend(ttrek_state_t *state_ptr) {
+
+    // using libgit2, we can amend the last commit by replacing the contents of the last commit
+    // with the contents of the current index
+
+    // git2
+
+    git_libgit2_init();
+    int error;
+    git_repository *repo = NULL;
+    git_index *index = NULL;
+    git_oid tree_oid;
+    git_oid commit_oid;
+    git_tree *tree = NULL;
+    git_commit *parent = NULL;
+
+    if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+        fprintf(stderr, "error: opening repository failed\n");
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Get the index
+    error = git_repository_index(&index, repo);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Add all files to the index (including modified and deleted)
+    error = git_index_add_all(index, NULL, 0, NULL, NULL);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Write the index as a tree
+    error = git_index_write_tree(&tree_oid, index);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Write the index to disk
+    error = git_index_write(index);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Create a tree from the tree OID
+    error = git_tree_lookup(&tree, repo, &tree_oid);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Get the parent commit
+    error = git_reference_name_to_id(&commit_oid, repo, "HEAD");
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_tree_free(tree);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    error = git_commit_lookup(&parent, repo, &commit_oid);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_tree_free(tree);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    // Amend the commit
+
+    error = git_commit_amend(&commit_oid, parent, "HEAD", NULL, NULL, NULL, NULL, tree);
+    if (error < 0) {
+        const git_error *e = git_error_last();
+        fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
+        git_commit_free(parent);
+        git_tree_free(tree);
+        git_index_free(index);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    }
+
+    printf("Amended commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+
+    // Clean up
+    git_commit_free(parent);
+    git_tree_free(tree);
+    git_index_free(index);
+    git_repository_free(repo);
+    git_libgit2_shutdown();
+
+    return TCL_OK;
+
 }

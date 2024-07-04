@@ -97,7 +97,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     ckfree(remObjv);
 
     if (!abort) {
-        if (TCL_OK != ttrek_GitCommit(state_ptr, "install")) {
+        if (TCL_OK != ttrek_GitAmend(state_ptr)) {
             fprintf(stderr, "error: committing changes failed\n");
             ttrek_DestroyState(state_ptr);
             return TCL_ERROR;
