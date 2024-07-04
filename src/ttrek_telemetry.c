@@ -443,3 +443,31 @@ void ttrek_TelemetryRegisterEnvironment() {
 Tcl_Obj *ttrek_TelemetryGetMachineId() {
     return machineIdObj;
 }
+
+void ttrek_TelemetryPackageInstallEvent(const char *package_name,
+    const char *package_version, const char *os, const char *arch,
+    int outcome, int is_toplevel)
+{
+
+    cJSON *root = cJSON_CreateObject();
+
+    cJSON_AddItemToObject(root, "action", cJSON_CreateString("install"));
+
+    cJSON_AddItemToObject(root, "outcome", (outcome ?
+        cJSON_CreateString("success") : cJSON_CreateString("failure")));
+
+    cJSON_AddItemToObject(root, "is_toplevel", (is_toplevel ?
+        cJSON_CreateTrue() : cJSON_CreateFalse()));
+
+    cJSON_AddItemToObject(root, "os", cJSON_CreateString(os));
+
+    cJSON_AddItemToObject(root, "arch", cJSON_CreateString(arch));
+
+    char install_event_url[256];
+    snprintf(install_event_url, sizeof(install_event_url), "%s/%s/%s",
+        PACKAGE_URL, package_name, package_version);
+
+    ttrek_RegistryGet(install_event_url, NULL, root);
+    cJSON_Delete(root);
+    return;
+}

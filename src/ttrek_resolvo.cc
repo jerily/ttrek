@@ -8,9 +8,11 @@
 #include <cassert>
 #include <iostream>
 #include <cstring>
+#include <sys/utsname.h>
 #include "PackageDatabase.h"
 #include "ttrek_resolvo.h"
 #include "installer.h"
+#include "ttrek_telemetry.h"
 
 int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
     for (int i = 0; i < objc; i++) {
@@ -476,6 +478,12 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        struct utsname sysinfo;
+        if (uname(&sysinfo)) {
+            fprintf(stderr, "error: could not get system information\n");
+            return TCL_ERROR;
+        }
+
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
@@ -490,9 +498,15 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
-            if (TCL_OK !=
-                ttrek_InstallPackage(interp, state_ptr, package_name.c_str(), package_version.c_str(),
-                                     direct_version_requirement.c_str(), package_name_exists_in_lock_p)) {
+            auto outcome = ttrek_InstallPackage(interp, state_ptr, package_name.c_str(),
+                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
+                direct_version_requirement.c_str(), package_name_exists_in_lock_p);
+
+            ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
+                sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),
+                (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
+
+            if (TCL_OK != outcome) {
 
                 for (const auto &spec: installs_from_lock_file_sofar) {
                     if (package_name_exists_in_lock_p) {
@@ -505,6 +519,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
                 }
 
                 return TCL_ERROR;
+
             }
 
             if (package_name_exists_in_lock_p) {

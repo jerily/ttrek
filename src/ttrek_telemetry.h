@@ -16,6 +16,10 @@ extern "C" {
 void ttrek_TelemetryFree(void);
 
 void ttrek_TelemetryRegisterEnvironment();
+void ttrek_TelemetryPackageInstallEvent(const char *package_name,
+    const char *package_version, const char *os, const char *arch,
+    int outcome, int is_toplevel);
+
 
 Tcl_Obj *ttrek_TelemetryGetMachineId();
 
