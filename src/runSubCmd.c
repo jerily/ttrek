@@ -16,7 +16,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+    if (TCL_OK != ttrek_EnsureGitReady(interp, state_ptr)) {
         fprintf(stderr, "error: resetting git repository failed\n");
         ttrek_DestroyState(state_ptr);
 //        ckfree(remObjv);

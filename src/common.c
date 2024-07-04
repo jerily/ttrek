@@ -61,8 +61,9 @@ static int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) 
     return TCL_OK;
 }
 
-int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
-    int exists;
+int ttrek_DirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr, int *result_exists) {
+    int exists = 0;
+    *result_exists = 0;
     if (TCL_OK != ttrek_FileExists(interp, dir_path_ptr, &exists)) {
         fprintf(stderr, "error: could not check if directory exists\n");
         return TCL_ERROR;
@@ -86,6 +87,20 @@ int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
             return TCL_ERROR;
         }
         ckfree(sb);
+        *result_exists = 1;
+        return TCL_OK;
+    }
+    return TCL_OK;
+}
+
+int ttrek_EnsureDirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr) {
+    int exists = 0;
+    if (TCL_OK != ttrek_DirectoryExists(interp, dir_path_ptr, &exists)) {
+        fprintf(stderr, "error: could not check if directory exists\n");
+        return TCL_ERROR;
+    }
+
+    if (exists) {
         return TCL_OK;
     }
 
@@ -433,7 +448,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
 
     if (TCL_OK != ttrek_CheckFileExists(path_to_spec_file_ptr)) {
-        fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
+        printf("%s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
         Tcl_DecrRefCount(project_home_dir_ptr);
         Tcl_DecrRefCount(path_to_spec_file_ptr);
         return NULL;

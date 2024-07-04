@@ -460,10 +460,7 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
 
 int ttrek_GitAmend(ttrek_state_t *state_ptr) {
 
-    // using libgit2, we can amend the last commit by replacing the contents of the last commit
-    // with the contents of the current index
-
-    // git2
+    // we can amend the last commit by replacing its contents with the current index
 
     git_libgit2_init();
     int error;
@@ -582,4 +579,45 @@ int ttrek_GitAmend(ttrek_state_t *state_ptr) {
 
     return TCL_OK;
 
+}
+
+int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+
+    // check if .git exists in ttrek-venv directory
+
+    Tcl_Obj *git_dir_ptr = ttrek_GetVenvSubDir(interp, state_ptr->project_venv_dir_ptr, ".git");
+    int exists;
+    if (TCL_OK != ttrek_DirectoryExists(interp, git_dir_ptr, &exists)) {
+        fprintf(stderr, "error: could not check if .git exists\n");
+        return TCL_ERROR;
+    }
+    Tcl_DecrRefCount(git_dir_ptr);
+
+    if (exists) {
+        // try to open the repository
+        git_libgit2_init();
+        git_repository *repo = NULL;
+        if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+            fprintf(stderr, "error: opening repository failed\n");
+            git_repository_free(repo);
+            git_libgit2_shutdown();
+            return TCL_ERROR;
+        }
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+
+
+        if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+            fprintf(stderr, "error: resetting git repository failed\n");
+            return TCL_ERROR;
+        }
+
+    } else {
+        if (TCL_OK != ttrek_GitInit(state_ptr)) {
+            fprintf(stderr, "error: initializing git repository failed\n");
+            return TCL_ERROR;
+        }
+    }
+
+    return TCL_OK;
 }

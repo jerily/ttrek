@@ -51,12 +51,11 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
-        fprintf(stderr, "error: resetting git repository failed\n");
+    if (TCL_OK != ttrek_EnsureGitReady(interp, state_ptr)) {
+        fprintf(stderr, "error: ensuring git repository is ready failed\n");
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
-
     }
 
     Tcl_Size installObjc = objc - 1;

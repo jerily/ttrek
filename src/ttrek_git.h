@@ -17,6 +17,7 @@ int ttrek_GitInit(ttrek_state_t *state_ptr);
 int ttrek_GitResetHard(ttrek_state_t *state_ptr);
 int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message);
 int ttrek_GitAmend(ttrek_state_t *state_ptr);
+int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 #ifdef __cplusplus
 }
