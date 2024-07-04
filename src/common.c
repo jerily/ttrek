@@ -429,10 +429,12 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     Tcl_Obj *path_to_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
 
     cJSON *lock_root = NULL;
-    if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
-        fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
-        Tcl_DecrRefCount(path_to_lock_file_ptr);
-        return NULL;
+    if (TCL_OK == ttrek_CheckFileExists(path_to_lock_file_ptr)) {
+        if (TCL_OK != ttrek_FileToJson(interp, path_to_lock_file_ptr, &lock_root)) {
+            fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_lock_file_ptr));
+            Tcl_DecrRefCount(path_to_lock_file_ptr);
+            return NULL;
+        }
     }
 
     Tcl_DecrRefCount(path_to_lock_file_ptr);
@@ -486,15 +488,6 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     }
 
     Tcl_Obj *path_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
-
-    if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
-        fprintf(stderr, "error: %s does not exist, run 'ttrek init' first\n", LOCK_JSON_FILE);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        Tcl_DecrRefCount(path_to_spec_file_ptr);
-        Tcl_DecrRefCount(path_lock_file_ptr);
-        return NULL;
-    }
-
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
