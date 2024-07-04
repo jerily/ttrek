@@ -61,21 +61,6 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
-
-    if (TCL_OK != ttrek_EnsureGitReady(interp, state_ptr)) {
-        fprintf(stderr, "error: ensuring git repository is ready failed\n");
-        ttrek_DestroyState(state_ptr);
-//        ckfree(remObjv);
-        return TCL_ERROR;
-    }
-
-    if (TCL_OK != Tcl_FSCreateDirectory(state_ptr->project_dirty_dir_ptr)) {
-        fprintf(stderr, "error: creating dirty directory failed\n");
-        ttrek_DestroyState(state_ptr);
-//        ckfree(remObjv);
-        return TCL_ERROR;
-    }
-
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(list_ptr);
 
@@ -118,14 +103,6 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     }
 
     Tcl_DecrRefCount(list_ptr);
-
-    Tcl_Obj *error_ptr;
-    if (TCL_OK != Tcl_FSRemoveDirectory(state_ptr->project_dirty_dir_ptr, 0, &error_ptr)) {
-        fprintf(stderr, "error: removing dirty directory failed\n");
-        Tcl_DecrRefCount(error_ptr);
-        ttrek_DestroyState(state_ptr);
-        return TCL_ERROR;
-    }
 
     ttrek_DestroyState(state_ptr);
     return TCL_OK;
