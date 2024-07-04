@@ -5,9 +5,6 @@
  */
 
 #include <string.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
 #include "subCmdDecls.h"
 #include "common.h"
 #include "ttrek_resolvo.h"
