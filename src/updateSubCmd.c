@@ -105,10 +105,8 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         }
     }
 
-    Tcl_Obj *error_ptr;
     if (TCL_OK != Tcl_FSDeleteFile(state_ptr->dirty_file_path_ptr)) {
         fprintf(stderr, "error: removing dirty directory failed\n");
-        Tcl_DecrRefCount(error_ptr);
         ttrek_DestroyState(state_ptr);
         return TCL_ERROR;
     }

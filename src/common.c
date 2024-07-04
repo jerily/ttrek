@@ -373,21 +373,21 @@ Tcl_Obj *ttrek_GetVenvSubDir(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr, 
     return path_to_install_dir_ptr;
 }
 
-Tcl_Obj *ttrek_GetSpecFilePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
-    Tcl_Obj *spec_filename_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
-    Tcl_IncrRefCount(spec_filename_ptr);
-    Tcl_Obj *path_to_spec_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, spec_filename_ptr, &path_to_spec_file_ptr)) {
-        Tcl_DecrRefCount(spec_filename_ptr);
+Tcl_Obj *ttrek_GetFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr, const char *filename) {
+    Tcl_Obj *filename_ptr = Tcl_NewStringObj(filename, -1);
+    Tcl_IncrRefCount(filename_ptr);
+    Tcl_Obj *path_to_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, filename_ptr, &path_to_file_ptr)) {
+        Tcl_DecrRefCount(filename_ptr);
         return NULL;
     }
-    Tcl_DecrRefCount(spec_filename_ptr);
-    Tcl_IncrRefCount(path_to_spec_file_ptr);
-    return path_to_spec_file_ptr;
+    Tcl_DecrRefCount(filename_ptr);
+    Tcl_IncrRefCount(path_to_file_ptr);
+    return path_to_file_ptr;
 }
 
 cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
-    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
+    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, SPEC_JSON_FILE);
     cJSON *spec_root = NULL;
     if (TCL_OK != ttrek_FileToJson(interp, path_to_spec_file_ptr, &spec_root)) {
         fprintf(stderr, "error: could not read %s\n", Tcl_GetString(path_to_spec_file_ptr));
@@ -398,48 +398,9 @@ cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
     return spec_root;
 }
 
-Tcl_Obj *ttrek_GetLockFilePath(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
-    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(LOCK_JSON_FILE, -1);
-    Tcl_IncrRefCount(lock_filename_ptr);
-    Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_home_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
-        Tcl_DecrRefCount(lock_filename_ptr);
-        return NULL;
-    }
-    Tcl_DecrRefCount(lock_filename_ptr);
-    Tcl_IncrRefCount(path_to_lock_file_ptr);
-    return path_to_lock_file_ptr;
-}
-
-Tcl_Obj *ttrek_GetManifestFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
-    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(MANIFEST_JSON_FILE, -1);
-    Tcl_IncrRefCount(lock_filename_ptr);
-    Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
-        Tcl_DecrRefCount(lock_filename_ptr);
-        return NULL;
-    }
-    Tcl_DecrRefCount(lock_filename_ptr);
-    Tcl_IncrRefCount(path_to_lock_file_ptr);
-    return path_to_lock_file_ptr;
-}
-
-Tcl_Obj *ttrek_GetDirtyFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
-    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(DIRTY_FILE, -1);
-    Tcl_IncrRefCount(lock_filename_ptr);
-    Tcl_Obj *path_to_lock_file_ptr;
-    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
-        Tcl_DecrRefCount(lock_filename_ptr);
-        return NULL;
-    }
-    Tcl_DecrRefCount(lock_filename_ptr);
-    Tcl_IncrRefCount(path_to_lock_file_ptr);
-    return path_to_lock_file_ptr;
-}
-
 cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
 
-    Tcl_Obj *path_to_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
+    Tcl_Obj *path_to_lock_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, LOCK_JSON_FILE);
 
     cJSON *lock_root = NULL;
     if (TCL_OK == ttrek_CheckFileExists(path_to_lock_file_ptr)) {
@@ -459,7 +420,7 @@ cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
 
 cJSON *ttrek_GetManifestRoot(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
 
-    Tcl_Obj *path_to_manifest_file_ptr = ttrek_GetManifestFilePath(interp, project_venv_dir_ptr);
+    Tcl_Obj *path_to_manifest_file_ptr = ttrek_GetFilePath(interp, project_venv_dir_ptr, MANIFEST_JSON_FILE);
 
     cJSON *manifest_root = NULL;
     if (TCL_OK == ttrek_CheckFileExists(path_to_manifest_file_ptr)) {
@@ -493,7 +454,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 
     DBG(fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr)));
 
-    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetSpecFilePath(interp, project_home_dir_ptr);
+    Tcl_Obj *path_to_spec_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, SPEC_JSON_FILE);
 
     if (TCL_OK != ttrek_CheckFileExists(path_to_spec_file_ptr)) {
         printf("%s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
@@ -502,15 +463,9 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         return NULL;
     }
 
-    Tcl_Obj *path_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
+    Tcl_Obj *path_lock_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, LOCK_JSON_FILE);
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
-
-    // we do not check if the manifest file exists here
-    // because it is not required to exist
-    Tcl_Obj *path_manifest_file_ptr = ttrek_GetManifestFilePath(interp, project_venv_dir_ptr);
-
-    Tcl_Obj *path_to_dirty_file_ptr = ttrek_GetDirtyFilePath(interp, project_venv_dir_ptr);
 
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
@@ -521,10 +476,13 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->project_install_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, INSTALL_DIR);
     state_ptr->project_build_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, BUILD_DIR);
     state_ptr->project_temp_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, TEMP_DIR);
-    state_ptr->dirty_file_path_ptr = path_to_dirty_file_ptr;
+    state_ptr->dirty_file_path_ptr = ttrek_GetFilePath(interp, project_venv_dir_ptr, DIRTY_FILE);
+    state_ptr->locking_file_path_ptr = ttrek_GetFilePath(interp, project_venv_dir_ptr, LOCKING_FILE);
+    // we do not check if the manifest file exists here
+    // because it is not required to exist
+    state_ptr->manifest_json_path_ptr = ttrek_GetFilePath(interp, project_venv_dir_ptr, MANIFEST_JSON_FILE);
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
-    state_ptr->manifest_json_path_ptr = path_manifest_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
     state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);

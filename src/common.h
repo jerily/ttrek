@@ -74,6 +74,7 @@ static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *MANIFEST_JSON_FILE = "ttrek-manifest.json";
 static const char *DIRTY_FILE = ".dirty";
+static const char *LOCKING_FILE = ".lock";
 static const char *VENV_DIR = "ttrek-venv";
 static const char *INSTALL_DIR = "local";
 static const char *BUILD_DIR = "build";
@@ -102,6 +103,7 @@ typedef struct {
     Tcl_Obj *lock_json_path_ptr;
     Tcl_Obj *manifest_json_path_ptr;
     Tcl_Obj *dirty_file_path_ptr;
+    Tcl_Obj *locking_file_path_ptr;
     cJSON *spec_root;
     cJSON *lock_root;
     cJSON *manifest_root;
