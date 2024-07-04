@@ -463,13 +463,20 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
 
     // print all refCount for all dir_ptr in state_ptr
-    DBG(fprintf(stderr, "project_home_dir_ptr refCount: %d\n", state_ptr->project_home_dir_ptr->refCount));
-    DBG(fprintf(stderr, "project_venv_dir_ptr refCount: %d\n", state_ptr->project_venv_dir_ptr->refCount));
-    DBG(fprintf(stderr, "project_install_dir_ptr refCount: %d\n", state_ptr->project_install_dir_ptr->refCount));
-    DBG(fprintf(stderr, "project_build_dir_ptr refCount: %d\n", state_ptr->project_build_dir_ptr->refCount));
-    DBG(fprintf(stderr, "project_temp_dir_ptr refCount: %d\n", state_ptr->project_temp_dir_ptr->refCount));
-    DBG(fprintf(stderr, "spec_json_path_ptr refCount: %d\n", state_ptr->spec_json_path_ptr->refCount));
-    DBG(fprintf(stderr, "lock_json_path_ptr refCount: %d\n", state_ptr->lock_json_path_ptr->refCount));
+    DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_home_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_venv_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_venv_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_install_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_install_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_build_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_build_dir_ptr->refCount));
+    DBG(fprintf(stderr, "project_temp_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->project_temp_dir_ptr->refCount));
+    DBG(fprintf(stderr, "spec_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->spec_json_path_ptr->refCount));
+    DBG(fprintf(stderr, "lock_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->lock_json_path_ptr->refCount));
 
     if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
         fprintf(stderr, "error: could not ensure skeleton exists\n");
