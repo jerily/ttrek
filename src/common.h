@@ -73,11 +73,11 @@ static const char *TELEMETRY_COLLECT_URL = TTREK_REGISTRY_BASE_URL "/telemetry/c
 static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *MANIFEST_JSON_FILE = "ttrek-manifest.json";
+static const char *DIRTY_FILE = ".dirty";
 static const char *VENV_DIR = "ttrek-venv";
 static const char *INSTALL_DIR = "local";
 static const char *BUILD_DIR = "build";
 static const char *TEMP_DIR = "tmp";
-static const char *DIRTY_DIR = ".dirty";
 
 typedef enum {
     MODE_LOCAL,
@@ -98,10 +98,10 @@ typedef struct {
     Tcl_Obj *project_install_dir_ptr;
     Tcl_Obj *project_build_dir_ptr;
     Tcl_Obj *project_temp_dir_ptr;
-    Tcl_Obj *project_dirty_dir_ptr;
     Tcl_Obj *spec_json_path_ptr;
     Tcl_Obj *lock_json_path_ptr;
     Tcl_Obj *manifest_json_path_ptr;
+    Tcl_Obj *dirty_file_path_ptr;
     cJSON *spec_root;
     cJSON *lock_root;
     cJSON *manifest_root;
@@ -129,6 +129,8 @@ int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_pt
 int ttrek_FileToJson(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON **root);
 
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions);
+
+int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr);
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj);
 

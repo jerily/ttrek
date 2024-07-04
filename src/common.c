@@ -424,6 +424,19 @@ Tcl_Obj *ttrek_GetManifestFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir
     return path_to_lock_file_ptr;
 }
 
+Tcl_Obj *ttrek_GetDirtyFilePath(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) {
+    Tcl_Obj *lock_filename_ptr = Tcl_NewStringObj(DIRTY_FILE, -1);
+    Tcl_IncrRefCount(lock_filename_ptr);
+    Tcl_Obj *path_to_lock_file_ptr;
+    if (TCL_OK != ttrek_ResolvePath(interp, project_venv_dir_ptr, lock_filename_ptr, &path_to_lock_file_ptr)) {
+        Tcl_DecrRefCount(lock_filename_ptr);
+        return NULL;
+    }
+    Tcl_DecrRefCount(lock_filename_ptr);
+    Tcl_IncrRefCount(path_to_lock_file_ptr);
+    return path_to_lock_file_ptr;
+}
+
 cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr) {
 
     Tcl_Obj *path_to_lock_file_ptr = ttrek_GetLockFilePath(interp, project_home_dir_ptr);
@@ -497,6 +510,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     // because it is not required to exist
     Tcl_Obj *path_manifest_file_ptr = ttrek_GetManifestFilePath(interp, project_venv_dir_ptr);
 
+    Tcl_Obj *path_to_dirty_file_ptr = ttrek_GetDirtyFilePath(interp, project_venv_dir_ptr);
+
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
     state_ptr->mode = mode;
@@ -506,7 +521,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->project_install_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, INSTALL_DIR);
     state_ptr->project_build_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, BUILD_DIR);
     state_ptr->project_temp_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, TEMP_DIR);
-    state_ptr->project_dirty_dir_ptr = ttrek_GetVenvSubDir(interp, project_venv_dir_ptr, DIRTY_DIR);
+    state_ptr->dirty_file_path_ptr = path_to_dirty_file_ptr;
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->manifest_json_path_ptr = path_manifest_file_ptr;
@@ -525,8 +540,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         state_ptr->project_build_dir_ptr->refCount));
     DBG(fprintf(stderr, "project_temp_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->project_temp_dir_ptr->refCount));
-    DBG(fprintf(stderr, "project_dirty_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
-        state_ptr->project_dirty_dir_ptr->refCount));
+    DBG(fprintf(stderr, "dirty_file_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
+        state_ptr->dirty_file_path_ptr->refCount));
     DBG(fprintf(stderr, "spec_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->spec_json_path_ptr->refCount));
     DBG(fprintf(stderr, "lock_json_path_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
@@ -787,4 +802,14 @@ static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl
             Tcl_SetObjResult(interp, Tcl_NewStringObj("invalid type", -1));
             return TCL_ERROR;
     }
+}
+
+int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
+    Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", 0666);
+    if (!chan) {
+        fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
+        return TCL_ERROR;
+    }
+    Tcl_Close(interp, chan);
+    return TCL_OK;
 }

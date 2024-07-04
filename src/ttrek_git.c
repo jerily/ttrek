@@ -506,7 +506,7 @@ int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
         git_libgit2_shutdown();
 
         int dirty_dir_exists = 0;
-        if (TCL_OK != ttrek_DirectoryExists(interp, state_ptr->project_dirty_dir_ptr, &dirty_dir_exists)) {
+        if (TCL_OK != ttrek_FileExists(interp, state_ptr->dirty_file_path_ptr, &dirty_dir_exists)) {
             fprintf(stderr, "error: checking if .dirty exists failed\n");
             return TCL_ERROR;
         }
