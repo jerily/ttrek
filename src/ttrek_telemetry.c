@@ -434,7 +434,7 @@ void ttrek_TelemetryRegisterEnvironment() {
     cJSON *env_info = ttrek_TelemetryCollectEnvironmentInfo();
     char register_env_url[256];
     snprintf(register_env_url, sizeof(register_env_url), "%s/%s",
-        TELEMETRY_URL, Tcl_GetString(machineIdObj));
+             TELEMETRY_REGISTER_URL, Tcl_GetString(machineIdObj));
     ttrek_RegistryGet(register_env_url, NULL, env_info);
     cJSON_Delete(env_info);
     return;
@@ -465,7 +465,7 @@ void ttrek_TelemetryPackageInstallEvent(const char *package_name,
 
     char install_event_url[256];
     snprintf(install_event_url, sizeof(install_event_url), "%s/%s/%s",
-        PACKAGE_URL, package_name, package_version);
+        TELEMETRY_COLLECT_URL, package_name, package_version);
 
     ttrek_RegistryGet(install_event_url, NULL, root);
     cJSON_Delete(root);

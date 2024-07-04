@@ -68,8 +68,8 @@ static const char *VERSION = XSTR(PROJECT_VERSION);
 #define TTREK_REGISTRY_BASE_URL "http://localhost:8080"
 
 static const char *REGISTRY_URL = TTREK_REGISTRY_BASE_URL "/registry";
-static const char *PACKAGE_URL = TTREK_REGISTRY_BASE_URL "/package";
-static const char *TELEMETRY_URL = TTREK_REGISTRY_BASE_URL "/telemetry";
+static const char *TELEMETRY_REGISTER_URL = TTREK_REGISTRY_BASE_URL "/telemetry/register";
+static const char *TELEMETRY_COLLECT_URL = TTREK_REGISTRY_BASE_URL "/telemetry/collect";
 static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *VENV_DIR = "ttrek-venv";
