@@ -54,7 +54,8 @@ static int ttrek_GetLockPackagesThatMatch(Tcl_Interp *interp, cJSON *lock_root, 
 
 int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, 1, 1, MODE_LOCAL, STRATEGY_LATEST);
+    int with_locking = 0;
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, 1, 1, with_locking, MODE_LOCAL, STRATEGY_LATEST);
 
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");

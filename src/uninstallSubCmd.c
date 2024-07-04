@@ -37,8 +37,9 @@ int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
         return TCL_ERROR;
     }
 
+    int with_locking = 1;
     ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, mode,
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, with_locking, mode,
                                                  ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
@@ -54,7 +55,7 @@ int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
     }
 
     if (TCL_OK != ttrek_TouchFile(interp, state_ptr->dirty_file_path_ptr)) {
-        fprintf(stderr, "error: creating dirty directory failed\n");
+        fprintf(stderr, "error: creating dirty file failed\n");
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);
         return TCL_ERROR;
@@ -84,7 +85,7 @@ int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv
     }
 
     if (TCL_OK != Tcl_FSDeleteFile(state_ptr->dirty_file_path_ptr)) {
-        fprintf(stderr, "error: removing dirty directory failed\n");
+        fprintf(stderr, "error: removing dirty file failed\n");
         ttrek_DestroyState(state_ptr);
         return TCL_ERROR;
     }

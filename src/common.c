@@ -6,13 +6,13 @@
 
 #include "common.h"
 #include <unistd.h>
-#include <sys/wait.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include "cjson/cJSON.h"
-#include "ttrek_telemetry.h"
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
 
@@ -438,7 +438,34 @@ cJSON *ttrek_GetManifestRoot(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr) 
     return manifest_root;
 }
 
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy) {
+static int ttrek_LockFile(ttrek_state_t *state_ptr) {
+    int fd = open(Tcl_GetString(state_ptr->locking_file_path_ptr), O_WRONLY | O_CREAT, 0666);
+    if (fd == -1) {
+        fprintf(stderr, "error: creating lock file failed\n");
+        return TCL_ERROR;
+    }
+
+    // attempt to acquire an exclusive lock
+    if (flock(fd, LOCK_EX | LOCK_NB) == -1) {
+        fprintf(stderr, "error: acquiring lock failed - some other process is running\n");
+        close(fd);
+        return TCL_ERROR;
+    }
+    state_ptr->lock_fd = fd;
+    return TCL_OK;
+}
+
+static int ttrek_UnlockFile(ttrek_state_t *state_ptr) {
+    // attempt to acquire an exclusive lock
+    if (flock(state_ptr->lock_fd, LOCK_UN) == -1) {
+        fprintf(stderr, "error: acquiring lock failed - some other process is running\n");
+        close(state_ptr->lock_fd);
+        return TCL_ERROR;
+    }
+    return TCL_OK;
+}
+
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, int with_locking, ttrek_mode_t mode, ttrek_strategy_t strategy) {
     ttrek_state_t *state_ptr = (ttrek_state_t *) Tcl_Alloc(sizeof(ttrek_state_t));
     if (!state_ptr) {
         return NULL;
@@ -467,6 +494,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
+    state_ptr->with_locking = with_locking;
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
     state_ptr->mode = mode;
@@ -512,10 +540,20 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         return NULL;
     }
 
+    if (state_ptr->with_locking) {
+        if (TCL_OK != ttrek_LockFile(state_ptr)) {
+            fprintf(stderr, "error: could not lock file\n");
+            return NULL;
+        }
+    }
+
     return state_ptr;
 }
 
 void ttrek_DestroyState(ttrek_state_t *state_ptr) {
+    if (state_ptr->with_locking) {
+        ttrek_UnlockFile(state_ptr);
+    }
     Tcl_DecrRefCount(state_ptr->project_home_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_venv_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);

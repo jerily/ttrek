@@ -123,7 +123,8 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     ttrek_TelemetrySaveMachineId(interp);
 
     // ensure skeleton directories exist
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, 0, MODE_LOCAL, STRATEGY_LATEST);
+    int with_locking = 1;
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, 0, with_locking, MODE_LOCAL, STRATEGY_LATEST);
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         return TCL_ERROR;
@@ -141,5 +142,6 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
+    ttrek_DestroyState(state_ptr);
     return TCL_OK;
 }

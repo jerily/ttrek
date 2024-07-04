@@ -107,10 +107,12 @@ typedef struct {
     cJSON *spec_root;
     cJSON *lock_root;
     cJSON *manifest_root;
+    int with_locking;
     int option_yes;
     int option_force;
     ttrek_mode_t mode;
     ttrek_strategy_t strategy;
+    int lock_fd;
 } ttrek_state_t;
 
 int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_ptr, Tcl_Obj **output_path_ptr);
@@ -136,13 +138,8 @@ int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr);
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj);
 
-//Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode);
-//Tcl_Obj *ttrek_GetInstallDir(Tcl_Interp *interp);
-//cJSON *ttrek_GetLockRoot(Tcl_Interp *interp);
-//cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp);
-
 Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
-ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, ttrek_mode_t mode, ttrek_strategy_t strategy);
+ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, int with_locking, ttrek_mode_t mode, ttrek_strategy_t strategy);
 void ttrek_DestroyState(ttrek_state_t *state_ptr);
 
 ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy);
