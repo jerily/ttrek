@@ -9,6 +9,7 @@
 #include "registry.h"
 #include "base64.h"
 #include "fsmonitor/fsmonitor.h"
+#include "ttrek_genInstall.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 #define MAX_PATCH_FILE_SIZE 1048576
@@ -18,48 +19,6 @@ static char STRING_REQUIRES[] = "requires";
 static char STRING_DEPENDENCIES[] = "dependencies";
 static char STRING_PACKAGES[] = "packages";
 static char STRING_FILES[] = "files";
-
-
-// Below we assume that the printf placeholders in this template are enclosed
-// in single quotes in the shell script. Double quotes cannot be used here.
-// If any placeholder must be enclosed in double quotes, a function other
-// than ttrek_StringToEscapedObj() must be used to properly escape characters
-// in the string.
-
-#define L(s) s "\n"
-static char *install_script_common =
-    L("#!/bin/bash")
-    L("")
-    L("set -eo pipefail # exit on error")
-    L("")
-    L("PACKAGE='%s'")
-    L("VERSION='%s'")
-    L("ROOT_BUILD_DIR='%s'")
-    L("INSTALL_DIR='%s'")
-    L("")
-    L("echo \"Installing to $INSTALL_DIR\"")
-    L("")
-    L("DOWNLOAD_DIR=\"$ROOT_BUILD_DIR/download\"")
-    L("ARCHIVE_FILE=\"${PACKAGE}-${VERSION}.archive\"")
-    L("SOURCE_DIR=\"$ROOT_BUILD_DIR/source/${PACKAGE}-${VERSION}\"")
-    L("BUILD_DIR=\"$ROOT_BUILD_DIR/build/${PACKAGE}-${VERSION}\"")
-    L("PATCH_DIR=\"$ROOT_BUILD_DIR/source\"")
-    L("BUILD_LOG_DIR=\"$ROOT_BUILD_DIR/logs/${PACKAGE}-${VERSION}\"")
-    L("")
-    L("mkdir -p \"$DOWNLOAD_DIR\"")
-    L("rm -rf \"$SOURCE_DIR\"")
-    L("mkdir -p \"$SOURCE_DIR\"")
-    L("rm -rf \"$BUILD_DIR\"")
-    L("mkdir -p \"$BUILD_DIR\"")
-    L("rm -rf \"$BUILD_LOG_DIR\"")
-    L("mkdir -p \"$BUILD_LOG_DIR\"")
-    L("")
-    L("LD_LIBRARY_PATH=\"$INSTALL_DIR/lib\"")
-    L("PKG_CONFIG_PATH=\"$INSTALL_DIR/lib/pkgconfig\"")
-    L("export LD_LIBRARY_PATH")
-    L("export PKG_CONFIG_PATH")
-    L("");
-#undef L
 
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
@@ -144,31 +103,6 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     }
 }
 
-static Tcl_Obj *ttrek_StringToEscapedObj(const char *str, Tcl_Size len) {
-    if (len < 0) {
-        len = strlen(str);
-    }
-    Tcl_Obj *rc = Tcl_NewStringObj(NULL, 0);
-    // How many bytes to copy into the result object
-    Tcl_Size tocopy = 0;
-    Tcl_Size i;
-    for (i = 0; i < len; i++) {
-        if (str[i] == '\'') {
-            if (tocopy) {
-                Tcl_AppendToObj(rc, &str[i - tocopy], tocopy);
-                tocopy = 0;
-            }
-            Tcl_AppendToObj(rc, "'\"'\"'", -1);
-        } else {
-            tocopy++;
-        }
-    }
-    if (tocopy) {
-        Tcl_AppendToObj(rc, &str[i - tocopy], tocopy);
-    }
-    return rc;
-}
-
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                                          const char *package_version, const char *os, const char *arch,
                                          const char *direct_version_requirement) {
@@ -192,7 +126,16 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         return TCL_ERROR;
     }
 
-    const char *base64_install_script_str = install_script_node->valuestring;
+    Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
+        package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
+        Tcl_GetString(state_ptr->project_install_dir_ptr), install_script_node);
+    if (install_script_full == NULL) {
+        fprintf(stderr, "error: could not generate install script: %s\n",
+            Tcl_GetStringResult(interp));
+        cJSON_free(install_spec_root);
+        return TCL_ERROR;
+    }
+    Tcl_IncrRefCount(install_script_full);
 
     cJSON *patches = cJSON_GetObjectItem(install_spec_root, "patches");
     if (patches) {
@@ -218,36 +161,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0644);
         }
     }
-
-    Tcl_Obj *install_script_objv[4];
-    install_script_objv[0] = ttrek_StringToEscapedObj(package_name, -1);
-    Tcl_IncrRefCount(install_script_objv[0]);
-    install_script_objv[1] = ttrek_StringToEscapedObj(package_version, -1);
-    Tcl_IncrRefCount(install_script_objv[1]);
-    install_script_objv[2] = ttrek_StringToEscapedObj(Tcl_GetString(state_ptr->project_build_dir_ptr), -1);
-    Tcl_IncrRefCount(install_script_objv[2]);
-    install_script_objv[3] = ttrek_StringToEscapedObj(Tcl_GetString(state_ptr->project_install_dir_ptr), -1);
-    Tcl_IncrRefCount(install_script_objv[3]);
-
-    Tcl_Obj *install_script_full = Tcl_Format(interp, install_script_common, 4, install_script_objv);
-
-    Tcl_DecrRefCount(install_script_objv[0]);
-    Tcl_DecrRefCount(install_script_objv[1]);
-    Tcl_DecrRefCount(install_script_objv[2]);
-    Tcl_DecrRefCount(install_script_objv[3]);
-
-    if (install_script_full == NULL) {
-        return TCL_ERROR;
-    }
-
-    Tcl_IncrRefCount(install_script_full);
-
-    char install_script[MAX_INSTALL_SCRIPT_LEN];
-    Tcl_Size install_script_len;
-    base64_decode(base64_install_script_str, strnlen(base64_install_script_str, MAX_INSTALL_SCRIPT_LEN), install_script,
-                  &install_script_len);
-
-    Tcl_AppendToObj(install_script_full, install_script, install_script_len);
 
     char install_filename[256];
     snprintf(install_filename, sizeof(install_filename), "install-%s-%s.sh", package_name, package_version);
