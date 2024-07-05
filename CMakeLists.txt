@@ -86,6 +86,8 @@ add_executable(${TARGET}
         src/uninstallSubCmd.c
         src/ttrek_telemetry.c
         src/ttrek_telemetry.h
+        src/ttrek_genInstall.c
+        src/ttrek_genInstall.h
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
