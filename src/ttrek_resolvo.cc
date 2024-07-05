@@ -14,9 +14,18 @@
 #include "installer.h"
 #include "ttrek_telemetry.h"
 
-int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
+int
+ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &direct_requirements,
+                        std::set<std::string> &use_flags) {
     for (int i = 0; i < objc; i++) {
         std::string arg = Tcl_GetString(objv[i]);
+
+        // if it starts with "+" or "-" it is a use flag
+        if (arg[0] == '+' || arg[0] == '-') {
+            use_flags.insert(arg);
+            continue;
+        }
+
         std::string package_name;
         std::string version_requirement;
         if (arg.find('@') == std::string::npos) {
@@ -28,7 +37,7 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
         }
         DBG(std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement
                       << std::endl);
-        requirements[package_name] = version_requirement;
+        direct_requirements[package_name] = version_requirement;
     }
     return TCL_OK;
 }
@@ -85,6 +94,7 @@ static void ttrek_ParseReverseDependenciesFromLock(cJSON *lock_root,
         cJSON *package = cJSON_GetArrayItem(packages, i);
         std::string package_name = package->string;
         std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
+
         if (!cJSON_HasObjectItem(package, "requires")) {
             continue;
         }
@@ -101,7 +111,8 @@ static void ttrek_ParseReverseDependenciesFromLock(cJSON *lock_root,
 }
 
 static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
-                                            std::map<std::string, std::unordered_set<std::string>> &dependencies_map) {
+                                            std::map<std::string, std::unordered_set<std::string>> &dependencies_map,
+                                            std::map<std::string, std::set<std::string> > &used_flags_map) {
 
     cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
     if (!packages) {
@@ -112,6 +123,8 @@ static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
         cJSON *package = cJSON_GetArrayItem(packages, i);
         std::string package_name = package->string;
         std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
+
+        // parse dependencies
         if (!cJSON_HasObjectItem(package, "requires")) {
             continue;
         }
@@ -124,6 +137,20 @@ static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
             }
             dependencies_map[package_name].insert(dep_package_name);
         }
+
+        // parse use flags
+        used_flags_map[package_name] = std::set<std::string>();
+        if (!cJSON_HasObjectItem(package, "used_flags")) {
+            continue;
+        }
+
+        cJSON *used_flags = cJSON_GetObjectItem(package, "used_flags");
+        for (int j = 0; j < cJSON_GetArraySize(used_flags); j++) {
+            cJSON *used_flag_node = cJSON_GetArrayItem(used_flags, j);
+            std::string used_flag = used_flag_node->string;
+            used_flags_map[package_name].insert(used_flag);
+        }
+
     }
 }
 
@@ -132,11 +159,6 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
             std::string &message,
             std::map<std::string, std::string> &requirements,
             std::vector<std::string> &installs) {
-
-    // Parse additional requirements from spec file
-    ttrek_ParseRequirementsFromLockFile(state_ptr, requirements);
-    ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
-    ttrek_ParseRequirements(objc, objv, requirements);
 
     ttrek_ParseLockedPackages(state_ptr, db);
 
@@ -230,7 +252,7 @@ typedef enum {
     RDEP_INSTALL,
     DEP_INSTALL,
     ALREADY_INSTALLED,
-    RDEP_OR_DEP_OF_ALREADY_INSTALLED
+    REINSTALL_DUE_TO_USE_FLAGS
 } ttrek_install_type_t;
 
 struct InstallSpec {
@@ -242,8 +264,23 @@ struct InstallSpec {
     int exact_package_exists_in_lock_p;
 };
 
+bool ttrek_SetCompareEqual(const std::set<std::string> &a, const std::set<std::string> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (const auto &item: a) {
+        if (b.find(item) == b.end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install,
-                                            const std::map<std::string, std::string> &requirements,
+                                            const std::map<std::string, std::string> &direct_requirements,
+                                            const std::map<std::string, std::string> &enhanced_requirements,
+                                            const std::set<std::string> &use_flags,
+                                            const std::map<std::string, std::set<std::string>> &used_flags_map,
                                             std::vector<InstallSpec> &execution_plan) {
     auto index = install.find('='); // package_name=package_version
     auto package_name = install.substr(0, index);
@@ -254,17 +291,24 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
 
-    int in_requirements_p = requirements.find(package_name) != requirements.end();
-    auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
+    int found_in_direct_requirements_p = direct_requirements.find(package_name) != direct_requirements.end();
+    int found_in_enhanced_requirements_p = enhanced_requirements.find(package_name) != enhanced_requirements.end();
+    auto direct_version_requirement = found_in_enhanced_requirements_p ? enhanced_requirements.at(package_name)
+                                                                       : "none";
 
     ttrek_install_type_t install_type;
     if (state_ptr->option_force) {
         install_type = DIRECT_INSTALL;
-    } else if (in_requirements_p && !exact_package_exists_in_lock_p) {
+    } else if (found_in_enhanced_requirements_p && !exact_package_exists_in_lock_p) {
         install_type = DIRECT_INSTALL;
+    } else if (found_in_direct_requirements_p && !ttrek_SetCompareEqual(use_flags, used_flags_map.at(package_name))) {
+        install_type = REINSTALL_DUE_TO_USE_FLAGS;
     } else {
         install_type = UNKNOWN_INSTALL;
     }
+
+    std::cout << "package: " << package_name << " install_type: " << install_type << std::endl;
+
     auto install_spec = InstallSpec{
             install_type,
             package_name,
@@ -277,34 +321,48 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
 
 static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
-                            const std::map<std::string, std::string> &requirements,
+                            const std::map<std::string, std::string> &direct_requirements,
+                            const std::map<std::string, std::string> &enhanced_requirements,
+                            const std::set<std::string> &use_flags,
                             const std::map<std::string, std::unordered_set<std::string>> &dependencies_from_solver_map,
                             std::vector<InstallSpec> &execution_plan) {
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
 
+    std::map<std::string, std::set<std::string>> used_flags_map;
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
-    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
+    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map, used_flags_map);
     for (const auto &dependency: dependencies_from_solver_map) {
         dependencies_map[dependency.first] = dependency.second;
     }
 
-    std::map<std::string, std::string> enhanced_requirements;
-    ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
-    for (const auto &requirement: requirements) {
-        enhanced_requirements[requirement.first] = requirement.second;
+//    std::map<std::string, std::string> enhanced_requirements;
+//    ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
+//    for (const auto &requirement: enhanced_requirements) {
+//        enhanced_requirements[requirement.first] = requirement.second;
+//    }
+
+    // print direct requirements
+    for (const auto &direct_requirement: direct_requirements) {
+        std::cout << "direct requirement: " << direct_requirement.first << "@" << direct_requirement.second << std::endl;
+    }
+
+    // print use flags
+    for (const auto &use_flag: use_flags) {
+        std::cout << "use flag: " << use_flag << std::endl;
     }
 
     // add installs to initial execution plan
     for (const auto &install: installs) {
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, execution_plan);
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, direct_requirements, enhanced_requirements, use_flags,
+                                        used_flags_map, execution_plan);
     }
 
     // check there is at least one direct install
     bool has_direct_install = false;
     for (const auto &install_spec: execution_plan) {
-        if (install_spec.install_type == DIRECT_INSTALL) {
+        if (install_spec.install_type == DIRECT_INSTALL || install_spec.install_type == REINSTALL_DUE_TO_USE_FLAGS) {
             has_direct_install = true;
             break;
         }
@@ -326,7 +384,8 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
         // compute dependencies and reverse dependencies of direct installs
         for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DIRECT_INSTALL) {
+            if (install_spec.install_type == DIRECT_INSTALL ||
+                install_spec.install_type == REINSTALL_DUE_TO_USE_FLAGS) {
 
                 if (reverse_dependencies_map.find(install_spec.package_name) !=
                     reverse_dependencies_map.end()) {
@@ -397,7 +456,8 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
         // set ALREADY_INSTALLED if the package is already installed and it is a DEP_INSTALL
         for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
+            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p &&
+                ttrek_SetCompareEqual(use_flags, used_flags_map.at(install_spec.package_name))) {
                 install_spec.install_type = ALREADY_INSTALLED;
                 reverse_dependencies_map.erase(install_spec.package_name);
                 dependencies_map.erase(install_spec.package_name);
@@ -425,6 +485,10 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
 
         std::cout << install_spec.package_name << "@" << install_spec.package_version;
 
+        if (install_spec.install_type == REINSTALL_DUE_TO_USE_FLAGS) {
+            std::cout << " (reinstall due to use flags)";
+        }
+
         if (install_spec.install_type == RDEP_INSTALL) {
             std::cout << " (reverse dependency)";
         }
@@ -442,11 +506,21 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
     db.set_reverse_dependencies_map(reverse_dependencies_map);
 
-    std::map<std::string, std::string> requirements;
+    std::set<std::string> use_flags;
+    std::map<std::string, std::string> direct_requirements;
+    std::map<std::string, std::string> enhanced_requirements;
     std::vector<std::string> installs;
     std::string message;
 
-    if (TCL_OK != ttrek_Solve(interp, objc, objv, db, state_ptr, message, requirements, installs)) {
+    // Parse additional requirements from spec file
+    ttrek_ParseRequirementsFromLockFile(state_ptr, enhanced_requirements);
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
+    ttrek_ParseRequirements(objc, objv, direct_requirements, use_flags);
+    for (const auto &direct_requirement: direct_requirements) {
+        enhanced_requirements[direct_requirement.first] = direct_requirement.second;
+    }
+
+    if (TCL_OK != ttrek_Solve(interp, objc, objv, db, state_ptr, message, enhanced_requirements, installs)) {
         return TCL_ERROR;
     }
 
@@ -457,7 +531,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;
-        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), execution_plan);
+        ttrek_GenerateExecutionPlan(state_ptr, installs, direct_requirements, enhanced_requirements, use_flags,
+                                    db.get_dependencies_map(), execution_plan);
 
         // print the execution plan
 
@@ -493,11 +568,15 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        Tcl_Obj *use_flags_ptr = Tcl_NewListObj(0, NULL);
+        for (const auto &use_flag: use_flags) {
+            Tcl_ListObjAppendElement(interp, use_flags_ptr, Tcl_NewStringObj(use_flag.c_str(), -1));
+        }
+
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == ALREADY_INSTALLED ||
-                install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
+            if (install_spec.install_type == ALREADY_INSTALLED) {
                 continue;
             }
             auto package_name = install_spec.package_name;
@@ -508,12 +587,12 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, package_name.c_str(),
-                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
-                direct_version_requirement.c_str(), package_name_exists_in_lock_p);
+                                                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
+                                                direct_version_requirement.c_str(), package_name_exists_in_lock_p, use_flags_ptr);
 
             ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
-                sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),
-                (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
+                                               sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),
+                                               (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
 
             if (TCL_OK != outcome) {
 
@@ -588,8 +667,9 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
         }
     } while (changed);
 
+    std::map<std::string, std::set<std::string>> used_flags_map;
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
-    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
+    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map, used_flags_map);
 
     do {
         changed = false;

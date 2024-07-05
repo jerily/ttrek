@@ -66,12 +66,22 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         return TCL_ERROR;
     }
 
+    Tcl_Size countRequirements = 0;
+    for (Tcl_Size i=1; i < objc; i++) {
+        // if first character is a "+" or "-" then it is a use flag
+        const char *requirement = Tcl_GetString(objv[i]);
+        if (requirement[0] == '+' || requirement[0] == '-') {
+            continue;
+        }
+        countRequirements++;
+    }
+
     Tcl_Size installObjc = objc - 1;
     Tcl_Obj **installObjv = NULL;
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(list_ptr);
-    if (installObjc == 0) {
+    if (countRequirements == 0) {
         // add direct dependencies from state_ptr->spec_root to installObjv
         if (TCL_OK != ttrek_GetDirectDependencies(interp, state_ptr->spec_root, list_ptr)) {
             fprintf(stderr, "error: getting direct dependencies failed\n");
@@ -79,6 +89,15 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
             ttrek_DestroyState(state_ptr);
             ckfree(remObjv);
             return TCL_ERROR;
+        }
+
+        // now add the use flags if there are any
+        for (Tcl_Size i=1; i < objc; i++) {
+            const char *requirement = Tcl_GetString(objv[i]);
+            if (requirement[0] == '+') {
+                Tcl_Obj *use_flag = Tcl_NewStringObj(requirement + 1, -1);
+                Tcl_ListObjAppendElement(interp, list_ptr, use_flag);
+            }
         }
 
         if (TCL_OK != Tcl_ListObjGetElements(interp, list_ptr, &installObjc, &installObjv)) {

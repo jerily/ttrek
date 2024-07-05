@@ -19,6 +19,7 @@ static char STRING_REQUIRES[] = "requires";
 static char STRING_DEPENDENCIES[] = "dependencies";
 static char STRING_PACKAGES[] = "packages";
 static char STRING_FILES[] = "files";
+static char STRING_USED_FLAGS[] = "used_flags";
 
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
@@ -60,7 +61,7 @@ static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package
 }
 
 static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
-                                   const char *package_version, cJSON *deps_node) {
+                                   const char *package_version, cJSON *deps_node, Tcl_Obj *use_flags_ptr) {
 
     // add direct requirement to dependencies
     cJSON *deps;
@@ -94,6 +95,15 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         cJSON_AddStringToObject(reqs_node, dep_name, dep_version_requirement);
     }
     cJSON_AddItemToObject(item_node, STRING_REQUIRES, reqs_node);
+    cJSON *used_flags_node = cJSON_CreateArray();
+    Tcl_Size use_flags_len;
+    Tcl_ListObjLength(NULL, use_flags_ptr, &use_flags_len);
+    for (Tcl_Size i = 0; i < use_flags_len; i++) {
+        Tcl_Obj *use_flag_ptr;
+        Tcl_ListObjIndex(NULL, use_flags_ptr, i, &use_flag_ptr);
+        cJSON_AddItemToArray(used_flags_node, cJSON_CreateString(Tcl_GetString(use_flag_ptr)));
+    }
+    cJSON_AddItemToObject(item_node, STRING_USED_FLAGS, used_flags_node);
 
     cJSON *packages = cJSON_HasObjectItem(lock_root, STRING_PACKAGES) ? cJSON_GetObjectItem(lock_root, STRING_PACKAGES) : NULL;
     if (!packages) {
@@ -111,7 +121,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                                          const char *package_version, const char *os, const char *arch,
-                                         const char *direct_version_requirement) {
+                                         const char *direct_version_requirement, Tcl_Obj *use_flags_ptr) {
 
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version,
@@ -230,16 +240,16 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
             ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
-                                   deps_node);
+                                   deps_node, use_flags_ptr);
         } else {
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, package_version_with_caret_op);
             ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version,
-                                   deps_node);
+                                   deps_node, use_flags_ptr);
         }
     } else {
-        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node);
+        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node, use_flags_ptr);
     }
     ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, fsmonitor_state_ptr->files_diff);
 
@@ -431,7 +441,8 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                          const char *package_version, const char *os, const char *arch,
-                         const char *direct_version_requirement, int package_name_exists_in_lock_p) {
+                         const char *direct_version_requirement, int package_name_exists_in_lock_p,
+                         Tcl_Obj *use_flags_ptr) {
 
     if (package_name_exists_in_lock_p) {
         if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {
@@ -446,7 +457,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
 
     if (TCL_OK !=
         ttrek_InstallScriptAndPatches(interp, state_ptr, package_name, package_version, os, arch,
-                                      direct_version_requirement)) {
+                                      direct_version_requirement, use_flags_ptr)) {
 
         fprintf(stderr, "error: installing script & patches failed\n");
 

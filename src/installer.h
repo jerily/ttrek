@@ -15,7 +15,8 @@ extern "C" {
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                          const char *package_version, const char *os, const char *arch,
-                         const char *direct_version_requirement, int package_name_exists_in_lock_p);
+                         const char *direct_version_requirement, int package_name_exists_in_lock_p,
+                         Tcl_Obj *use_flags_ptr);
 
 int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
