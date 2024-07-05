@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <time.h>
 #include "cjson/cJSON.h"
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
@@ -207,11 +208,17 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
         return TCL_ERROR;
     }
 
+    // sleep for 100ms
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = 100000000;
+
     if (resultObj != NULL) {
         while (!Tcl_Eof(chan)) {
             if (Tcl_ReadChars(chan, resultObj, -1, 0) < 0) {
                 goto read_error;
             }
+            nanosleep(&ts, NULL);
         }
         goto wait;
     }
@@ -231,6 +238,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
             fprintf(stdout, "%s", Tcl_GetString(resultObj));
             fflush(stdout);
         }
+        nanosleep(&ts, NULL);
     }
     Tcl_DecrRefCount(resultObj);
     resultObj = NULL;
