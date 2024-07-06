@@ -572,7 +572,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     return TCL_OK;
 }
 
-int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
+int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int autoremove, int *abort) {
 
     std::unordered_set<std::string> uninstalls;
 
@@ -603,17 +603,23 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
         }
     } while (changed);
 
-    std::map<std::string, std::unordered_set<std::string>> dependencies_map;
-    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
+    std::map<std::string, std::unordered_set<std::string>> dependencies_from_lock_map;
+    ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_from_lock_map);
+    std::map<std::string, std::string> requirements;
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
 
     do {
         changed = false;
 
         // remove all uninstalls from reverse_dependencies_map lists
         for (const auto &uninstall: uninstalls) {
-            auto it = dependencies_map.find(uninstall);
-            if (it != dependencies_map.end()) {
+            auto it = dependencies_from_lock_map.find(uninstall);
+            if (it != dependencies_from_lock_map.end()) {
                 for (const auto &dep: it->second) {
+                    if (requirements.find(dep) != requirements.end()) {
+                        DBG(std::cout << "cannot uninstall " << dep << " because it is a direct requirement" << std::endl);
+                        continue;
+                    }
                     if (reverse_dependencies_map.find(dep) != reverse_dependencies_map.end() &&
                         reverse_dependencies_map.at(dep).find(uninstall) != reverse_dependencies_map.at(dep).end()) {
                         reverse_dependencies_map.at(dep).erase(uninstall);
@@ -625,15 +631,17 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
         }
 
         // prepare the list of orphaned dependencies to uninstall
-        for (const auto &uninstall: uninstalls) {
-            auto it = dependencies_map.find(uninstall);
-            if (it != dependencies_map.end()) {
-                for (const auto &dep: it->second) {
-                    if (reverse_dependencies_map.find(dep) == reverse_dependencies_map.end() ||
-                        reverse_dependencies_map.at(dep).empty()) {
-                        if (uninstalls.find(dep) == uninstalls.end()) {
-                            uninstalls.insert(dep);
-                            changed = true;
+        if (autoremove) {
+            for (const auto &uninstall: uninstalls) {
+                auto it = dependencies_from_lock_map.find(uninstall);
+                if (it != dependencies_from_lock_map.end()) {
+                    for (const auto &dep: it->second) {
+                        if (reverse_dependencies_map.find(dep) == reverse_dependencies_map.end() ||
+                            reverse_dependencies_map.at(dep).empty()) {
+                            if (uninstalls.find(dep) == uninstalls.end()) {
+                                uninstalls.insert(dep);
+                                changed = true;
+                            }
                         }
                     }
                 }
