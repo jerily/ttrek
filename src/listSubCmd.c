@@ -54,11 +54,30 @@ static int ttrek_GetLockPackagesThatMatch(Tcl_Interp *interp, cJSON *lock_root, 
 
 int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
+    int option_user = 0;
+    int option_global = 0;
+    Tcl_ArgvInfo ArgTable[] = {
+            {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "run in user mode",                                          NULL},
+            {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "run in global mode",                                        NULL},
+            {TCL_ARGV_END, NULL,             NULL, NULL, NULL}
+    };
+
+    Tcl_Obj **remObjv;
+    Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
+
+    if (option_user && option_global) {
+        fprintf(stderr, "error: conflicting options -u and -g\n");
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     int with_locking = 0;
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, 1, 1, with_locking, MODE_LOCAL, STRATEGY_LATEST);
+    ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, 0, 0, with_locking, mode, STRATEGY_LATEST);
 
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
+        ckfree(remObjv);
         return TCL_ERROR;
     }
 
@@ -70,14 +89,16 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             fprintf(stderr, "error: getting direct dependencies failed\n");
             Tcl_DecrRefCount(list_ptr);
             ttrek_DestroyState(state_ptr);
+            ckfree(remObjv);
             return TCL_ERROR;
         }
     } else {
         for (Tcl_Size i = 1; i < objc; i++) {
-            if (TCL_OK != ttrek_GetLockPackagesThatMatch(interp, state_ptr->lock_root, objv[i], list_ptr)) {
+            if (TCL_OK != ttrek_GetLockPackagesThatMatch(interp, state_ptr->lock_root, remObjv[i], list_ptr)) {
                 fprintf(stderr, "error: getting direct dependencies failed\n");
                 Tcl_DecrRefCount(list_ptr);
                 ttrek_DestroyState(state_ptr);
+                ckfree(remObjv);
                 return TCL_ERROR;
             }
         }
@@ -89,6 +110,7 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         fprintf(stderr, "error: getting list length failed\n");
         Tcl_DecrRefCount(list_ptr);
         ttrek_DestroyState(state_ptr);
+        ckfree(remObjv);
         return TCL_ERROR;
     }
 
@@ -98,6 +120,7 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             fprintf(stderr, "error: getting list element failed\n");
             Tcl_DecrRefCount(list_ptr);
             ttrek_DestroyState(state_ptr);
+            ckfree(remObjv);
             return TCL_ERROR;
         }
         fprintf(stdout, "%s\n", Tcl_GetString(elem));
@@ -106,5 +129,6 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(list_ptr);
 
     ttrek_DestroyState(state_ptr);
+    ckfree(remObjv);
     return TCL_OK;
 }
