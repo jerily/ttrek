@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
             }
             break;
         case SUBCMD_RUN:
-            if (TCL_OK != ttrek_RunSubCmd(interp, objc-2, &objv[2])) {
+            if (TCL_OK != ttrek_RunSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }

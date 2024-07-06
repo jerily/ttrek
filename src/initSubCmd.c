@@ -91,29 +91,26 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         project_version[strcspn(project_version, "\n")] = 0;
     }
 
-    cJSON *spec_root = cJSON_CreateObject();
-    cJSON *name = cJSON_CreateString(project_name);
-    cJSON_AddItemToObject(spec_root, "name", name);
-    cJSON *version = cJSON_CreateString(project_version);
-    cJSON_AddItemToObject(spec_root, "version", version);
-    cJSON *scripts = cJSON_CreateObject();
-    cJSON_AddItemToObject(spec_root, "scripts", scripts);
-    cJSON *spec_dependencies = cJSON_CreateObject();
-    cJSON_AddItemToObject(spec_root, "dependencies", spec_dependencies);
-    cJSON *devDependencies = cJSON_CreateObject();
-    cJSON_AddItemToObject(spec_root, "devDependencies", devDependencies);
+    if (TCL_OK != ttrek_InitSpecFile(interp, path_to_spec_ptr, project_name, project_version)) {
+        fprintf(stderr, "error: initializing spec file failed\n");
+        Tcl_DecrRefCount(path_to_spec_ptr);
+        Tcl_DecrRefCount(path_to_lock_ptr);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
 
-    ttrek_WriteJsonFile(interp, path_to_spec_ptr, spec_root);
+    if (TCL_OK != ttrek_InitLockFile(interp, path_to_lock_ptr)) {
+        fprintf(stderr, "error: initializing lock file failed\n");
+        Tcl_DecrRefCount(path_to_spec_ptr);
+        Tcl_DecrRefCount(path_to_lock_ptr);
+        Tcl_DecrRefCount(spec_file_name_ptr);
+        Tcl_DecrRefCount(lock_file_name_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
 
-    cJSON *lock_root = cJSON_CreateObject();
-    cJSON *lock_packages = cJSON_CreateObject();
-    cJSON_AddItemToObject(lock_root, "packages", lock_packages);
-    cJSON *lock_dependencies = cJSON_CreateObject();
-    cJSON_AddItemToObject(lock_root, "dependencies", lock_dependencies);
-    ttrek_WriteJsonFile(interp, path_to_lock_ptr, lock_root);
-
-    cJSON_Delete(spec_root);
-    cJSON_Delete(lock_root);
     Tcl_DecrRefCount(path_to_spec_ptr);
     Tcl_DecrRefCount(path_to_lock_ptr);
     Tcl_DecrRefCount(spec_file_name_ptr);

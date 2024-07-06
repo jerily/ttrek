@@ -345,11 +345,27 @@ Tcl_Obj *ttrek_GetProjectDirForLocalMode(Tcl_Interp *interp) {
     return NULL;
 }
 
+Tcl_Obj *ttrek_GetProjectDirForUserMode(Tcl_Interp *interp) {
+    Tcl_Obj *project_homedir_ptr = ttrek_GetHomeDirectory();
+    if (!project_homedir_ptr) {
+        fprintf(stderr, "error: getting home directory failed\n");
+        return NULL;
+    }
+    Tcl_IncrRefCount(project_homedir_ptr);
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, project_homedir_ptr)) {
+        fprintf(stderr, "error: could not ensure project %s/.ttrek directory exists\n", Tcl_GetString(project_homedir_ptr));
+        return NULL;
+    }
+
+    return project_homedir_ptr;
+}
+
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
     if (mode == MODE_LOCAL) {
         return ttrek_GetProjectDirForLocalMode(interp);
     } else if (mode == MODE_USER) {
-//        return ttrek_GetProjectDirForUserMode(interp);
+        return ttrek_GetProjectDirForUserMode(interp);
     } else if (mode == MODE_GLOBAL) {
 //        return ttrek_GetProjectDirForGlobalMode(interp);
     }
@@ -488,18 +504,28 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
         return NULL;
     }
 
-    DBG(fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr)));
+    fprintf(stderr, "project_home_dir: %s\n", Tcl_GetString(project_home_dir_ptr));
 
     Tcl_Obj *path_to_spec_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, SPEC_JSON_FILE);
 
     if (TCL_OK != ttrek_CheckFileExists(path_to_spec_file_ptr)) {
-        printf("%s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
-        Tcl_DecrRefCount(project_home_dir_ptr);
-        Tcl_DecrRefCount(path_to_spec_file_ptr);
-        return NULL;
+        if (mode == MODE_LOCAL) {
+            fprintf(stderr, "%s does not exist, run 'ttrek init' first\n", SPEC_JSON_FILE);
+            Tcl_DecrRefCount(project_home_dir_ptr);
+            Tcl_DecrRefCount(path_to_spec_file_ptr);
+            return NULL;
+        } else {
+            ttrek_InitSpecFile(interp, path_to_spec_file_ptr, "system-created-project", "1.0.0");
+        }
     }
 
     Tcl_Obj *path_lock_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, LOCK_JSON_FILE);
+
+    if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
+        if (mode != MODE_LOCAL) {
+            ttrek_InitLockFile(interp, path_lock_file_ptr);
+        }
+    }
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
@@ -816,5 +842,39 @@ int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr) {
         return TCL_ERROR;
     }
     Tcl_Close(interp, chan);
+    return TCL_OK;
+}
+
+int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char *project_name, const char *project_version) {
+    cJSON *spec_root = cJSON_CreateObject();
+    cJSON *name = cJSON_CreateString(project_name);
+    cJSON_AddItemToObject(spec_root, "name", name);
+    cJSON *version = cJSON_CreateString(project_version);
+    cJSON_AddItemToObject(spec_root, "version", version);
+    cJSON *scripts = cJSON_CreateObject();
+    cJSON_AddItemToObject(spec_root, "scripts", scripts);
+    cJSON *spec_dependencies = cJSON_CreateObject();
+    cJSON_AddItemToObject(spec_root, "dependencies", spec_dependencies);
+    cJSON *devDependencies = cJSON_CreateObject();
+    cJSON_AddItemToObject(spec_root, "devDependencies", devDependencies);
+    if (TCL_OK != ttrek_WriteJsonFile(interp, path_to_spec_ptr, spec_root)) {
+        cJSON_Delete(spec_root);
+        return TCL_ERROR;
+    }
+    cJSON_Delete(spec_root);
+    return TCL_OK;
+}
+
+int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr) {
+    cJSON *lock_root = cJSON_CreateObject();
+    cJSON *lock_packages = cJSON_CreateObject();
+    cJSON_AddItemToObject(lock_root, "packages", lock_packages);
+    cJSON *lock_dependencies = cJSON_CreateObject();
+    cJSON_AddItemToObject(lock_root, "dependencies", lock_dependencies);
+    if (TCL_OK != ttrek_WriteJsonFile(interp, path_to_lock_ptr, lock_root)) {
+        cJSON_Delete(lock_root);
+        return TCL_ERROR;
+    }
+    cJSON_Delete(lock_root);
     return TCL_OK;
 }
