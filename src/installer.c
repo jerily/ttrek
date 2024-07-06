@@ -111,7 +111,8 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                                          const char *package_version, const char *os, const char *arch,
-                                         const char *direct_version_requirement) {
+                                         const char *direct_version_requirement, int package_num_current,
+                                         int package_num_total) {
 
     char install_spec_url[256];
     snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version,
@@ -123,6 +124,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         fprintf(stderr, "error: could not get install spec for %s@%s\n", package_name, package_version);
         return TCL_ERROR;
     }
+
+    // DBG2(printf("got JSON: [%s]", Tcl_DStringValue(&ds)));
 
     cJSON *install_spec_root = cJSON_Parse(Tcl_DStringValue(&ds));
     cJSON *install_script_node = cJSON_GetObjectItem(install_spec_root, "install_script");
@@ -178,9 +181,16 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     Tcl_DecrRefCount(install_script_full);
 
-    Tcl_Size argc = 1;
-    const char *argv[2] = {
+    char package_num_current_str[5];
+    snprintf(package_num_current_str, sizeof(package_num_current_str), "%d", package_num_current);
+    char package_num_total_str[5];
+    snprintf(package_num_total_str, sizeof(package_num_total_str), "%d", package_num_total);
+
+    Tcl_Size argc = 3;
+    const char *argv[4] = {
             Tcl_GetString(path_to_install_file_ptr),
+            package_num_current_str,
+            package_num_total_str,
             NULL
     };
     DBG(fprintf(stderr, "path_to_install_file: %s\n", Tcl_GetString(path_to_install_file_ptr)));
@@ -206,7 +216,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
-    fprintf(stderr, "Exit status: OK\n");
 
     if (TCL_OK != ttrek_FSMonitor_ReadChanges(interp, state_ptr->project_install_dir_ptr, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not read changes from file system\n");
@@ -431,7 +440,8 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name,
                          const char *package_version, const char *os, const char *arch,
-                         const char *direct_version_requirement, int package_name_exists_in_lock_p) {
+                         const char *direct_version_requirement, int package_name_exists_in_lock_p,
+                         int package_num_current, int package_num_total) {
 
     if (package_name_exists_in_lock_p) {
         if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {
@@ -446,7 +456,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
 
     if (TCL_OK !=
         ttrek_InstallScriptAndPatches(interp, state_ptr, package_name, package_version, os, arch,
-                                      direct_version_requirement)) {
+                                      direct_version_requirement, package_num_current, package_num_total)) {
 
         fprintf(stderr, "error: installing script & patches failed\n");
 
