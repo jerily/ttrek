@@ -361,13 +361,29 @@ Tcl_Obj *ttrek_GetProjectDirForUserMode(Tcl_Interp *interp) {
     return project_homedir_ptr;
 }
 
+Tcl_Obj *ttrek_GetProjectDirForGlobalMode(Tcl_Interp *interp) {
+    Tcl_Obj *project_homedir_ptr = Tcl_NewStringObj("/usr/local/share/ttrek", -1);
+    if (!project_homedir_ptr) {
+        fprintf(stderr, "error: getting home directory failed\n");
+        return NULL;
+    }
+    Tcl_IncrRefCount(project_homedir_ptr);
+
+    if (TCL_OK != ttrek_EnsureDirectoryExists(interp, project_homedir_ptr)) {
+        fprintf(stderr, "error: could not ensure project %s/.ttrek directory exists\n", Tcl_GetString(project_homedir_ptr));
+        return NULL;
+    }
+
+    return project_homedir_ptr;
+}
+
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
     if (mode == MODE_LOCAL) {
         return ttrek_GetProjectDirForLocalMode(interp);
     } else if (mode == MODE_USER) {
         return ttrek_GetProjectDirForUserMode(interp);
     } else if (mode == MODE_GLOBAL) {
-//        return ttrek_GetProjectDirForGlobalMode(interp);
+        return ttrek_GetProjectDirForGlobalMode(interp);
     }
     return NULL;
 }
