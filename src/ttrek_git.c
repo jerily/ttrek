@@ -189,6 +189,7 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
     }
 
     git_ignore_add_rule(repo, LOCKING_FILE_IGNORE_RULE);
+    git_ignore_add_rule(repo, BUILD_DIR_IGNORE_RULE);
 
     // Get the OID of the commit to reset to
     error = git_revparse_single((git_object **)&commit, repo, commit_sha);
@@ -377,6 +378,9 @@ int ttrek_GitAmend(ttrek_state_t *state_ptr) {
         git_libgit2_shutdown();
         return TCL_ERROR;
     }
+
+    git_ignore_add_rule(repo, LOCKING_FILE_IGNORE_RULE);
+    git_ignore_add_rule(repo, BUILD_DIR_IGNORE_RULE);
 
     // Get the index
     error = git_repository_index(&index, repo);

@@ -76,6 +76,7 @@ static const char *MANIFEST_JSON_FILE = "ttrek-manifest.json";
 static const char *DIRTY_FILE = ".dirty";
 static const char *LOCKING_FILE = ".lock";
 static const char *LOCKING_FILE_IGNORE_RULE = "/.lock";
+static const char *BUILD_DIR_IGNORE_RULE = "/build";
 static const char *VENV_DIR = "ttrek-venv";
 static const char *INSTALL_DIR = "local";
 static const char *BUILD_DIR = "build";
