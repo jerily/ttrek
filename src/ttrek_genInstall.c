@@ -8,46 +8,15 @@
 #include <string.h>
 #include <stdarg.h>
 
-// Below we assume that the printf placeholders in this template are enclosed
-// in single quotes in the shell script. Double quotes cannot be used here.
-// If any placeholder must be enclosed in double quotes, a function other
-// than ttrek_StringToEscapedObj() must be used to properly escape characters
-// in the string.
+static const char install_script_common_dynamic[] = {
+#include "install_common_dynamic.sh.h"
+    0x00
+};
 
-#define L(s) s "\n"
-static char *install_script_common =
-    L("#!/bin/bash")
-    L("")
-    L("set -eo pipefail # exit on error")
-    L("")
-    L("PACKAGE=%s")
-    L("VERSION=%s")
-    L("ROOT_BUILD_DIR=%s")
-    L("INSTALL_DIR=%s")
-    L("")
-    L("echo \"Installing to $INSTALL_DIR\"")
-    L("")
-    L("DOWNLOAD_DIR=\"$ROOT_BUILD_DIR/download\"")
-    L("ARCHIVE_FILE=\"${PACKAGE}-${VERSION}.archive\"")
-    L("SOURCE_DIR=\"$ROOT_BUILD_DIR/source/${PACKAGE}-${VERSION}\"")
-    L("BUILD_DIR=\"$ROOT_BUILD_DIR/build/${PACKAGE}-${VERSION}\"")
-    L("PATCH_DIR=\"$ROOT_BUILD_DIR/source\"")
-    L("BUILD_LOG_DIR=\"$ROOT_BUILD_DIR/logs/${PACKAGE}-${VERSION}\"")
-    L("")
-    L("mkdir -p \"$DOWNLOAD_DIR\"")
-    L("rm -rf \"$SOURCE_DIR\"")
-    L("mkdir -p \"$SOURCE_DIR\"")
-    L("rm -rf \"$BUILD_DIR\"")
-    L("mkdir -p \"$BUILD_DIR\"")
-    L("rm -rf \"$BUILD_LOG_DIR\"")
-    L("mkdir -p \"$BUILD_LOG_DIR\"")
-    L("")
-    L("LD_LIBRARY_PATH=\"$INSTALL_DIR/lib\"")
-    L("PKG_CONFIG_PATH=\"$INSTALL_DIR/lib/pkgconfig\"")
-    L("export LD_LIBRARY_PATH")
-    L("export PKG_CONFIG_PATH")
-    L("");
-#undef L
+static const char install_script_common_static[] = {
+#include "install_common_static.sh.h"
+    0x00
+};
 
 static Tcl_Obj *ttrek_StringToSingleQuotedObj(const char *str, Tcl_Size len) {
     if (len < 0) {
@@ -122,13 +91,23 @@ static Tcl_Obj *ttrek_ObjectToDoubleQuotedObj(Tcl_Obj *obj) {
     return rc;
 }
 
-static Tcl_Obj *ttrek_cJSONObjectToObject(const cJSON *json, const char *key) {
+static Tcl_Obj *ttrek_cJSONStringToObject(const cJSON *json, const char *key) {
     const cJSON *obj = cJSON_GetObjectItem(json, key);
-    if (obj == NULL) {
+    if (obj == NULL || !cJSON_IsString(obj)) {
         return NULL;
     }
     return Tcl_NewStringObj(cJSON_GetStringValue(obj), -1);
 }
+
+/*
+static Tcl_Obj *ttrek_cJSONNumberToObject(const cJSON *json, const char *key) {
+    const cJSON *obj = cJSON_GetObjectItem(json, key);
+    if (obj == NULL || !cJSON_IsNumber(obj)) {
+        return NULL;
+    }
+    return Tcl_NewIntObj(cJSON_GetNumberValue(obj));
+}
+*/
 
 // WARNING: this function will release format objects if their refcount is zero.
 static Tcl_Obj *ttrek_AppendFormatToObj(Tcl_Interp *interp, Tcl_Obj *result, const char *format,
@@ -152,18 +131,26 @@ static Tcl_Obj *ttrek_AppendFormatToObj(Tcl_Interp *interp, Tcl_Obj *result, con
     return result;
 }
 
+static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultList, Tcl_Obj *cmd) {
+    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
+    Tcl_AppendToObj(cmd, " || fail", -1);
+    Tcl_ListObjAppendElement(interp, resultList, cmd);
+}
+
 #define sq(x) ttrek_StringToSingleQuotedObj(x, -1)
 #define dq(x) ttrek_StringToDoubleQuotedObj(x, -1)
 #define osq(x) ttrek_ObjectToSingleQuotedObj(x)
 #define odq(x) ttrek_ObjectToDoubleQuotedObj(x)
 
+#define APPEND_CMD(x) ttrek_SpecToObj_AppendCommand(interp, resultList, (x));
+
 static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
 
     Tcl_Obj *cmd;
 
-    Tcl_Obj *url = ttrek_cJSONObjectToObject(opts, "url");
+    Tcl_Obj *url = ttrek_cJSONStringToObject(opts, "url");
     if (url == NULL) {
-        SetResult("error while parsing \"download\" cmd: no url");
+        SetResult("error while parsing \"download\" cmd: no url or url is not a string");
         return TCL_ERROR;
     }
 
@@ -171,8 +158,10 @@ static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_O
         " --silent --show-error -L -o %s --output-dir %s %s", 3,
         dq("$ARCHIVE_FILE"), dq("$DOWNLOAD_DIR"), osq(url));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
+        dq("$BUILD_LOG_DIR/download.log"));
+
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -182,9 +171,9 @@ static int ttrek_SpecToObj_Patch(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj 
 
     Tcl_Obj *cmd;
 
-    Tcl_Obj *filename = ttrek_cJSONObjectToObject(opts, "filename");
+    Tcl_Obj *filename = ttrek_cJSONStringToObject(opts, "filename");
     if (filename == NULL) {
-        SetResult("error while parsing \"patch\" cmd: no filename");
+        SetResult("error while parsing \"patch\" cmd: no filename or filename is not a string");
         return TCL_ERROR;
     }
 
@@ -194,13 +183,12 @@ static int ttrek_SpecToObj_Patch(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj 
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1, dq("$SOURCE_DIR"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cat %s/patch-%s-%s-%s | patch", 4,
         dq("$PATCH_DIR"), dq("$PACKAGE"), dq("$VERSION"), osq(filename));
 
-    Tcl_Obj *p_num = ttrek_cJSONObjectToObject(opts, "p_num");
+    Tcl_Obj *p_num = ttrek_cJSONStringToObject(opts, "p_num");
     if (p_num != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, " -p%s", 1, osq(p_num));
     }
@@ -208,8 +196,7 @@ static int ttrek_SpecToObj_Patch(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj 
     ttrek_AppendFormatToObj(interp, cmd, " >%s/patch-%s.log 2>&1", 2,
         dq("$BUILD_LOG_DIR"), osq(filename));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     Tcl_DecrRefCount(filename);
 
@@ -221,16 +208,16 @@ static int ttrek_SpecToObj_Git(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *r
 
     Tcl_Obj *cmd;
 
-    Tcl_Obj *url = ttrek_cJSONObjectToObject(opts, "url");
+    Tcl_Obj *url = ttrek_cJSONStringToObject(opts, "url");
     if (url == NULL) {
-        SetResult("error while parsing \"git\" cmd: no url");
+        SetResult("error while parsing \"git\" cmd: no url or url is not a string");
         return TCL_ERROR;
     }
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "git -C %s clone %s --depth 1"
         " --single-branch", 2, dq("$SOURCE_DIR"), osq(url));
 
-    Tcl_Obj *branch = ttrek_cJSONObjectToObject(opts, "branch");
+    Tcl_Obj *branch = ttrek_cJSONStringToObject(opts, "branch");
     if (branch != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, " --branch %s", 1, osq(branch));
     }
@@ -247,14 +234,15 @@ static int ttrek_SpecToObj_Git(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *r
 
     Tcl_AppendToObj(cmd, " .", -1);
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
+        dq("$BUILD_LOG_DIR/download.log"));
+
+    APPEND_CMD(cmd);
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "find %s -name '.git' -print0 |"
         " xargs -0 rm -rf", 1, dq("$SOURCE_DIR"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -274,7 +262,7 @@ static int ttrek_SpecToObj_Unpack(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj
 
     int format;
 
-    Tcl_Obj *formatObj = ttrek_cJSONObjectToObject(opts, "format");
+    Tcl_Obj *formatObj = ttrek_cJSONStringToObject(opts, "format");
     if (formatObj != NULL) {
 
         int res = Tcl_GetIndexFromObj(interp, formatObj, formats, "unpack format", 0,
@@ -295,36 +283,37 @@ static int ttrek_SpecToObj_Unpack(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj
         cmd = ttrek_AppendFormatToObj(interp, NULL, "unzip %s -d %s", 2,
             dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
 
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-        Tcl_ListObjAppendElement(interp, resultList, cmd);
+        ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
+            dq("$BUILD_LOG_DIR/unpack.log"));
+
+        APPEND_CMD(cmd);
 
         cmd = ttrek_AppendFormatToObj(interp, NULL, "TEMP=\"$(echo %s/*)\"", 1,
             dq("$SOURCE_DIR"));
 
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-        Tcl_ListObjAppendElement(interp, resultList, cmd);
+        APPEND_CMD(cmd);
 
         cmd = ttrek_AppendFormatToObj(interp, NULL, "mv %s/* %s", 2,
             dq("$TEMP"), dq("$SOURCE_DIR"));
 
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-        Tcl_ListObjAppendElement(interp, resultList, cmd);
+        APPEND_CMD(cmd);
 
         cmd = ttrek_AppendFormatToObj(interp, NULL, "rm -rf %s", 1,
             dq("$TEMP"));
 
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-        Tcl_ListObjAppendElement(interp, resultList, cmd);
+        APPEND_CMD(cmd);
 
         break;
 
     case formatTarGz:
 
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "tar -xzf %s --strip-components=1"
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "tar -vxzf %s --strip-components=1"
             " -C %s", 2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
 
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-        Tcl_ListObjAppendElement(interp, resultList, cmd);
+        ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
+            dq("$BUILD_LOG_DIR/unpack.log"));
+
+        APPEND_CMD(cmd);
 
         break;
 
@@ -338,13 +327,12 @@ static int ttrek_SpecToObj_Cd(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *re
 
     Tcl_Obj *cmd;
 
-    Tcl_Obj *dirname = ttrek_cJSONObjectToObject(opts, "dirname");
+    Tcl_Obj *dirname = ttrek_cJSONStringToObject(opts, "dirname");
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1,
         (dirname == NULL ? dq("$BUILD_DIR") : odq(dirname)));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -356,18 +344,17 @@ static int ttrek_SpecToObj_Autogen(Tcl_Interp *interp, const cJSON *opts, Tcl_Ob
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1, dq("$SOURCE_DIR"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     cmd = Tcl_NewObj();
 
-    Tcl_Obj *ld_library_path = ttrek_cJSONObjectToObject(opts, "ld_library_path");
+    Tcl_Obj *ld_library_path = ttrek_cJSONStringToObject(opts, "ld_library_path");
     if (ld_library_path != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "LD_LIBRARY_PATH=%s ", 1,
             odq(ld_library_path));
     }
 
-    Tcl_Obj *path = ttrek_cJSONObjectToObject(opts, "path");
+    Tcl_Obj *path = ttrek_cJSONStringToObject(opts, "path");
     if (path == NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "%s", 1, dq("./autogen.sh"));
     } else {
@@ -380,7 +367,7 @@ static int ttrek_SpecToObj_Autogen(Tcl_Interp *interp, const cJSON *opts, Tcl_Ob
         goto skip_options;
     }
 
-    Tcl_Obj *option_prefix = ttrek_cJSONObjectToObject(opts, "option_prefix");
+    Tcl_Obj *option_prefix = ttrek_cJSONStringToObject(opts, "option_prefix");
     if (option_prefix == NULL) {
         option_prefix = Tcl_NewStringObj("--", 2);
     }
@@ -389,12 +376,12 @@ static int ttrek_SpecToObj_Autogen(Tcl_Interp *interp, const cJSON *opts, Tcl_Ob
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        Tcl_Obj *name = ttrek_cJSONObjectToObject(option, "name");
+        Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
         }
 
-        Tcl_Obj *value = ttrek_cJSONObjectToObject(option, "value");
+        Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
         if (value == NULL) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
@@ -412,8 +399,7 @@ skip_options:
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/autogen.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -423,13 +409,13 @@ static int ttrek_SpecToObj_Configure(Tcl_Interp *interp, const cJSON *opts, Tcl_
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
-    Tcl_Obj *ld_library_path = ttrek_cJSONObjectToObject(opts, "ld_library_path");
+    Tcl_Obj *ld_library_path = ttrek_cJSONStringToObject(opts, "ld_library_path");
     if (ld_library_path != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "LD_LIBRARY_PATH=%s ", 1,
             odq(ld_library_path));
     }
 
-    Tcl_Obj *path = ttrek_cJSONObjectToObject(opts, "path");
+    Tcl_Obj *path = ttrek_cJSONStringToObject(opts, "path");
     if (path == NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "%s", 1, dq("$SOURCE_DIR/configure"));
     } else {
@@ -437,7 +423,7 @@ static int ttrek_SpecToObj_Configure(Tcl_Interp *interp, const cJSON *opts, Tcl_
         ttrek_AppendFormatToObj(interp, cmd, "%s", 1, odq(path));
     }
 
-    Tcl_Obj *option_prefix = ttrek_cJSONObjectToObject(opts, "option_prefix");
+    Tcl_Obj *option_prefix = ttrek_cJSONStringToObject(opts, "option_prefix");
     if (option_prefix == NULL) {
         option_prefix = Tcl_NewStringObj("--", 2);
     }
@@ -454,12 +440,12 @@ static int ttrek_SpecToObj_Configure(Tcl_Interp *interp, const cJSON *opts, Tcl_
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        Tcl_Obj *name = ttrek_cJSONObjectToObject(option, "name");
+        Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
         }
 
-        Tcl_Obj *value = ttrek_cJSONObjectToObject(option, "value");
+        Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
         if (value == NULL) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
@@ -477,8 +463,7 @@ skip_options:
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/configure.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -488,7 +473,7 @@ static int ttrek_SpecToObj_CmakeConfig(Tcl_Interp *interp, const cJSON *opts, Tc
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
-    Tcl_Obj *ld_library_path = ttrek_cJSONObjectToObject(opts, "ld_library_path");
+    Tcl_Obj *ld_library_path = ttrek_cJSONStringToObject(opts, "ld_library_path");
     if (ld_library_path != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "LD_LIBRARY_PATH=%s ", 1,
             odq(ld_library_path));
@@ -510,12 +495,12 @@ static int ttrek_SpecToObj_CmakeConfig(Tcl_Interp *interp, const cJSON *opts, Tc
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        Tcl_Obj *name = ttrek_cJSONObjectToObject(option, "name");
+        Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
         }
 
-        Tcl_Obj *value = ttrek_cJSONObjectToObject(option, "value");
+        Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
         if (value == NULL) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
@@ -530,8 +515,7 @@ skip_options:
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/configure.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -541,6 +525,24 @@ static int ttrek_SpecToObj_Make(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *
 
     Tcl_Obj *cmd = Tcl_NewStringObj("make", -1);
 
+    const cJSON *parallel = cJSON_GetObjectItem(opts, "parallel");
+    if (parallel != NULL) {
+        if (cJSON_IsNumber(parallel)) {
+            ttrek_AppendFormatToObj(interp, cmd, " -j%s", 1,
+                osq(Tcl_NewIntObj(cJSON_GetNumberValue(parallel))));
+        } else if (cJSON_IsBool(parallel)) {
+            if (cJSON_IsTrue(parallel)) {
+                ttrek_AppendFormatToObj(interp, cmd, " -j%s", 1,
+                    dq("$DEFAULT_THREADS"));
+            }
+        } else {
+            Tcl_BounceRefCount(cmd);
+            SetResult("error while parsing \"make\" cmd: option \"parallel\""
+                " must be a boolean or a number");
+            return TCL_ERROR;
+        }
+    }
+
     const cJSON *options = cJSON_GetObjectItem(opts, "options");
     if (options == NULL) {
         goto skip_options;
@@ -549,12 +551,12 @@ static int ttrek_SpecToObj_Make(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        Tcl_Obj *name = ttrek_cJSONObjectToObject(option, "name");
+        Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
         }
 
-        Tcl_Obj *value = ttrek_cJSONObjectToObject(option, "value");
+        Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
         if (value == NULL) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
@@ -569,8 +571,7 @@ skip_options:
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/build.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -583,7 +584,25 @@ static int ttrek_SpecToObj_CmakeMake(Tcl_Interp *interp, const cJSON *opts, Tcl_
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --build %s", 1,
             dq("$BUILD_DIR"));
 
-    Tcl_Obj *config = ttrek_cJSONObjectToObject(opts, "config");
+    const cJSON *parallel = cJSON_GetObjectItem(opts, "parallel");
+    if (parallel != NULL) {
+        if (cJSON_IsNumber(parallel)) {
+            ttrek_AppendFormatToObj(interp, cmd, " --parallel %s", 1,
+                osq(Tcl_NewIntObj(cJSON_GetNumberValue(parallel))));
+        } else if (cJSON_IsBool(parallel)) {
+            if (cJSON_IsTrue(parallel)) {
+                ttrek_AppendFormatToObj(interp, cmd, " --parallel %s", 1,
+                    dq("$DEFAULT_THREADS"));
+            }
+        } else {
+            Tcl_BounceRefCount(cmd);
+            SetResult("error while parsing \"cmake_make\" cmd: option \"parallel\""
+                " must be a boolean or a number");
+            return TCL_ERROR;
+        }
+    }
+
+    Tcl_Obj *config = ttrek_cJSONStringToObject(opts, "config");
     if (config != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, " --config=%s", 1, osq(config));
     }
@@ -591,8 +610,7 @@ static int ttrek_SpecToObj_CmakeMake(Tcl_Interp *interp, const cJSON *opts, Tcl_
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/build.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -602,7 +620,7 @@ static int ttrek_SpecToObj_MakeInstall(Tcl_Interp *interp, const cJSON *opts, Tc
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
-    Tcl_Obj *ld_library_path = ttrek_cJSONObjectToObject(opts, "ld_library_path");
+    Tcl_Obj *ld_library_path = ttrek_cJSONStringToObject(opts, "ld_library_path");
     if (ld_library_path != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, "LD_LIBRARY_PATH=%s ", 1,
             odq(ld_library_path));
@@ -618,12 +636,12 @@ static int ttrek_SpecToObj_MakeInstall(Tcl_Interp *interp, const cJSON *opts, Tc
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        Tcl_Obj *name = ttrek_cJSONObjectToObject(option, "name");
+        Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
         }
 
-        Tcl_Obj *value = ttrek_cJSONObjectToObject(option, "value");
+        Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
         if (value == NULL) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
@@ -638,8 +656,7 @@ skip_options:
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/install.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -652,7 +669,7 @@ static int ttrek_SpecToObj_CmakeInstall(Tcl_Interp *interp, const cJSON *opts, T
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --install %s", 1,
             dq("$BUILD_DIR"));
 
-    Tcl_Obj *config = ttrek_cJSONObjectToObject(opts, "config");
+    Tcl_Obj *config = ttrek_cJSONStringToObject(opts, "config");
     if (config != NULL) {
         ttrek_AppendFormatToObj(interp, cmd, " --config=%s", 1, osq(config));
     }
@@ -660,8 +677,7 @@ static int ttrek_SpecToObj_CmakeInstall(Tcl_Interp *interp, const cJSON *opts, T
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/install.log"));
 
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
-    Tcl_ListObjAppendElement(interp, resultList, cmd);
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 
@@ -672,20 +688,21 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec) {
 
     static const struct {
         const char *cmd;
+        const char *stage;
         int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList);
     } commands[] = {
-        {"download",      ttrek_SpecToObj_Download},
-        {"git",           ttrek_SpecToObj_Git},
-        {"unpack",        ttrek_SpecToObj_Unpack},
-        {"patch",         ttrek_SpecToObj_Patch},
-        {"cd",            ttrek_SpecToObj_Cd},
-        {"autogen",       ttrek_SpecToObj_Autogen},
-        {"configure",     ttrek_SpecToObj_Configure},
-        {"cmake_config",  ttrek_SpecToObj_CmakeConfig},
-        {"make",          ttrek_SpecToObj_Make},
-        {"cmake_make",    ttrek_SpecToObj_CmakeMake},
-        {"make_install",  ttrek_SpecToObj_MakeInstall},
-        {"cmake_install", ttrek_SpecToObj_CmakeInstall},
+        {"download",       "1", ttrek_SpecToObj_Download},
+        {"git",            "1", ttrek_SpecToObj_Git},
+        {"unpack",         "1", ttrek_SpecToObj_Unpack},
+        {"patch",          "1", ttrek_SpecToObj_Patch},
+        {"cd",            NULL, ttrek_SpecToObj_Cd},
+        {"autogen",        "2", ttrek_SpecToObj_Autogen},
+        {"configure",      "2", ttrek_SpecToObj_Configure},
+        {"cmake_config",   "2", ttrek_SpecToObj_CmakeConfig},
+        {"make",           "3", ttrek_SpecToObj_Make},
+        {"cmake_make",     "3", ttrek_SpecToObj_CmakeMake},
+        {"make_install",   "4", ttrek_SpecToObj_MakeInstall},
+        {"cmake_install",  "4", ttrek_SpecToObj_CmakeInstall},
         {NULL, 0}
     };
 
@@ -712,6 +729,12 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec) {
             goto error;
         }
 
+        if (commands[cmdType].stage != NULL) {
+            Tcl_Obj *stageCmd = Tcl_NewStringObj("stage ", -1);
+            Tcl_AppendToObj(stageCmd, commands[cmdType].stage, -1);
+            Tcl_ListObjAppendElement(interp, resultList, stageCmd);
+        }
+
         if (commands[cmdType].handler(interp, cmd, resultList) != TCL_OK) {
             goto error;
         }
@@ -735,31 +758,18 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
         return NULL;
     }
 
-    Tcl_Obj *objs[4];
-    objs[0] = ttrek_StringToSingleQuotedObj(package_name, -1);
-    Tcl_IncrRefCount(objs[0]);
-    objs[1] = ttrek_StringToSingleQuotedObj(package_version, -1);
-    Tcl_IncrRefCount(objs[1]);
-    objs[2] = ttrek_StringToSingleQuotedObj(project_build_dir, -1);
-    Tcl_IncrRefCount(objs[2]);
-    objs[3] = ttrek_StringToSingleQuotedObj(project_install_dir, -1);
-    Tcl_IncrRefCount(objs[3]);
+    Tcl_Obj *install_common = Tcl_NewObj();
 
-    Tcl_Obj *install_common = Tcl_Format(interp, install_script_common, 4, objs);
+    ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 4,
+        sq(package_name), sq(package_version), sq(project_build_dir),
+        sq(project_install_dir));
 
-    Tcl_DecrRefCount(objs[0]);
-    Tcl_DecrRefCount(objs[1]);
-    Tcl_DecrRefCount(objs[2]);
-    Tcl_DecrRefCount(objs[3]);
-
-    if (install_common == NULL) {
-        Tcl_BounceRefCount(install_specific)
-        return NULL;
-    }
+    Tcl_AppendToObj(install_common, install_script_common_static, -1);
 
     Tcl_Obj *install_full = Tcl_NewListObj(0, NULL);
     Tcl_ListObjAppendElement(interp, install_full, install_common);
     Tcl_ListObjAppendList(interp, install_full, install_specific);
+    Tcl_ListObjAppendElement(interp, install_full, Tcl_NewStringObj("ok", -1));
 
     Tcl_Obj *rc = Tcl_NewObj();
 

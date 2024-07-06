@@ -481,10 +481,24 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             }
         }
 
+        std::cout << std::endl;
+
         // ensure the directory skeleton exists
         if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
             fprintf(stderr, "error: could not ensure directory skeleton exists\n");
             return TCL_ERROR;
+        }
+
+        int package_num_total = 0;
+        int package_num_current = 0;
+
+        // Count the number of packages that need to be installed
+        for (const auto &install_spec: execution_plan) {
+            if (install_spec.install_type == ALREADY_INSTALLED ||
+                install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
+                continue;
+            }
+            package_num_total++;
         }
 
         struct utsname sysinfo;
@@ -505,11 +519,12 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             auto direct_version_requirement = install_spec.direct_version_requirement;
             auto package_name_exists_in_lock_p = install_spec.package_name_exists_in_lock_p;
 
-            std::cout << "installing... " << package_name << "@" << package_version << std::endl;
+            // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, package_name.c_str(),
                 package_version.c_str(), sysinfo.sysname, sysinfo.machine,
-                direct_version_requirement.c_str(), package_name_exists_in_lock_p);
+                direct_version_requirement.c_str(), package_name_exists_in_lock_p,
+                ++package_num_current, package_num_total);
 
             ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
                 sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),

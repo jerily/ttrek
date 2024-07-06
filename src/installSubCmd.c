@@ -5,6 +5,8 @@
  */
 
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include "subCmdDecls.h"
 #include "common.h"
 #include "ttrek_resolvo.h"
@@ -92,6 +94,13 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     } else {
         installObjv = &remObjv[1];
     }
+
+    // Set the environment variable IS_TTY to a value that corresponds
+    // to whether stdout is terminal. This variable will be used by
+    // the installation shell scripts to determine how to show installation
+    // progress.
+    setenv("IS_TTY", (isatty(1) ? "1" : "0"), 1);
+    DBG2(printf("set IS_TTY: %d", isatty(1)));
 
     int abort = 0;
     if (TCL_OK != ttrek_InstallOrUpdate(interp, installObjc, installObjv, state_ptr, &abort)) {

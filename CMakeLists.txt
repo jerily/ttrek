@@ -57,7 +57,21 @@ target_link_libraries(test_resolvo
         stdc++
 )
 
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_dynamic.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_dynamic.sh
+)
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh
+)
+
 add_executable(${TARGET}
+        ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
         src/ttrek_resolvo.cc
         src/ttrek_resolvo.h
         src/ttrek_git.c
@@ -105,7 +119,7 @@ find_library(TCL_LIBRARY NAMES libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" N
 find_library(GIT2_LIBRARY NAMES libgit2.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-target_include_directories(${TARGET} PRIVATE "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
+target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
 target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${GIT2_LIBRARY})
 if (NOT APPLE)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")

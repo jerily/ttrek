@@ -226,6 +226,7 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
     // make "chan" non-blocking
     Tcl_SetChannelOption(interp, chan, "-blocking", "0");
     Tcl_SetChannelOption(interp, chan, "-buffering", "none");
+    Tcl_SetChannelOption(interp, chan, "-translation", "binary");
 
     resultObj = Tcl_NewObj();
     Tcl_IncrRefCount(resultObj);
