@@ -19,6 +19,7 @@ static const char *subcommands[] = {
         "run",
         "update",
         "ls",
+        "use",
         NULL
 };
 
@@ -28,7 +29,8 @@ enum subcommand {
     SUBCMD_UNINSTALL,
     SUBCMD_RUN,
     SUBCMD_UPDATE,
-    SUBCMD_LIST
+    SUBCMD_LIST,
+    SUBCMD_USE
 };
 
 int main(int argc, char *argv[]) {
@@ -102,6 +104,13 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "error: list subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
+            break;
+        case SUBCMD_USE:
+            if (TCL_OK != ttrek_UseSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: use subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
     }
 
     goto done;
