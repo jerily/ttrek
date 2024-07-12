@@ -154,9 +154,9 @@ static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_O
         return TCL_ERROR;
     }
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "LD_LIBRARY_PATH= curl --fail"
-        " --silent --show-error -L -o %s --output-dir %s %s", 3,
-        dq("$ARCHIVE_FILE"), dq("$DOWNLOAD_DIR"), osq(url));
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "%s download %s %s",
+        3, osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)), osq(url),
+        dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"));
 
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/download.log"));

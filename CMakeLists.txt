@@ -98,6 +98,7 @@ add_executable(${TARGET}
         src/fsmonitor/fsmonitor.c
         src/listSubCmd.c
         src/uninstallSubCmd.c
+        src/downloadSubCmd.c
         src/ttrek_telemetry.c
         src/ttrek_telemetry.h
         src/ttrek_genInstall.c
