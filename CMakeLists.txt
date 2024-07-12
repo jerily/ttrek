@@ -69,9 +69,22 @@ add_custom_command(
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh
 )
 
+file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
+
+set(HELP_TOPICS_H) # List of *.h files for the help topics
+foreach (HELP_TOPIC ${HELP_TOPICS})
+    list(APPEND HELP_TOPICS_H ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h)
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
+      COMMAND cat $< | sed -e 's/"/\\\\"/g' | sed -e :a -e '/$$/N\; s/\\n/\\\\n/\; ta' | sed -e 's/.*/\\"&\\"/' >"$@"
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}
+    )
+endforeach()
+
 add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
+        ${HELP_TOPICS_H}
         src/ttrek_resolvo.cc
         src/ttrek_resolvo.h
         src/ttrek_git.c
@@ -104,6 +117,10 @@ add_executable(${TARGET}
         src/ttrek_telemetry.h
         src/ttrek_genInstall.c
         src/ttrek_genInstall.h
+        src/helpSubCmd.c
+        src/ttrek_help.c
+        src/ttrek_help.h
+        src/ttrek_help_messages.h
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:

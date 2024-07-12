@@ -22,6 +22,7 @@ static const char *subcommands[] = {
         /* internal subcommands */
         "download",
         "unpack",
+        "help",
         NULL
 };
 
@@ -34,6 +35,7 @@ enum subcommand {
     SUBCMD_LIST,
     SUBCMD_DOWNLOAD,
     SUBCMD_UNPACK
+    SUBCMD_HELP
 };
 
 int main(int argc, char *argv[]) {
@@ -128,6 +130,12 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "error: list subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
+            break;
+        case SUBCMD_HELP:
+            if (TCL_OK != ttrek_HelpSubCmd(interp, objc-1, &objv[1])) {
+                exitcode = 1;
+            }
+            break;
     }
 
     goto done;
