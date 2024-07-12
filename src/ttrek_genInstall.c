@@ -154,9 +154,9 @@ static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_O
         return TCL_ERROR;
     }
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "LD_LIBRARY_PATH= curl --fail"
-        " --silent --show-error -L -o %s --output-dir %s %s", 3,
-        dq("$ARCHIVE_FILE"), dq("$DOWNLOAD_DIR"), osq(url));
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "%s download %s %s",
+        3, osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)), osq(url),
+        dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"));
 
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/download.log"));
@@ -252,72 +252,14 @@ static int ttrek_SpecToObj_Unpack(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj
 
     Tcl_Obj *cmd;
 
-    static const char *const formats[] = {
-        "tar.gz", "zip", NULL
-    };
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "%s unpack %s %s", 3,
+        osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)),
+        dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
 
-    enum formats {
-        formatTarGz, formatZip
-    };
+    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
+        dq("$BUILD_LOG_DIR/unpack.log"));
 
-    int format;
-
-    Tcl_Obj *formatObj = ttrek_cJSONStringToObject(opts, "format");
-    if (formatObj != NULL) {
-
-        int res = Tcl_GetIndexFromObj(interp, formatObj, formats, "unpack format", 0,
-            &format);
-        Tcl_BounceRefCount(formatObj);
-
-        if (res != TCL_OK) {
-            return TCL_ERROR;
-        }
-
-    } else {
-        format = formatTarGz;
-    }
-
-    switch ((enum formats) format) {
-    case formatZip:
-
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "unzip %s -d %s", 2,
-            dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
-
-        ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-            dq("$BUILD_LOG_DIR/unpack.log"));
-
-        APPEND_CMD(cmd);
-
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "TEMP=\"$(echo %s/*)\"", 1,
-            dq("$SOURCE_DIR"));
-
-        APPEND_CMD(cmd);
-
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "mv %s/* %s", 2,
-            dq("$TEMP"), dq("$SOURCE_DIR"));
-
-        APPEND_CMD(cmd);
-
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "rm -rf %s", 1,
-            dq("$TEMP"));
-
-        APPEND_CMD(cmd);
-
-        break;
-
-    case formatTarGz:
-
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "tar -vxzf %s --strip-components=1"
-            " -C %s", 2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
-
-        ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-            dq("$BUILD_LOG_DIR/unpack.log"));
-
-        APPEND_CMD(cmd);
-
-        break;
-
-    }
+    APPEND_CMD(cmd);
 
     return TCL_OK;
 

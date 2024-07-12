@@ -19,6 +19,9 @@ static const char *subcommands[] = {
         "run",
         "update",
         "ls",
+        /* internal subcommands */
+        "download",
+        "unpack",
         "help",
         NULL
 };
@@ -30,6 +33,8 @@ enum subcommand {
     SUBCMD_RUN,
     SUBCMD_UPDATE,
     SUBCMD_LIST,
+    SUBCMD_DOWNLOAD,
+    SUBCMD_UNPACK
     SUBCMD_HELP
 };
 
@@ -52,6 +57,14 @@ int main(int argc, char *argv[]) {
     cJSON_InitHooks(&hooks);
 
     interp = Tcl_CreateInterp();
+
+    // On Windows, argument is not not used. TclpFindExecutable() uses
+    // GetModuleFileNameW() to get the executable name.
+#ifdef _WIN32
+    Tcl_FindExecutable(NULL);
+#else
+    Tcl_FindExecutable(argv[0]);
+#endif
 
     ttrek_TelemetryLoadMachineId(interp);
 
@@ -95,6 +108,19 @@ int main(int argc, char *argv[]) {
             break;
         case SUBCMD_RUN:
             if (TCL_OK != ttrek_RunSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_DOWNLOAD:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
+            if (TCL_OK != ttrek_DownloadSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_UNPACK:
+            if (TCL_OK != ttrek_UnpackSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
