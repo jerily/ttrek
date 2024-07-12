@@ -34,7 +34,7 @@ enum subcommand {
     SUBCMD_UPDATE,
     SUBCMD_LIST,
     SUBCMD_DOWNLOAD,
-    SUBCMD_UNPACK
+    SUBCMD_UNPACK,
     SUBCMD_HELP
 };
 
