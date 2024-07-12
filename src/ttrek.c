@@ -21,6 +21,7 @@ static const char *subcommands[] = {
         "ls",
         /* internal subcommands */
         "download",
+        "unpack",
         NULL
 };
 
@@ -31,7 +32,8 @@ enum subcommand {
     SUBCMD_RUN,
     SUBCMD_UPDATE,
     SUBCMD_LIST,
-    SUBCMD_DOWNLOAD
+    SUBCMD_DOWNLOAD,
+    SUBCMD_UNPACK
 };
 
 int main(int argc, char *argv[]) {
@@ -111,6 +113,12 @@ int main(int argc, char *argv[]) {
         case SUBCMD_DOWNLOAD:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (TCL_OK != ttrek_DownloadSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_UNPACK:
+            if (TCL_OK != ttrek_UnpackSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: run subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
