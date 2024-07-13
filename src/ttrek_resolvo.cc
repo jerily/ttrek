@@ -462,6 +462,45 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
     }
 }
 
+static const std::string & ttrek_RewriteUnsatMessage(const std::string &message) {
+    // replace all use:* substrings with "use flag"
+    // for example, use:threads 1.2.3 -> use flag +threads
+    // for example, use:threads 0.0.0 -> use flag -threads
+    // also skip the line after the occurrence of the use flag
+
+    static std::string result;
+    result.clear();
+
+    std::istringstream iss(message);
+    std::string line;
+    bool skip = false;
+    while (std::getline(iss, line)) {
+        if (skip) {
+            skip = false;
+            continue;
+        }
+        if (line.find("use:") != std::string::npos) {
+            skip = true;
+            auto index = line.find("use:");
+            auto index2 = line.find(' ', index);
+            auto use_flag = line.substr(index + 4, index2 - index - 4);
+            auto polarity = line.substr(index2 + 1, 5);
+            result += line.substr(0, index);
+            result += "USE flag: ";
+            if (polarity == "0.0.0") {
+                result += "-";
+            } else {
+                result += "+";
+            }
+            result += use_flag;
+        } else {
+            result += line;
+        }
+        result += "\n";
+    }
+    return result;
+}
+
 int
 ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int *abort) {
 
@@ -482,7 +521,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
     if (installs.empty()) {
         *abort = 1;
-        std::cout << message << std::endl;
+        std::cout << ttrek_RewriteUnsatMessage(message) << std::endl;
     } else {
 
         // generate the execution plan
