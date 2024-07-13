@@ -27,8 +27,8 @@
 #include "registry.h"
 #include "cjson/cJSON.h"
 
-std::vector<resolvo::String> split_string(const std::string_view &str, const char *split_str) {
-    std::vector<resolvo::String> split;
+std::vector<std::string_view> split_string(const std::string_view &str, const char *split_str) {
+    std::vector<std::string_view> split;
     size_t start = 0;
     size_t end = str.find(split_str);
     while (end != std::string::npos) {
@@ -40,8 +40,62 @@ std::vector<resolvo::String> split_string(const std::string_view &str, const cha
     return split;
 }
 
-std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> fetch_package_versions(const std::string& package_name) {
-    std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_view>>> result;
+struct UseFlag {
+    std::string name;
+    bool polarity;
+
+    UseFlag(std::string_view name, bool polarity) : name(std::string(name)), polarity(polarity) {}
+
+    std::string to_string() const {
+        return (polarity ? "+" : "-") + name;
+    };
+
+    bool operator==(const UseFlag &other) const {
+        return name == other.name && polarity == other.polarity;
+    }
+
+    bool operator<(const UseFlag &other) const {
+        return name < other.name || (name == other.name && polarity < other.polarity);
+    }
+
+};
+
+// hash for UseFlag
+
+namespace std {
+    template<>
+    struct hash<UseFlag> {
+        std::size_t operator()(const UseFlag &use_flag) const {
+            return std::hash<std::string>()(use_flag.to_string());
+        }
+    };
+}
+
+struct DependencyInfo {
+    std::string version_requirement;
+    std::unordered_set<UseFlag> if_use_flags;
+
+    DependencyInfo(std::string version_requirement, std::string if_value) : version_requirement(std::move(version_requirement)) {
+        if (!if_value.empty()) {
+            auto use_flags = split_string(if_value, " ");
+            for (const auto &use_flag : use_flags) {
+                bool polarity = true;
+                if (use_flag[0] == '-') {
+                    polarity = false;
+                } else if (use_flag[0] == '+') {
+                    polarity = true;
+                } else {
+                    throw std::runtime_error("Invalid use flag: " + std::string(use_flag));
+                }
+                if_use_flags.emplace(UseFlag(use_flag.substr(1), polarity));
+            }
+        }
+    }
+
+};
+
+std::map<std::string_view, std::vector<std::pair<std::string_view, DependencyInfo>>> fetch_package_versions(const std::string& package_name) {
+    std::map<std::string_view, std::vector<std::pair<std::string_view, DependencyInfo>>> result;
     char package_versions_url[256];
     snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
     Tcl_DString versions_ds;
@@ -56,13 +110,24 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, std::string_v
         cJSON *version_item = cJSON_GetArrayItem(versions_root, i);
         const char *version_str = version_item->string;
         DBG(fprintf(stderr, "version_str: %s\n", version_str));
-        std::vector<std::pair<std::string_view, std::string_view>> deps;
+        std::vector<std::pair<std::string_view, DependencyInfo>> deps;
         for (int j = 0; j < cJSON_GetArraySize(version_item); j++) {
             cJSON *deps_item = cJSON_GetArrayItem(version_item, j);
             const char *dep_name = deps_item->string;
-            const char *dep_version = cJSON_GetStringValue(deps_item);
-            DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
-            deps.emplace_back(dep_name, dep_version);
+            if (cJSON_HasObjectItem(deps_item, "version") && cJSON_HasObjectItem(deps_item, "if")) {
+                cJSON *deps_obj = cJSON_GetObjectItem(deps_item, "version");
+                const char *dep_version = cJSON_GetStringValue(deps_obj);
+                DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
+                cJSON *if_obj = cJSON_GetObjectItem(deps_item, "if");
+                const char *if_value = cJSON_GetStringValue(if_obj);
+                deps.emplace_back(dep_name, DependencyInfo(dep_version, if_value));
+                continue;
+            } else {
+                const char *dep_version = cJSON_GetStringValue(deps_item);
+                DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
+                deps.emplace_back(dep_name, DependencyInfo(dep_version, ""));
+                continue;
+            }
         }
         result[version_str] = deps;
     }
@@ -278,6 +343,15 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         return id;
     }
 
+    resolvo::VersionSetId alloc_requirement_from_use_flag(const UseFlag &use_flag) {
+        auto spec_name = names.alloc(std::string_view("use:" + use_flag.name));
+        auto spec_versions = use_flag.polarity ? Range<Pack>::singleton(Pack("1.2.3")) : Range<Pack>::singleton(Pack("0.0.0"));
+        auto requirement = Requirement{spec_name, spec_versions};
+        auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
+        requirements.push_back(requirement);
+        return id;
+    }
+
     void alloc_locked_package(const std::string &package_name, const std::string &package_version) {
         DBG(std::cout << "set locked package: " << package_name << "=" << package_version << std::endl);
         locked_packages[package_name] = package_version;
@@ -359,7 +433,24 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     }
 
     resolvo::Candidates get_candidates(resolvo::NameId package) override {
+
+        resolvo::Candidates result;
+        result.favored = nullptr;
+        result.locked = nullptr;
+
         auto package_name = std::string(names[package]);
+        if (package_name.find("use:") == 0) {
+            auto use_flag_name = package_name.substr(4);
+            for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
+                const auto &candidate = candidates[i];
+                if (candidate.name != package) {
+                    continue;
+                }
+                result.candidates.push_back(resolvo::SolvableId{i});
+                result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
+            }
+            return result;
+        }
         auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
         DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
         resolvo::SolvableId locked_candidate_id{};
@@ -376,9 +467,22 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
                 // add the dependencies for the package
                 for (const auto &dep : package_version_deps) {
-                    auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second);
+                    auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second.version_requirement);
                     dependencies.requirements.push_back(dep_version_set);
                     DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
+
+                    // add use flag dependency
+                    for (const auto &use_flag : dep.second.if_use_flags) {
+                        auto use_version_set = alloc_requirement_from_use_flag(use_flag);
+
+                        // alloc_candidate for both polarities, no deps
+                        auto use_flag_str = "use:" + use_flag.name;
+                        auto id0 = alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
+                        auto id1 = alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
+
+                        // add the use flag dependency
+                        dependencies.requirements.push_back(use_version_set);
+                    }
 
                     // keep track of the dependencies for each package
                     // so that we can later sort the installs based on
@@ -394,10 +498,6 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                 }
             }
         }
-
-        resolvo::Candidates result;
-        result.favored = nullptr;
-        result.locked = nullptr;
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
             const auto& candidate = candidates[i];
