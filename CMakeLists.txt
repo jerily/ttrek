@@ -69,9 +69,22 @@ add_custom_command(
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh
 )
 
+file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
+
+set(HELP_TOPICS_H) # List of *.h files for the help topics
+foreach (HELP_TOPIC ${HELP_TOPICS})
+    list(APPEND HELP_TOPICS_H ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h)
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
+      COMMAND cat $< | sed -e 's/"/\\\\"/g' | sed -e :a -e '/$$/N\; s/\\n/\\\\n/\; ta' | sed -e 's/.*/\\"&\\"/' >"$@"
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}
+    )
+endforeach()
+
 add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
+        ${HELP_TOPICS_H}
         src/ttrek_resolvo.cc
         src/ttrek_resolvo.h
         src/ttrek_git.c
@@ -99,10 +112,16 @@ add_executable(${TARGET}
         src/listSubCmd.c
         src/useSubCmd.c
         src/uninstallSubCmd.c
+        src/downloadSubCmd.c
+        src/unpackSubCmd.c
         src/ttrek_telemetry.c
         src/ttrek_telemetry.h
         src/ttrek_genInstall.c
         src/ttrek_genInstall.h
+        src/helpSubCmd.c
+        src/ttrek_help.c
+        src/ttrek_help.h
+        src/ttrek_help_messages.h
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
@@ -118,10 +137,11 @@ find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" 
 find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(TCL_LIBRARY NAMES libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(GIT2_LIBRARY NAMES libgit2.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(ARCHIVE_LIBRARY NAMES libarchive.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
-target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${GIT2_LIBRARY})
+target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY})
 if (NOT APPLE)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
         target_link_options(${TARGET} PRIVATE -static)

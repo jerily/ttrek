@@ -1,0 +1,11 @@
+Usage: ttrek COMMAND [options]
+
+Available commands:
+    init
+    install
+    update
+    uninstall
+    ls
+    run
+
+Run 'ttrek help COMMAND' for more information on a command.

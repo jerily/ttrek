@@ -1,0 +1,22 @@
+Usage: install [options] ?package_A@version_range_A? ?package_B@version_range_B? ?...?
+
+Available options:
+    -u - install using user mode (~/.local)
+    -g - install using global mode (/usr/local/ttrek)
+    default - If no mode is specified, install using local mode (./ttrek-venv)
+
+package is the package name e.g. twebserver
+
+version_range is a comma-separated list of operator (op) and version pairs where op is:
+
+^  - caret operator accepts all versions that have the same major version
+>= - greater than or equal operator ...
+>  - greater than operator ...
+<= - less than or equal operator ...
+<  - less than operator ...
+== - equals operator ...
+
+Examples:
+    twebserver@1.47.37
+    twebserver@^1.47.37
+    "twebserver@>=1.47.37,<1.50.0"
