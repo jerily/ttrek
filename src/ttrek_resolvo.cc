@@ -462,11 +462,28 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
     }
 }
 
+
+static std::string ttrek_ReplaceAll(std::string inputStr, const std::string& from, const std::string& to) {
+    size_t startPos = 0;
+    std::string result;
+    size_t fromLen = from.length();
+    size_t pos;
+
+    while ((pos = inputStr.find(from, startPos)) != std::string::npos) {
+        result += inputStr.substr(startPos, pos - startPos) + to;
+        startPos = pos + fromLen;
+    }
+
+    result += inputStr.substr(startPos);
+    return result;
+}
+
 static const std::string & ttrek_RewriteUnsatMessage(const std::string &message) {
     // replace all use:* substrings with "use flag"
     // for example, use:threads 1.2.3 -> use flag +threads
     // for example, use:threads 0.0.0 -> use flag -threads
     // also skip the line after the occurrence of the use flag
+    // except when it is a top level line (it does not start with "│")
 
     static std::string result;
     result.clear();
@@ -475,24 +492,30 @@ static const std::string & ttrek_RewriteUnsatMessage(const std::string &message)
     std::string line;
     bool skip = false;
     while (std::getline(iss, line)) {
-        if (skip) {
-            skip = false;
-            continue;
-        }
+//        if (skip) {
+//            skip = false;
+//            continue;
+//        }
         if (line.find("use:") != std::string::npos) {
             skip = true;
             auto index = line.find("use:");
             auto index2 = line.find(' ', index);
             auto use_flag = line.substr(index + 4, index2 - index - 4);
             auto polarity = line.substr(index2 + 1, 5);
+            auto rest = line.substr(index2 + 6); // version + two spaces
+            // replace the word "installed" with the word "satisfied" in the rest of the line
+            rest = ttrek_ReplaceAll(rest, "installed", "satisfied");
+            // replace the word "versions" with the phrase "USE flags" in the rest of the line
+            rest = ttrek_ReplaceAll(rest, "versions", "USE flags");
             result += line.substr(0, index);
-            result += "USE flag: ";
+            result += "USE flag ";
             if (polarity == "0.0.0") {
                 result += "-";
             } else {
                 result += "+";
             }
             result += use_flag;
+            result += rest;
         } else {
             result += line;
         }
