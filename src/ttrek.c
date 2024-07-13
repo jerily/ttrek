@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
             break;
             break;
         case SUBCMD_USE:
-            if (TCL_OK != ttrek_UseSubCmd(interp, objc-1, &objv[1])) {
+            if (TCL_OK != ttrek_UseSubCmd(interp, objc-2, &objv[2])) {
                 fprintf(stderr, "error: use subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
