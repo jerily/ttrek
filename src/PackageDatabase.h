@@ -44,6 +44,19 @@ struct UseFlag {
     std::string name;
     bool polarity;
 
+    UseFlag(std::string_view use_flag_str) {
+        bool polarity = true;
+        if (use_flag_str[0] == '-') {
+            polarity = false;
+        } else if (use_flag_str[0] == '+') {
+            polarity = true;
+        } else {
+            throw std::runtime_error("Invalid use flag: " + std::string(use_flag_str));
+        }
+        name = std::string(use_flag_str.substr(1));
+        this->polarity = polarity;
+    }
+
     UseFlag(std::string_view name, bool polarity) : name(std::string(name)), polarity(polarity) {}
 
     std::string to_string() const {
@@ -309,6 +322,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     std::set<std::string> candidate_names;
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
+    std::map<std::string, std::vector<std::pair<std::string, std::unordered_set<UseFlag>>>> use_flag_dependencies_map;
     std::map<std::string, std::string> locked_packages;
     ttrek_strategy_t the_strategy;
 
@@ -346,6 +360,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     resolvo::VersionSetId alloc_requirement_from_use_flag(const UseFlag &use_flag) {
         auto spec_name = names.alloc(std::string_view("use:" + use_flag.name));
         auto spec_versions = use_flag.polarity ? Range<Pack>::singleton(Pack("1.2.3")) : Range<Pack>::singleton(Pack("0.0.0"));
+        std::cout << "allocating use flag requirement: " << use_flag.to_string() << std::endl;
         auto requirement = Requirement{spec_name, spec_versions};
         auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
         requirements.push_back(requirement);
@@ -465,23 +480,39 @@ struct PackageDatabase : public resolvo::DependencyProvider {
 
                 auto dependencies = resolvo::Dependencies();
 
+                // add use flag dependencies
+                if (use_flag_dependencies_map.find(package_name) != use_flag_dependencies_map.end()) {
+                    std::cout << "package: " << package_name << " has use flag dependencies" << std::endl;
+                    for (const auto &use_flag_dep : use_flag_dependencies_map.at(package_name)) {
+                        auto use_flag_dep_versions = std::string_view(use_flag_dep.first);
+                        auto version_requirement = version_range(use_flag_dep_versions.empty() ? std::nullopt : std::optional(use_flag_dep_versions));
+                        std::cout << "use flag version requirement: " << use_flag_dep_versions << std::endl;
+                        std::cout << "package version: " << package_version << std::endl;
+                        if (version_requirement.contains(Pack(package_version))) {
+                            auto use_flags = use_flag_dep.second;
+                            for (const auto &use_flag : use_flags) {
+                                auto use_flag_version_set = alloc_requirement_from_use_flag(use_flag);
+                                dependencies.requirements.push_back(use_flag_version_set);
+                            }
+                        }
+                    }
+                }
+
                 // add the dependencies for the package
                 for (const auto &dep : package_version_deps) {
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second.version_requirement);
                     dependencies.requirements.push_back(dep_version_set);
                     DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
 
-                    // add use flag dependency
-                    for (const auto &use_flag : dep.second.if_use_flags) {
-                        auto use_version_set = alloc_requirement_from_use_flag(use_flag);
-
-                        // alloc_candidate for both polarities, no deps
-                        auto use_flag_str = "use:" + use_flag.name;
-                        auto id0 = alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
-                        auto id1 = alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
-
-                        // add the use flag dependency
-                        dependencies.requirements.push_back(use_version_set);
+                    // keep track of the use flag dependencies for each package
+                    if (!dep.second.if_use_flags.empty()) {
+                        auto dep_name = std::string(dep.first);
+                        auto p = std::pair<std::string, std::unordered_set<UseFlag>>(
+                                dep.second.version_requirement, dep.second.if_use_flags);
+                        if (use_flag_dependencies_map.find(dep_name) == use_flag_dependencies_map.end()) {
+                            use_flag_dependencies_map[dep_name] = std::vector<std::pair<std::string, std::unordered_set<UseFlag>>>();
+                        }
+                        use_flag_dependencies_map.at(dep_name).emplace_back(p);
                     }
 
                     // keep track of the dependencies for each package

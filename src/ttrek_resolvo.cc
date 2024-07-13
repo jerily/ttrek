@@ -127,6 +127,16 @@ static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
     }
 }
 
+static void ttrek_ParseUseFlagsFromSpecFile(ttrek_state_t *state_ptr, std::unordered_set<UseFlag> &use_flags) {
+    cJSON *use = cJSON_GetObjectItem(state_ptr->spec_root, "useFlags");
+    if (use) {
+        for (int i = 0; i < cJSON_GetArraySize(use); i++) {
+            cJSON *use_item = cJSON_GetArrayItem(use, i);
+            use_flags.insert(UseFlag(use_item->valuestring));
+        }
+    }
+}
+
 int
 ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDatabase &db, ttrek_state_t *state_ptr,
             std::string &message,
@@ -140,10 +150,23 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
     ttrek_ParseLockedPackages(state_ptr, db);
 
+    std::unordered_set<UseFlag> use_flags;
+    ttrek_ParseUseFlagsFromSpecFile(state_ptr, use_flags);
+
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;
     for (const auto &requirement: requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
+    }
+
+    for (const auto &use_flag: use_flags) {
+        requirements_vector.push_back(db.alloc_requirement_from_use_flag(use_flag));
+
+        // alloc_candidate for both polarities, no deps
+        auto use_flag_str = "use:" + use_flag.name;
+        auto id0 = db.alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
+        auto id1 = db.alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
+
     }
 
     std::map<std::string, std::string> constraints;
@@ -162,6 +185,13 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
         for (auto solvable: result) {
             installs.emplace_back(db.display_solvable(solvable));
         }
+
+        // print result
+        std::cout << "The following packages will be installed:" << std::endl;
+        for (const auto &install: installs) {
+            std::cout << install << std::endl;
+        }
+
         db.topological_sort(installs);
     }
 
