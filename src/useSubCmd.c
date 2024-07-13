@@ -9,11 +9,11 @@
 
 static int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
 
-    if (!cJSON_HasObjectItem(spec_root, "defaultUseFlags")) {
+    if (!cJSON_HasObjectItem(spec_root, "useFlags")) {
         return TCL_OK;
     }
 
-    cJSON *use = cJSON_GetObjectItem(spec_root, "defaultUseFlags");
+    cJSON *use = cJSON_GetObjectItem(spec_root, "useFlags");
 
     for (int i = 0; i < cJSON_GetArraySize(use); i++) {
         cJSON *use_flag_node = cJSON_GetArrayItem(use, i);
@@ -34,10 +34,10 @@ static int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc
         cJSON_AddItemToArray(use_node, cJSON_CreateString(Tcl_GetString(objv[i])));
     }
 
-    if (!cJSON_HasObjectItem(spec_root, "defaultUseFlags")) {
-        cJSON_AddItemToObject(spec_root, "defaultUseFlags", use_node);
+    if (!cJSON_HasObjectItem(spec_root, "useFlags")) {
+        cJSON_AddItemToObject(spec_root, "useFlags", use_node);
     } else {
-        cJSON_ReplaceItemInObject(spec_root, "defaultUseFlags", use_node);
+        cJSON_ReplaceItemInObject(spec_root, "useFlags", use_node);
     }
 
     return TCL_OK;
