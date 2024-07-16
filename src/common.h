@@ -107,6 +107,7 @@ typedef struct {
     Tcl_Obj *dirty_file_path_ptr;
     Tcl_Obj *locking_file_path_ptr;
     cJSON *spec_root;
+    Tcl_Obj *use_flags_ptr;
     cJSON *lock_root;
     cJSON *manifest_root;
     int with_locking;

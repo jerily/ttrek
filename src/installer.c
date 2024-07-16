@@ -137,7 +137,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
         package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-        Tcl_GetString(state_ptr->project_install_dir_ptr), install_script_node);
+        Tcl_GetString(state_ptr->project_install_dir_ptr), install_script_node,
+        state_ptr->use_flags_ptr);
     if (install_script_full == NULL) {
         fprintf(stderr, "error: could not generate install script: %s\n",
             Tcl_GetStringResult(interp));
@@ -452,6 +453,10 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cha
             fprintf(stderr, "error: could not delete package files from existing installation\n");
             return TCL_ERROR;
         }
+    }
+
+    if (strlen(package_name) >= 4 && strncmp(package_name, "use:", 4) == 0) {
+        return TCL_OK;
     }
 
     if (TCL_OK !=
