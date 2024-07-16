@@ -17,7 +17,9 @@ int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
 int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
 int ttrek_AddUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
 int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
-
+int ttrek_PopulateHashTableFromUseFlagsList(Tcl_Interp *interp, Tcl_Obj *list_ptr, Tcl_HashTable *ht);
+int ttrek_PopulateUseFlagsListFromHashTable(Tcl_Interp *interp, Tcl_HashTable *ht, Tcl_Obj *list_ptr);
+int ttrek_HashTableContainsUseFlag(Tcl_Interp *interp, Tcl_HashTable *ht, const char *use_flag_str, int *contains_p);
 
 #ifdef __cplusplus
 }

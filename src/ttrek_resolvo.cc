@@ -13,6 +13,7 @@
 #include "ttrek_resolvo.h"
 #include "installer.h"
 #include "ttrek_telemetry.h"
+#include "ttrek_useflags.h"
 
 int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
     for (int i = 0; i < objc; i++) {
@@ -586,8 +587,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         // Count the number of packages that need to be installed
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == ALREADY_INSTALLED ||
-                install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
+            if (install_spec.install_type == ALREADY_INSTALLED) {
                 continue;
             }
             package_num_total++;
@@ -599,11 +599,26 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        Tcl_Obj *use_flags_list_ptr = Tcl_NewListObj(0, NULL);
+        Tcl_IncrRefCount(use_flags_list_ptr);
+        if (TCL_OK != ttrek_GetUseFlags(interp, state_ptr->spec_root, use_flags_list_ptr)) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            return TCL_ERROR;
+        }
+
+        Tcl_HashTable use_flags_ht;
+        Tcl_InitHashTable(&use_flags_ht, TCL_STRING_KEYS);
+        if (TCL_OK != ttrek_PopulateHashTableFromUseFlagsList(interp, use_flags_list_ptr, &use_flags_ht)) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&use_flags_ht);
+            return TCL_ERROR;
+        }
+
+
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
         for (const auto &install_spec: execution_plan) {
-            if (install_spec.install_type == ALREADY_INSTALLED ||
-                install_spec.install_type == RDEP_OR_DEP_OF_ALREADY_INSTALLED) {
+            if (install_spec.install_type == ALREADY_INSTALLED) {
                 continue;
             }
             auto package_name = install_spec.package_name;
@@ -613,7 +628,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
-            auto outcome = ttrek_InstallPackage(interp, state_ptr, package_name.c_str(),
+            auto outcome = ttrek_InstallPackage(interp, state_ptr, &use_flags_ht, package_name.c_str(),
                 package_version.c_str(), sysinfo.sysname, sysinfo.machine,
                 direct_version_requirement.c_str(), package_name_exists_in_lock_p,
                 ++package_num_current, package_num_total);
@@ -634,6 +649,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
                     }
                 }
 
+                Tcl_DecrRefCount(use_flags_list_ptr);
+                Tcl_DeleteHashTable(&use_flags_ht);
                 return TCL_ERROR;
 
             }
@@ -642,6 +659,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
                 installs_from_lock_file_sofar.push_back(install_spec);
             }
         }
+        Tcl_DecrRefCount(use_flags_list_ptr);
+        Tcl_DeleteHashTable(&use_flags_ht);
 
         if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;

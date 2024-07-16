@@ -4,8 +4,24 @@
  * SPDX-License-Identifier: MIT.
  */
 
+#include <string.h>
 #include "ttrek_useflags.h"
 
+#define MAX_USE_FLAG_LEN 128
+int ttrek_IsValidUseFlag(const char *use_flag_str) {
+    if (use_flag_str == NULL) {
+        return 0;
+    }
+
+    if (strnlen(use_flag_str, MAX_USE_FLAG_LEN) < 2) {
+        return 0;
+    }
+
+    if (use_flag_str[0] == '+' || use_flag_str[0] == '-') {
+        return 1;
+    }
+    return 0;
+}
 
 int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
 
@@ -44,7 +60,7 @@ int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
 }
 
 
-static int ttrek_PopulateHashTableFromUseFlagsList(Tcl_Interp *interp, Tcl_Obj *list_ptr, Tcl_HashTable *ht) {
+int ttrek_PopulateHashTableFromUseFlagsList(Tcl_Interp *interp, Tcl_Obj *list_ptr, Tcl_HashTable *ht) {
 
     Tcl_Size list_len;
     if (TCL_OK != Tcl_ListObjLength(interp, list_ptr, &list_len)) {
@@ -75,7 +91,7 @@ static int ttrek_PopulateHashTableFromUseFlagsList(Tcl_Interp *interp, Tcl_Obj *
     return TCL_OK;
 }
 
-static int ttrek_PopulateUseFlagsListFromHashTable(Tcl_Interp *interp, Tcl_HashTable *ht, Tcl_Obj *list_ptr) {
+int ttrek_PopulateUseFlagsListFromHashTable(Tcl_Interp *interp, Tcl_HashTable *ht, Tcl_Obj *list_ptr) {
 
     Tcl_HashSearch search;
     Tcl_HashEntry *entry = Tcl_FirstHashEntry(ht, &search);
@@ -135,7 +151,7 @@ int ttrek_AddUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
         Tcl_SetHashValue(entry, INT2PTR(polarity));
     }
 
-    Tcl_Obj * out_list_ptr = Tcl_NewListObj(0, NULL);
+    Tcl_Obj *out_list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(out_list_ptr);
     if (TCL_OK != ttrek_PopulateUseFlagsListFromHashTable(interp, &ht, out_list_ptr)) {
         Tcl_DecrRefCount(list_ptr);
@@ -203,7 +219,7 @@ int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
         }
     }
 
-    Tcl_Obj * out_list_ptr = Tcl_NewListObj(0, NULL);
+    Tcl_Obj *out_list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(out_list_ptr);
     if (TCL_OK != ttrek_PopulateUseFlagsListFromHashTable(interp, &ht, out_list_ptr)) {
         Tcl_DecrRefCount(list_ptr);
@@ -230,5 +246,31 @@ int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
 
     Tcl_DeleteHashTable(&ht);
     Tcl_DecrRefCount(list_ptr);
+    return TCL_OK;
+}
+
+int ttrek_HashTableContainsUseFlag(Tcl_Interp *interp, Tcl_HashTable *ht, const char *use_flag_str, int *contains_p) {
+
+    *contains_p = 0;
+
+    int polarity = 0;
+    if (use_flag_str[0] == '+') {
+        polarity = 1;
+    } else if (use_flag_str[0] == '-') {
+        polarity = 0;
+    } else {
+        return TCL_ERROR;
+    }
+    const char *use_flag_name = use_flag_str + 1;
+
+    Tcl_HashEntry *entry = Tcl_FindHashEntry(ht, use_flag_name);
+    if (entry) {
+        int entry_polarity = PTR2INT(Tcl_GetHashValue(entry));
+        if (entry_polarity == polarity) {
+            *contains_p = 1;
+            return TCL_OK;
+        }
+    }
+
     return TCL_OK;
 }

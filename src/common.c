@@ -566,10 +566,6 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
     state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
 
-    state_ptr->use_flags_ptr = Tcl_NewListObj(0, NULL);
-    Tcl_IncrRefCount(state_ptr->use_flags_ptr);
-    ttrek_GetUseFlags(interp, state_ptr->spec_root, state_ptr->use_flags_ptr);
-
     // print all refCount for all dir_ptr in state_ptr
     DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
         state_ptr->project_home_dir_ptr->refCount));
@@ -617,7 +613,6 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->manifest_json_path_ptr);
-    Tcl_DecrRefCount(state_ptr->use_flags_ptr);
     cJSON_Delete(state_ptr->spec_root);
     cJSON_Delete(state_ptr->lock_root);
     cJSON_Delete(state_ptr->manifest_root);

@@ -20,7 +20,7 @@ static const char install_script_common_static[] = {
     0x00
 };
 
-static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_Obj *use_flags_ptr, const cJSON *json) {
+static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr, const cJSON *json) {
 
     const cJSON *flagJson = cJSON_GetObjectItem(json, "if");
 
@@ -33,15 +33,15 @@ static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_Obj *use_flags_ptr, co
 
         const char *flag_str = cJSON_GetStringValue(flagJson);
 
-        Tcl_Obj **objv;
-        Tcl_Size objc;
-        if (Tcl_ListObjGetElements(NULL, use_flags_ptr, &objc, &objv) == TCL_OK) {
-            for (Tcl_Size i = 0; i < objc; ++i) {
-                if (strcmp(Tcl_GetString(objv[i]), flag_str) == 0) {
-                    DBG2(printf("check flag \"%s\": yes", flag_str));
-                    return 1;
-                }
-            }
+        if (flag_str == NULL) {
+            SetResult("error while parsing \"if\" property in json");
+            return -1;
+        }
+
+        int contains_p;
+        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, flag_str, &contains_p)) {
+            SetResult("error while checking if a flag exists");
+            return -1;
         }
 
         DBG2(printf("check flag \"%s\": no", flag_str));
@@ -222,7 +222,7 @@ static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultLis
 
 #define APPEND_CMD(x) ttrek_SpecToObj_AppendCommand(interp, resultList, (x));
 
-#define DEFINE_COMMAND(x) static int ttrek_SpecToObj_##x(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *use_flags_ptr, Tcl_Obj *resultList)
+#define DEFINE_COMMAND(x) static int ttrek_SpecToObj_##x(Tcl_Interp *interp, const cJSON *opts, Tcl_HashTable *use_flags_ht_ptr, Tcl_Obj *resultList)
 
 DEFINE_COMMAND(EnvVariable) {
 
@@ -485,7 +485,7 @@ DEFINE_COMMAND(Autogen) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
         if (is_continue == -1) {
             Tcl_DecrRefCount(option_prefix);
             Tcl_BounceRefCount(cmd);
@@ -559,7 +559,7 @@ DEFINE_COMMAND(Configure) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
         if (is_continue == -1) {
             Tcl_DecrRefCount(option_prefix);
             Tcl_BounceRefCount(cmd);
@@ -624,7 +624,7 @@ DEFINE_COMMAND(CmakeConfig) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
         if (is_continue == -1) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
@@ -689,7 +689,7 @@ DEFINE_COMMAND(Make) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
         if (is_continue == -1) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
@@ -783,7 +783,7 @@ DEFINE_COMMAND(MakeInstall) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
         if (is_continue == -1) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
@@ -840,12 +840,12 @@ DEFINE_COMMAND(CmakeInstall) {
 }
 
 
-Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_Obj *use_flags_ptr) {
+Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr) {
 
     static const struct {
         const char *cmd;
         const char *stage;
-        int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *use_flags_ptr, Tcl_Obj *resultList);
+        int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_HashTable *use_flags_ht_ptr, Tcl_Obj *resultList);
     } commands[] = {
         {"download",       "1", ttrek_SpecToObj_Download},
         {"git",            "1", ttrek_SpecToObj_Git},
@@ -868,7 +868,7 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_Obj *use_flags_ptr
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, cmd);
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, cmd);
         if (is_continue == -1) {
             goto error;
         }
@@ -900,7 +900,7 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_Obj *use_flags_ptr
             Tcl_ListObjAppendElement(interp, resultList, stageCmd);
         }
 
-        if (commands[cmdType].handler(interp, cmd, use_flags_ptr, resultList) != TCL_OK) {
+        if (commands[cmdType].handler(interp, cmd, use_flags_ht_ptr, resultList) != TCL_OK) {
             goto error;
         }
 
@@ -915,10 +915,10 @@ error:
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
     const char *package_version, const char *project_build_dir,
-    const char *project_install_dir, cJSON *spec, Tcl_Obj *use_flags_ptr)
+    const char *project_install_dir, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr)
 {
 
-    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ptr);
+    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ht_ptr);
     if (install_specific == NULL) {
         return NULL;
     }
