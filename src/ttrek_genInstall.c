@@ -20,7 +20,9 @@ static const char install_script_common_static[] = {
     0x00
 };
 
-static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr, const cJSON *json) {
+static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
+                                  const cJSON *json, int *result)
+{
 
     const cJSON *flagJson = cJSON_GetObjectItem(json, "if");
 
@@ -28,29 +30,29 @@ static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_h
 
         if (!cJSON_IsString(flagJson)) {
             SetResult("\"if\" property in json is not a string");
-            return -1;
+            return TCL_ERROR;
         }
 
         const char *flag_str = cJSON_GetStringValue(flagJson);
 
         if (flag_str == NULL) {
             SetResult("error while parsing \"if\" property in json");
-            return -1;
+            return TCL_ERROR;
         }
 
-        int contains_p;
-        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, flag_str, &contains_p)) {
+        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, flag_str, result)) {
             SetResult("error while checking if a flag exists");
-            return -1;
+            return TCL_ERROR;
         }
 
-        DBG2(printf("check flag \"%s\": no", flag_str));
-        return 0;
+        DBG2(printf("check flag \"%s\": %s", flag_str, (*result ? "yes" : "no")));
+        return TCL_OK;
 
     }
 
     // If no flags are defined, consider the flag enabled
-    return 1;
+    *result = 1;
+    return TCL_OK;
 
 }
 
@@ -485,8 +487,8 @@ DEFINE_COMMAND(Autogen) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
-        if (is_continue == -1) {
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
             Tcl_DecrRefCount(option_prefix);
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
@@ -559,8 +561,8 @@ DEFINE_COMMAND(Configure) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
-        if (is_continue == -1) {
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
             Tcl_DecrRefCount(option_prefix);
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
@@ -624,8 +626,8 @@ DEFINE_COMMAND(CmakeConfig) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
-        if (is_continue == -1) {
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
         }
@@ -689,8 +691,8 @@ DEFINE_COMMAND(Make) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
-        if (is_continue == -1) {
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
         }
@@ -783,8 +785,8 @@ DEFINE_COMMAND(MakeInstall) {
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option);
-        if (is_continue == -1) {
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
         }
@@ -868,8 +870,9 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_fla
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
 
-        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, cmd);
-        if (is_continue == -1) {
+
+        int is_continue;
+        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, cmd, &is_continue) != TCL_OK) {
             goto error;
         }
         if (!is_continue) {
