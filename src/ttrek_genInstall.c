@@ -5,7 +5,9 @@
  */
 
 #include "common.h"
+#include "ttrek_useflags.h"
 #include <string.h>
+#include <ctype.h>
 #include <stdarg.h>
 
 static const char install_script_common_dynamic[] = {
@@ -17,6 +19,40 @@ static const char install_script_common_static[] = {
 #include "install_common_static.sh.h"
     0x00
 };
+
+static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_Obj *use_flags_ptr, const cJSON *json) {
+
+    const cJSON *flagJson = cJSON_GetObjectItem(json, "if");
+
+    if (flagJson != NULL) {
+
+        if (!cJSON_IsString(flagJson)) {
+            SetResult("\"if\" property in json is not a string");
+            return -1;
+        }
+
+        const char *flag_str = cJSON_GetStringValue(flagJson);
+
+        Tcl_Obj **objv;
+        Tcl_Size objc;
+        if (Tcl_ListObjGetElements(NULL, use_flags_ptr, &objc, &objv) == TCL_OK) {
+            for (Tcl_Size i = 0; i < objc; ++i) {
+                if (strcmp(Tcl_GetString(objv[i]), flag_str) == 0) {
+                    DBG2(printf("check flag \"%s\": yes", flag_str));
+                    return 1;
+                }
+            }
+        }
+
+        DBG2(printf("check flag \"%s\": no", flag_str));
+        return 0;
+
+    }
+
+    // If no flags are defined, consider the flag enabled
+    return 1;
+
+}
 
 static Tcl_Obj *ttrek_StringToSingleQuotedObj(const char *str, Tcl_Size len) {
     if (len < 0) {
@@ -91,6 +127,48 @@ static Tcl_Obj *ttrek_ObjectToDoubleQuotedObj(Tcl_Obj *obj) {
     return rc;
 }
 
+static int ttrek_ValidateShellVariableName(Tcl_Interp *interp, Tcl_Obj *obj) {
+
+    Tcl_Size len;
+    const char *str = Tcl_GetStringFromObj(obj, &len);
+
+    // empty string is invalid shell variable name
+    if (len < 1) {
+        DBG2(printf("return false (string is empty)"));
+        if (interp != NULL) {
+            SetResult("shell variable name cannot be an empty string");
+        }
+        return 0;
+    }
+
+    // Check if the first character is a letter or an underscore
+    if (!isalpha(str[0]) && str[0] != '_') {
+        DBG2(printf("return false (first character is invalid)"));
+        if (interp != NULL) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("the first character in"
+                " the variable name \"%s\" is invalid", str));
+        }
+        return 0;
+    }
+
+    // Check the rest of the string
+    for (Tcl_Size i = 1; i < len; i++) {
+        if (!isalnum(str[i]) && str[i] != '_') {
+            DBG2(printf("return false (character at index %" TCL_SIZE_MODIFIER
+                "d is invalid)", i));
+            if (interp != NULL) {
+                Tcl_SetObjResult(interp, Tcl_ObjPrintf("character at index %"
+                    TCL_SIZE_MODIFIER "d in the variable name \"%s\" is invalid",
+                    i, str));
+            }
+            return 0;
+        }
+    }
+
+    return 1;
+
+}
+
 static Tcl_Obj *ttrek_cJSONStringToObject(const cJSON *json, const char *key) {
     const cJSON *obj = cJSON_GetObjectItem(json, key);
     if (obj == NULL || !cJSON_IsString(obj)) {
@@ -144,7 +222,96 @@ static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultLis
 
 #define APPEND_CMD(x) ttrek_SpecToObj_AppendCommand(interp, resultList, (x));
 
-static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+#define DEFINE_COMMAND(x) static int ttrek_SpecToObj_##x(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *use_flags_ptr, Tcl_Obj *resultList)
+
+DEFINE_COMMAND(EnvVariable) {
+
+    Tcl_Obj *cmd;
+
+    static const char *const op_modes[] = {
+        "set", "append", "prepend", "unset",
+        NULL
+    };
+
+    enum op_modes {
+        OP_ENV_SET, OP_ENV_APPEND, OP_ENV_PREPEND, OP_ENV_UNSET
+    };
+
+    int op_mode;
+
+    Tcl_Obj *op_mode_ptr = ttrek_cJSONStringToObject(opts, "op");
+    if (op_mode_ptr == NULL) {
+        // The default mode is: append
+        op_mode = OP_ENV_APPEND;
+    } else {
+        int res = Tcl_GetIndexFromObj(interp, op_mode_ptr, op_modes,
+            "operation mode for environment variable", 0, &op_mode);
+        Tcl_BounceRefCount(op_mode_ptr);
+        if (res != TCL_OK) {
+            return TCL_ERROR;
+        }
+    }
+
+    Tcl_Obj *name = ttrek_cJSONStringToObject(opts, "name");
+    if (name == NULL) {
+        SetResult("error while parsing \"env_variable\" cmd: no name or name"
+            " is not a string");
+        return TCL_ERROR;
+    }
+
+    if (!ttrek_ValidateShellVariableName(interp, name)) {
+        Tcl_BounceRefCount(name);
+        return TCL_ERROR;
+    }
+
+    if (op_mode == OP_ENV_UNSET) {
+
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "unset %s", 1, name);
+        APPEND_CMD(cmd);
+
+    } else {
+
+        // Make sure we have a value for set/application modes of operations.
+        Tcl_Obj *value = ttrek_cJSONStringToObject(opts, "value");
+        if (value == NULL) {
+            SetResult("error while parsing \"env_variable\" cmd: no value or value"
+                " is not a string for set/append/prepend operation");
+            Tcl_BounceRefCount(name);
+            return TCL_ERROR;
+        }
+
+        // increment the reference count for the name variable, since we are using it twice
+        Tcl_IncrRefCount(name);
+
+        if (op_mode == OP_ENV_SET) {
+            cmd = ttrek_AppendFormatToObj(interp, NULL, "%s=%s", 2, name, odq(value));
+        } else {
+            // op_mode == OP_ENV_APPEND or OP_ENV_PREPEND
+            Tcl_Obj *var_copy = Tcl_ObjPrintf("${%s}", Tcl_GetString(name));
+            if (op_mode == OP_ENV_APPEND) {
+                cmd = ttrek_AppendFormatToObj(interp, NULL, "%s=%s' '%s", 3, name,
+                    odq(var_copy), odq(value));
+            } else {
+                // op_mode == OP_ENV_PREPEND
+                cmd = ttrek_AppendFormatToObj(interp, NULL, "%s=%s' '%s", 3, name,
+                    odq(value), odq(var_copy));
+            }
+        }
+
+        APPEND_CMD(cmd);
+
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "export %s", 1, name);
+        APPEND_CMD(cmd);
+
+        Tcl_DecrRefCount(name);
+
+    }
+
+    return TCL_OK;
+
+}
+
+DEFINE_COMMAND(Download) {
 
     Tcl_Obj *cmd;
 
@@ -167,7 +334,7 @@ static int ttrek_SpecToObj_Download(Tcl_Interp *interp, const cJSON *opts, Tcl_O
 
 }
 
-static int ttrek_SpecToObj_Patch(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Patch) {
 
     Tcl_Obj *cmd;
 
@@ -204,7 +371,7 @@ static int ttrek_SpecToObj_Patch(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj 
 
 }
 
-static int ttrek_SpecToObj_Git(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Git) {
 
     Tcl_Obj *cmd;
 
@@ -248,7 +415,7 @@ static int ttrek_SpecToObj_Git(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *r
 
 }
 
-static int ttrek_SpecToObj_Unpack(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Unpack) {
 
     Tcl_Obj *cmd;
 
@@ -265,7 +432,7 @@ static int ttrek_SpecToObj_Unpack(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj
 
 }
 
-static int ttrek_SpecToObj_Cd(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Cd) {
 
     Tcl_Obj *cmd;
 
@@ -280,7 +447,7 @@ static int ttrek_SpecToObj_Cd(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *re
 
 }
 
-static int ttrek_SpecToObj_Autogen(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Autogen) {
 
     Tcl_Obj *cmd;
 
@@ -318,6 +485,16 @@ static int ttrek_SpecToObj_Autogen(Tcl_Interp *interp, const cJSON *opts, Tcl_Ob
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        if (is_continue == -1) {
+            Tcl_DecrRefCount(option_prefix);
+            Tcl_BounceRefCount(cmd);
+            return TCL_ERROR;
+        }
+        if (!is_continue) {
+            continue;
+        }
+
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
@@ -347,7 +524,7 @@ skip_options:
 
 }
 
-static int ttrek_SpecToObj_Configure(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Configure) {
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
@@ -382,6 +559,16 @@ static int ttrek_SpecToObj_Configure(Tcl_Interp *interp, const cJSON *opts, Tcl_
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        if (is_continue == -1) {
+            Tcl_DecrRefCount(option_prefix);
+            Tcl_BounceRefCount(cmd);
+            return TCL_ERROR;
+        }
+        if (!is_continue) {
+            continue;
+        }
+
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
@@ -411,7 +598,7 @@ skip_options:
 
 }
 
-static int ttrek_SpecToObj_CmakeConfig(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(CmakeConfig) {
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
@@ -436,6 +623,15 @@ static int ttrek_SpecToObj_CmakeConfig(Tcl_Interp *interp, const cJSON *opts, Tc
 
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
+
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        if (is_continue == -1) {
+            Tcl_BounceRefCount(cmd);
+            return TCL_ERROR;
+        }
+        if (!is_continue) {
+            continue;
+        }
 
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
@@ -463,7 +659,7 @@ skip_options:
 
 }
 
-static int ttrek_SpecToObj_Make(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(Make) {
 
     Tcl_Obj *cmd = Tcl_NewStringObj("make", -1);
 
@@ -493,6 +689,15 @@ static int ttrek_SpecToObj_Make(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
 
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        if (is_continue == -1) {
+            Tcl_BounceRefCount(cmd);
+            return TCL_ERROR;
+        }
+        if (!is_continue) {
+            continue;
+        }
+
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
             continue;
@@ -519,7 +724,7 @@ skip_options:
 
 }
 
-static int ttrek_SpecToObj_CmakeMake(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(CmakeMake) {
 
     Tcl_Obj *cmd;
 
@@ -558,7 +763,7 @@ static int ttrek_SpecToObj_CmakeMake(Tcl_Interp *interp, const cJSON *opts, Tcl_
 
 }
 
-static int ttrek_SpecToObj_MakeInstall(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(MakeInstall) {
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
@@ -577,6 +782,15 @@ static int ttrek_SpecToObj_MakeInstall(Tcl_Interp *interp, const cJSON *opts, Tc
 
     const cJSON *option;
     cJSON_ArrayForEach(option, options) {
+
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, option);
+        if (is_continue == -1) {
+            Tcl_BounceRefCount(cmd);
+            return TCL_ERROR;
+        }
+        if (!is_continue) {
+            continue;
+        }
 
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
@@ -604,7 +818,7 @@ skip_options:
 
 }
 
-static int ttrek_SpecToObj_CmakeInstall(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList) {
+DEFINE_COMMAND(CmakeInstall) {
 
     Tcl_Obj *cmd;
 
@@ -626,18 +840,19 @@ static int ttrek_SpecToObj_CmakeInstall(Tcl_Interp *interp, const cJSON *opts, T
 }
 
 
-Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec) {
+Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_Obj *use_flags_ptr) {
 
     static const struct {
         const char *cmd;
         const char *stage;
-        int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *resultList);
+        int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_Obj *use_flags_ptr, Tcl_Obj *resultList);
     } commands[] = {
         {"download",       "1", ttrek_SpecToObj_Download},
         {"git",            "1", ttrek_SpecToObj_Git},
         {"unpack",         "1", ttrek_SpecToObj_Unpack},
         {"patch",          "1", ttrek_SpecToObj_Patch},
         {"cd",            NULL, ttrek_SpecToObj_Cd},
+        {"env_variable",  NULL, ttrek_SpecToObj_EnvVariable},
         {"autogen",        "2", ttrek_SpecToObj_Autogen},
         {"configure",      "2", ttrek_SpecToObj_Configure},
         {"cmake_config",   "2", ttrek_SpecToObj_CmakeConfig},
@@ -652,6 +867,14 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec) {
 
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
+
+        int is_continue = ttrek_IsUseFlagEnabled(interp, use_flags_ptr, cmd);
+        if (is_continue == -1) {
+            goto error;
+        }
+        if (!is_continue) {
+            continue;
+        }
 
         const cJSON *cmdTypeJson = cJSON_GetObjectItem(cmd, "cmd");
         if (cmdTypeJson == NULL) {
@@ -677,7 +900,7 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec) {
             Tcl_ListObjAppendElement(interp, resultList, stageCmd);
         }
 
-        if (commands[cmdType].handler(interp, cmd, resultList) != TCL_OK) {
+        if (commands[cmdType].handler(interp, cmd, use_flags_ptr, resultList) != TCL_OK) {
             goto error;
         }
 
@@ -692,10 +915,10 @@ error:
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
     const char *package_version, const char *project_build_dir,
-    const char *project_install_dir, cJSON *spec)
+    const char *project_install_dir, cJSON *spec, Tcl_Obj *use_flags_ptr)
 {
 
-    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec);
+    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ptr);
     if (install_specific == NULL) {
         return NULL;
     }
