@@ -76,7 +76,7 @@ foreach (HELP_TOPIC ${HELP_TOPICS})
     list(APPEND HELP_TOPICS_H ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h)
     add_custom_command(
       OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
-      COMMAND cat $< | sed -e 's/"/\\\\"/g' | sed -e :a -e '/$$/N\; s/\\n/\\\\n/\; ta' | sed -e 's/.*/\\"&\\"/' >"$@"
+      COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC} | sed -e 's/"/\\\\"/g' | sed -e :a -e '/$$/N\; s/\\n/\\\\n/\; ta' | sed -e 's/.*/\\"&\\"/' >${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}
     )
 endforeach()
