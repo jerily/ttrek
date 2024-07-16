@@ -329,6 +329,10 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
     // add installs to initial execution plan
     for (const auto &install: installs) {
+        // if use flag, then skip
+        if (install.find("use:") != std::string::npos) {
+            continue;
+        }
         ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, execution_plan);
     }
 
