@@ -14,8 +14,29 @@
 #include <sys/file.h>
 #include <time.h>
 #include "cjson/cJSON.h"
+#include <openssl/sha.h>
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
+
+Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr) {
+    Tcl_Size size;
+    unsigned char *str = Tcl_GetByteArrayFromObj(data_ptr, &size);
+    DBG2(printf("get SHA256 hash from data size: %" TCL_SIZE_MODIFIER "d", size));
+
+    unsigned char hash_bin[SHA256_DIGEST_LENGTH];
+    SHA256(str, size, hash_bin);
+
+    const char *hex = "0123456789abcdef";
+    char hash_hex[SHA256_DIGEST_LENGTH * 2];
+    for (int i = 0, j = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        hash_hex[j++] = hex[(hash_bin[i] >> 4) & 0xF];
+        hash_hex[j++] = hex[hash_bin[i] & 0xF];
+    }
+
+    Tcl_Obj *rc = Tcl_NewStringObj(hash_hex, SHA256_DIGEST_LENGTH * 2);
+    DBG2(printf("return: %s", Tcl_GetString(rc)));
+    return rc;
+}
 
 Tcl_Obj *ttrek_GetHomeDirectory() {
     const char *homeDir = getenv("HOME");
