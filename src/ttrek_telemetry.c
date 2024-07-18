@@ -19,8 +19,6 @@
 #include <sys/utsname.h>
 #endif
 
-#include <openssl/sha.h>
-
 static Tcl_Obj *machineIdObj = NULL;
 static int isEnvironmentRegistered = 0;
 static char *machineIdBaseFile = "machine-id";
@@ -80,26 +78,6 @@ static int ttrek_TelemetryIsFileExist(const char *path) {
    int rc = (Tcl_FSAccess(pathObj, F_OK) == -1 ? 0 : 1);
    Tcl_DecrRefCount(pathObj);
    return rc;
-}
-
-static Tcl_Obj *ttrek_TelemetryGetSHA256(Tcl_Obj *data) {
-    Tcl_Size size;
-    unsigned char *str = Tcl_GetByteArrayFromObj(data, &size);
-    DBG2(printf("get SHA256 hash from data size: %" TCL_SIZE_MODIFIER "d", size));
-
-    unsigned char hash_bin[SHA256_DIGEST_LENGTH];
-    SHA256(str, size, hash_bin);
-
-    const char *hex = "0123456789abcdef";
-    char hash_hex[SHA256_DIGEST_LENGTH * 2];
-    for (int i = 0, j = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        hash_hex[j++] = hex[(hash_bin[i] >> 4) & 0xF];
-        hash_hex[j++] = hex[hash_bin[i] & 0xF];
-    }
-
-    Tcl_Obj *rc = Tcl_NewStringObj(hash_hex, SHA256_DIGEST_LENGTH * 2);
-    DBG2(printf("return: %s", Tcl_GetString(rc)));
-    return rc;
 }
 
 static int ttrek_TelemetryIsDockerEnvironment() {
@@ -214,7 +192,7 @@ done:
     // The real machine ID may be security sensitive information that
     // should not be shared outside the machine. To avoid disclosure of
     // this information, we will use its hash.
-    Tcl_Obj *rc = ttrek_TelemetryGetSHA256(machineIdRaw);
+    Tcl_Obj *rc = ttrek_GetHashSHA256(machineIdRaw);
     Tcl_DecrRefCount(machineIdRaw);
     DBG2(printf("return: ok"));
     return rc;
