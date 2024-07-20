@@ -70,6 +70,7 @@ static const char *VERSION = XSTR(PROJECT_VERSION);
 static const char *REGISTRY_URL = TTREK_REGISTRY_BASE_URL "/registry";
 static const char *TELEMETRY_REGISTER_URL = TTREK_REGISTRY_BASE_URL "/telemetry/register";
 static const char *TELEMETRY_COLLECT_URL = TTREK_REGISTRY_BASE_URL "/telemetry/collect";
+static const char *DOWNLOAD_URL = TTREK_REGISTRY_BASE_URL "/download";
 static const char *SPEC_JSON_FILE = "ttrek.json";
 static const char *LOCK_JSON_FILE = "ttrek-lock.json";
 static const char *MANIFEST_JSON_FILE = "ttrek-manifest.json";
@@ -149,6 +150,8 @@ int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *l
 
 int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char *project_name, const char *project_version);
 int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr);
+
+Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
 
 #ifdef __cplusplus
 }
