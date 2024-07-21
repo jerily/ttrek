@@ -114,6 +114,18 @@ int ttrek_PopulateUseFlagsListFromHashTable(Tcl_Interp *interp, Tcl_HashTable *h
     return TCL_OK;
 }
 
+int ttrek_PopulateIUseFlagsListFromNode(Tcl_Interp *interp, cJSON *use_node, Tcl_Obj *list_ptr) {
+    for (int i = 0; i < cJSON_GetArraySize(use_node); i++) {
+        cJSON *use_flag_node = cJSON_GetArrayItem(use_node, i);
+        Tcl_Obj *use_flag = Tcl_NewStringObj(use_flag_node->valuestring, -1);
+        if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, use_flag)) {
+            return TCL_ERROR;
+        }
+    }
+
+    return TCL_OK;
+}
+
 int ttrek_AddUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
@@ -269,6 +281,33 @@ int ttrek_HashTableContainsUseFlag(Tcl_Interp *interp, Tcl_HashTable *ht, const 
         if (entry_polarity == polarity) {
             *contains_p = 1;
             return TCL_OK;
+        }
+    }
+
+    return TCL_OK;
+}
+
+int ttrek_HashTableIntersectionWithIUse(Tcl_Interp *interp, Tcl_HashTable *ht, Tcl_Obj *iuse_list_ptr, Tcl_Obj *result_list_ptr) {
+
+    Tcl_Size iuse_list_len;
+    if (TCL_OK != Tcl_ListObjLength(interp, iuse_list_ptr, &iuse_list_len)) {
+        return TCL_ERROR;
+    }
+
+    for (Tcl_Size i = 0; i < iuse_list_len; i++) {
+        Tcl_Obj *elem;
+        if (TCL_OK != Tcl_ListObjIndex(interp, iuse_list_ptr, i, &elem)) {
+            return TCL_ERROR;
+        }
+        const char *use_flag_str = Tcl_GetString(elem);
+        int contains = 0;
+        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, ht, use_flag_str, &contains)) {
+            return TCL_ERROR;
+        }
+        if (contains) {
+            if (TCL_OK != Tcl_ListObjAppendElement(interp, result_list_ptr, elem)) {
+                return TCL_ERROR;
+            }
         }
     }
 

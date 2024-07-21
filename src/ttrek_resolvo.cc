@@ -128,6 +128,48 @@ static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
     }
 }
 
+static void
+ttrek_ParseUseFlagsFromLockFile(cJSON *lock_root,
+                                std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
+                                std::map<std::string, std::set<UseFlag>> &use_flags_map) {
+
+    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
+    if (!packages) {
+        return;
+    }
+
+    for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
+        cJSON *package = cJSON_GetArrayItem(packages, i);
+        std::string package_name = package->string;
+
+        if (cJSON_HasObjectItem(package, "iuse")) {
+            cJSON *iuse = cJSON_GetObjectItem(package, "iuse");
+            std::set<UseFlag> iuse_flags;
+            for (int j = 0; j < cJSON_GetArraySize(iuse); j++) {
+                cJSON *iuse_item = cJSON_GetArrayItem(iuse, j);
+                std::string iuse_flag_str = iuse_item->string;
+                UseFlag iuse_flag(iuse_flag_str);
+                iuse_flags.insert(iuse_flag);
+            }
+            iuse_flags_map[package_name] = iuse_flags;
+        }
+
+        if (cJSON_HasObjectItem(package, "use")) {
+            cJSON *use = cJSON_GetObjectItem(package, "use");
+            std::set<UseFlag> use_flags;
+            for (int j = 0; j < cJSON_GetArraySize(use); j++) {
+                cJSON *use_item = cJSON_GetArrayItem(use, j);
+                std::string use_flag_str = use_item->string;
+                UseFlag use_flag(use_flag_str);
+                use_flags.insert(use_flag);
+            }
+            use_flags_map[package_name] = use_flags;
+        }
+
+    }
+
+}
+
 static void ttrek_ParseUseFlagsFromSpecFile(ttrek_state_t *state_ptr, std::unordered_set<UseFlag> &use_flags) {
     cJSON *use = cJSON_GetObjectItem(state_ptr->spec_root, "useFlags");
     if (use) {
@@ -271,10 +313,64 @@ struct InstallSpec {
     std::string direct_version_requirement;
     int package_name_exists_in_lock_p;
     int exact_package_exists_in_lock_p;
+    int exact_use_flags_p;
 };
+
+static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
+                                                std::set<UseFlag> &iuse_flags,
+                                                std::set<UseFlag> &use_flags) {
+
+    Tcl_HashTable iuse_flags_ht;
+    Tcl_InitHashTable(&iuse_flags_ht, TCL_STRING_KEYS);
+    for (const auto &iuse_flag: iuse_flags) {
+        auto iuse_flag_name = iuse_flag.name.c_str();
+        auto iuse_flag_polarity = iuse_flag.polarity ? "1" : "0";
+
+        // create hash table entry for iuse_flag_name and set the value to iuse_flag_polarity
+
+
+        int newEntry = 0;
+        Tcl_HashEntry *entry = Tcl_CreateHashEntry(&iuse_flags_ht, iuse_flag_name, &newEntry);
+        Tcl_SetHashValue(entry, INT2PTR(iuse_flag_polarity));
+
+
+    }
+
+
+    Tcl_Size count = 0;
+    for (const auto &use_flag: use_flags) {
+        auto use_flag_str = use_flag.to_string();
+
+        int iuse_contains_p;
+        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, &iuse_flags_ht, use_flag_str.c_str(), &iuse_contains_p)) {
+            return false;
+        }
+
+        if (iuse_contains_p) {
+            int use_contains_p;
+            if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, use_flag_str.c_str(), &use_contains_p)) {
+                return false;
+            }
+            if (!use_contains_p) {
+                return false;
+            }
+        }
+
+        count++;
+    }
+
+    if (count != use_flags_ht_ptr->numEntries) {
+        return false;
+    }
+
+    return true;
+}
 
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install,
                                             const std::map<std::string, std::string> &requirements,
+                                            Tcl_HashTable *use_flags_ht_ptr,
+                                            std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
+                                            std::map<std::string, std::set<UseFlag>> &use_flags_map,
                                             std::vector<InstallSpec> &execution_plan) {
     auto index = install.find('='); // package_name=package_version
     auto package_name = install.substr(0, index);
@@ -284,6 +380,10 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
+
+    bool exact_use_flags_p = ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, use_flags_ht_ptr,
+                                                                 iuse_flags_map[package_name],
+                                                                 use_flags_map[package_name]);
 
     int in_requirements_p = requirements.find(package_name) != requirements.end();
     auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
@@ -302,7 +402,8 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
             package_version,
             direct_version_requirement,
             package_name_exists_in_lock_p,
-            exact_package_exists_in_lock_p};
+            exact_package_exists_in_lock_p,
+            exact_use_flags_p};
     execution_plan.push_back(install_spec);
 }
 
@@ -310,6 +411,7 @@ static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                             const std::map<std::string, std::string> &requirements,
                             const std::map<std::string, std::unordered_set<std::string>> &dependencies_from_solver_map,
+                            Tcl_HashTable *use_flags_ht_ptr,
                             std::vector<InstallSpec> &execution_plan) {
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
@@ -327,13 +429,18 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         enhanced_requirements[requirement.first] = requirement.second;
     }
 
+    std::map<std::string, std::set<UseFlag>> iuse_flags_map;
+    std::map<std::string, std::set<UseFlag>> use_flags_map;
+    ttrek_ParseUseFlagsFromLockFile(state_ptr->lock_root, iuse_flags_map, use_flags_map);
+
     // add installs to initial execution plan
     for (const auto &install: installs) {
         // if use flag, then skip
         if (install.find("use:") != std::string::npos) {
             continue;
         }
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, execution_plan);
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, use_flags_ht_ptr,
+                                        iuse_flags_map, use_flags_map, execution_plan);
     }
 
     // check there is at least one direct install
@@ -432,7 +539,8 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
         // set ALREADY_INSTALLED if the package is already installed and it is a DEP_INSTALL
         for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p) {
+            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p &&
+                install_spec.exact_use_flags_p) {
                 install_spec.install_type = ALREADY_INSTALLED;
                 reverse_dependencies_map.erase(install_spec.package_name);
                 dependencies_map.erase(install_spec.package_name);
@@ -463,12 +571,17 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
         if (install_spec.install_type == RDEP_INSTALL) {
             std::cout << " (reverse dependency)";
         }
+
+        if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p && !install_spec.exact_use_flags_p) {
+            std::cout << " (USE flags changed)";
+        }
+
         std::cout << std::endl;
     }
 }
 
 
-static std::string ttrek_ReplaceAll(std::string inputStr, const std::string& from, const std::string& to) {
+static std::string ttrek_ReplaceAll(std::string inputStr, const std::string &from, const std::string &to) {
     size_t startPos = 0;
     std::string result;
     size_t fromLen = from.length();
@@ -483,7 +596,7 @@ static std::string ttrek_ReplaceAll(std::string inputStr, const std::string& fro
     return result;
 }
 
-static const std::string & ttrek_RewriteUnsatMessage(const std::string &message) {
+static const std::string &ttrek_RewriteUnsatMessage(const std::string &message) {
     // replace all use:* substrings with "use flag"
     // for example, use:threads 1.2.3 -> use flag +threads
     // for example, use:threads 0.0.0 -> use flag -threads
@@ -552,15 +665,33 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         std::cout << ttrek_RewriteUnsatMessage(message) << std::endl;
     } else {
 
+        Tcl_Obj *use_flags_list_ptr = Tcl_NewListObj(0, NULL);
+        Tcl_IncrRefCount(use_flags_list_ptr);
+        if (TCL_OK != ttrek_GetUseFlags(interp, state_ptr->spec_root, use_flags_list_ptr)) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            return TCL_ERROR;
+        }
+
+        Tcl_HashTable use_flags_ht;
+        Tcl_InitHashTable(&use_flags_ht, TCL_STRING_KEYS);
+        if (TCL_OK != ttrek_PopulateHashTableFromUseFlagsList(interp, use_flags_list_ptr, &use_flags_ht)) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&use_flags_ht);
+            return TCL_ERROR;
+        }
+
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;
-        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), execution_plan);
+        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), &use_flags_ht,
+                                    execution_plan);
 
         // print the execution plan
 
         if (execution_plan.empty()) {
             *abort = 1;
             std::cout << "Nothing to install!" << std::endl;
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&use_flags_ht);
             return TCL_OK;
         }
 
@@ -574,6 +705,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             std::getline(std::cin, answer);
             if (answer != "y") {
                 *abort = 1;
+                Tcl_DecrRefCount(use_flags_list_ptr);
+                Tcl_DeleteHashTable(&use_flags_ht);
                 return TCL_OK;
             }
         }
@@ -583,6 +716,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         // ensure the directory skeleton exists
         if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
             fprintf(stderr, "error: could not ensure directory skeleton exists\n");
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&use_flags_ht);
             return TCL_ERROR;
         }
 
@@ -600,24 +735,10 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         struct utsname sysinfo;
         if (uname(&sysinfo)) {
             fprintf(stderr, "error: could not get system information\n");
-            return TCL_ERROR;
-        }
-
-        Tcl_Obj *use_flags_list_ptr = Tcl_NewListObj(0, NULL);
-        Tcl_IncrRefCount(use_flags_list_ptr);
-        if (TCL_OK != ttrek_GetUseFlags(interp, state_ptr->spec_root, use_flags_list_ptr)) {
-            Tcl_DecrRefCount(use_flags_list_ptr);
-            return TCL_ERROR;
-        }
-
-        Tcl_HashTable use_flags_ht;
-        Tcl_InitHashTable(&use_flags_ht, TCL_STRING_KEYS);
-        if (TCL_OK != ttrek_PopulateHashTableFromUseFlagsList(interp, use_flags_list_ptr, &use_flags_ht)) {
             Tcl_DecrRefCount(use_flags_list_ptr);
             Tcl_DeleteHashTable(&use_flags_ht);
             return TCL_ERROR;
         }
-
 
         // perform the installation
         std::vector<InstallSpec> installs_from_lock_file_sofar;
@@ -633,13 +754,13 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, &use_flags_ht, package_name.c_str(),
-                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
-                direct_version_requirement.c_str(), package_name_exists_in_lock_p,
-                ++package_num_current, package_num_total);
+                                                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
+                                                direct_version_requirement.c_str(), package_name_exists_in_lock_p,
+                                                ++package_num_current, package_num_total);
 
             ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
-                sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),
-                (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
+                                               sysinfo.sysname, sysinfo.machine, (outcome == TCL_OK ? 1 : 0),
+                                               (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
 
             if (TCL_OK != outcome) {
 
@@ -687,7 +808,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     return TCL_OK;
 }
 
-int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int autoremove, int *abort) {
+int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int autoremove,
+                    int *abort) {
 
     std::unordered_set<std::string> uninstalls;
 
@@ -732,7 +854,8 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
             if (it != dependencies_from_lock_map.end()) {
                 for (const auto &dep: it->second) {
                     if (requirements.find(dep) != requirements.end()) {
-                        DBG(std::cout << "cannot uninstall " << dep << " because it is a direct requirement" << std::endl);
+                        DBG(std::cout << "cannot uninstall " << dep << " because it is a direct requirement"
+                                      << std::endl);
                         continue;
                     }
                     if (reverse_dependencies_map.find(dep) != reverse_dependencies_map.end() &&

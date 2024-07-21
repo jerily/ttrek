@@ -10,6 +10,7 @@
 #include "base64.h"
 #include "fsmonitor/fsmonitor.h"
 #include "ttrek_genInstall.h"
+#include "ttrek_useflags.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 #define MAX_PATCH_FILE_SIZE 1048576
@@ -19,6 +20,8 @@ static char STRING_REQUIRES[] = "requires";
 static char STRING_DEPENDENCIES[] = "dependencies";
 static char STRING_PACKAGES[] = "packages";
 static char STRING_FILES[] = "files";
+static char STRING_IUSE[] = "iuse";
+static char STRING_USE[] = "use";
 
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
@@ -60,7 +63,7 @@ static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package
 }
 
 static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
-                                   const char *package_version, cJSON *deps_node) {
+                                   const char *package_version, cJSON *deps_node, Tcl_Obj * iuse_list_ptr, Tcl_Obj * use_list_ptr) {
 
     // add direct requirement to dependencies
     cJSON *deps;
@@ -94,6 +97,33 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
         cJSON_AddStringToObject(reqs_node, dep_name, dep_version_requirement);
     }
     cJSON_AddItemToObject(item_node, STRING_REQUIRES, reqs_node);
+
+
+    // add the use flags to the package
+    Tcl_Size iuse_list_len;
+    Tcl_ListObjLength(NULL, iuse_list_ptr, &iuse_list_len);
+
+    cJSON *iuse_node = cJSON_CreateArray();
+    for (Tcl_Size i = 0; i < iuse_list_len; i++) {
+        Tcl_Obj *use_flag_ptr;
+        Tcl_ListObjIndex(NULL, iuse_list_ptr, i, &use_flag_ptr);
+        cJSON_AddItemToArray(iuse_node, cJSON_CreateString(Tcl_GetString(use_flag_ptr)));
+    }
+
+    cJSON *use_node = cJSON_CreateArray();
+    Tcl_Size use_list_len;
+    Tcl_ListObjLength(NULL, use_list_ptr, &use_list_len);
+
+    for (Tcl_Size i = 0; i < use_list_len; i++) {
+        Tcl_Obj *use_flag_ptr;
+        Tcl_ListObjIndex(NULL, use_list_ptr, i, &use_flag_ptr);
+        cJSON_AddItemToArray(use_node, cJSON_CreateString(Tcl_GetString(use_flag_ptr)));
+    }
+
+    cJSON_AddItemToObject(item_node, STRING_IUSE, iuse_node);
+    cJSON_AddItemToObject(item_node, STRING_USE, use_node);
+
+    // add the package to the packages list
 
     cJSON *packages = cJSON_HasObjectItem(lock_root, STRING_PACKAGES) ? cJSON_GetObjectItem(lock_root, STRING_PACKAGES) : NULL;
     if (!packages) {
@@ -235,23 +265,41 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 //        fprintf(stderr, "file_diff: %s\n", Tcl_GetString(file_diff_ptr));
 //    }
 
+
+    cJSON *iuse_node = cJSON_GetObjectItem(install_spec_root, STRING_IUSE);
+    Tcl_Obj *iuse_list_ptr = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(iuse_list_ptr);
+    Tcl_Obj *use_list_ptr = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(use_list_ptr);
+
+    if (iuse_node) {
+        // populate use flags list from cJSON node
+        ttrek_PopulateIUseFlagsListFromNode(interp, iuse_node, iuse_list_ptr);
+
+        // compute intersection with given use flags
+        ttrek_HashTableIntersectionWithIUse(interp, use_flags_ht_ptr, iuse_list_ptr, use_list_ptr);
+    }
+
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
     if (strncmp(direct_version_requirement, "none", 4) != 0) {
         if (strnlen(direct_version_requirement, 256) > 0) {
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
             ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
-                                   deps_node);
+                                   deps_node, iuse_list_ptr, use_list_ptr);
         } else {
             char package_version_with_caret_op[256];
             snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
             ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, package_version_with_caret_op);
             ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version,
-                                   deps_node);
+                                   deps_node, iuse_list_ptr, use_list_ptr);
         }
     } else {
-        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node);
+        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node, iuse_list_ptr, use_list_ptr);
     }
     ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, fsmonitor_state_ptr->files_diff);
+
+    Tcl_DecrRefCount(iuse_list_ptr);
+    Tcl_DecrRefCount(use_list_ptr);
 
     if (TCL_OK != ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not remove watch on install directory\n");
