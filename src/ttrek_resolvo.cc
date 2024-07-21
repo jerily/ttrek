@@ -347,7 +347,8 @@ static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTabl
 
         if (iuse_contains_p) {
             int use_contains_p;
-            if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, use_flag_str.c_str(), &use_contains_p)) {
+            if (TCL_OK !=
+                ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, use_flag_str.c_str(), &use_contains_p)) {
                 return false;
             }
             if (!use_contains_p) {
@@ -390,7 +391,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     ttrek_install_type_t install_type;
     if (state_ptr->option_force) {
         install_type = DIRECT_INSTALL;
-    } else if (in_requirements_p && !exact_package_exists_in_lock_p) {
+    } else if (in_requirements_p && (!exact_package_exists_in_lock_p || !exact_use_flags_p)) {
         install_type = DIRECT_INSTALL;
     } else {
         install_type = UNKNOWN_INSTALL;
@@ -571,7 +572,8 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
             std::cout << " (reverse dependency)";
         }
 
-        if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p && !install_spec.exact_use_flags_p) {
+        if ((install_spec.install_type == DEP_INSTALL || install_spec.install_type == DIRECT_INSTALL) &&
+            install_spec.exact_package_exists_in_lock_p && !install_spec.exact_use_flags_p) {
             std::cout << " (USE flags changed)";
         }
 
