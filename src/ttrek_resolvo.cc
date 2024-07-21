@@ -142,29 +142,29 @@ ttrek_ParseUseFlagsFromLockFile(cJSON *lock_root,
         cJSON *package = cJSON_GetArrayItem(packages, i);
         std::string package_name = package->string;
 
+        std::set<UseFlag> iuse_flags;
         if (cJSON_HasObjectItem(package, "iuse")) {
             cJSON *iuse = cJSON_GetObjectItem(package, "iuse");
-            std::set<UseFlag> iuse_flags;
             for (int j = 0; j < cJSON_GetArraySize(iuse); j++) {
                 cJSON *iuse_item = cJSON_GetArrayItem(iuse, j);
-                std::string iuse_flag_str = iuse_item->string;
+                std::string iuse_flag_str = iuse_item->valuestring;
                 UseFlag iuse_flag(iuse_flag_str);
                 iuse_flags.insert(iuse_flag);
             }
-            iuse_flags_map[package_name] = iuse_flags;
         }
+        iuse_flags_map[package_name] = iuse_flags;
 
+        std::set<UseFlag> use_flags;
         if (cJSON_HasObjectItem(package, "use")) {
             cJSON *use = cJSON_GetObjectItem(package, "use");
-            std::set<UseFlag> use_flags;
             for (int j = 0; j < cJSON_GetArraySize(use); j++) {
                 cJSON *use_item = cJSON_GetArrayItem(use, j);
-                std::string use_flag_str = use_item->string;
+                std::string use_flag_str = use_item->valuestring;
                 UseFlag use_flag(use_flag_str);
                 use_flags.insert(use_flag);
             }
-            use_flags_map[package_name] = use_flags;
         }
+        use_flags_map[package_name] = use_flags;
 
     }
 
