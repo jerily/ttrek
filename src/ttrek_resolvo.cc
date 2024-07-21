@@ -230,10 +230,10 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
         }
 
         // print result
-        std::cout << "The following packages will be installed:" << std::endl;
-        for (const auto &install: installs) {
-            std::cout << install << std::endl;
-        }
+//        std::cout << "The following packages will be installed:" << std::endl;
+//        for (const auto &install: installs) {
+//            std::cout << install << std::endl;
+//        }
 
         db.topological_sort(installs);
     }
