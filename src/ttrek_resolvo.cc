@@ -302,8 +302,7 @@ typedef enum {
     DIRECT_INSTALL,
     RDEP_INSTALL,
     DEP_INSTALL,
-    ALREADY_INSTALLED,
-    RDEP_OR_DEP_OF_ALREADY_INSTALLED
+    ALREADY_INSTALLED
 } ttrek_install_type_t;
 
 struct InstallSpec {
