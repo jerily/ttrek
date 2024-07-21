@@ -12,7 +12,7 @@ static const char *use_commands[] = {
         "add",
         "del",
         "set",
-        "get",
+        "ls",
         NULL
 };
 
