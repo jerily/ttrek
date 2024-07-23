@@ -24,5 +24,5 @@ mkdir -p ~/my-project
 cd ~/my-project
 <path to source tree>/build/ttrek help
 <path to source tree>/build/ttrek init
-<path to source tree>/build/ttrek install tcl
+<path to source tree>/build/ttrek install twebserver aws-sdk-tcl tink-tcl
 ```
