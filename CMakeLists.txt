@@ -123,6 +123,8 @@ add_executable(${TARGET}
         src/ttrek_help.h
         src/ttrek_help_messages.h
         src/ttrek_useflags.c
+        src/ttrek_buildInstructions.c
+        src/ttrek_buildInstructions.h
 )
 
 # Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:

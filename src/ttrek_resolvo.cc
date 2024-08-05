@@ -806,6 +806,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
 
     }
+
     return TCL_OK;
 }
 
