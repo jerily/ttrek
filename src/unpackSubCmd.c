@@ -100,7 +100,7 @@ int ttrek_UnpackSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     struct archive *ext = NULL;
     struct archive_entry *entry;
     int r;
-    int flags;
+    int flags = 0;
     Tcl_Obj *outputFileName = NULL;
 
     flags |= ARCHIVE_EXTRACT_PERM;
