@@ -102,7 +102,7 @@ static Tcl_Obj *ttrek_StringToDoubleQuotedObj(const char *str, Tcl_Size len) {
     Tcl_Size i;
     for (i = 0; i < len; i++) {
         if (str[i] == '\"' || str[i] == '\\' || str[i] == '`' ||
-            (str[i] == '$' && i < (len - 1) && str[i+1] == '('))
+            (i < (len - 1) && str[i] == '$' && str[i+1] == '('))
         {
             if (tocopy) {
                 Tcl_AppendToObj(rc, &str[i - tocopy], tocopy);
@@ -228,6 +228,8 @@ static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultLis
 
 DEFINE_COMMAND(EnvVariable) {
 
+    UNUSED(use_flags_ht_ptr);
+
     Tcl_Obj *cmd;
 
     static const char *const op_modes[] = {
@@ -315,6 +317,8 @@ DEFINE_COMMAND(EnvVariable) {
 
 DEFINE_COMMAND(Download) {
 
+    UNUSED(use_flags_ht_ptr);
+
     Tcl_Obj *cmd;
 
     Tcl_Obj *url = ttrek_cJSONStringToObject(opts, "url");
@@ -337,6 +341,8 @@ DEFINE_COMMAND(Download) {
 }
 
 DEFINE_COMMAND(Patch) {
+
+    UNUSED(use_flags_ht_ptr);
 
     Tcl_Obj *cmd;
 
@@ -374,6 +380,8 @@ DEFINE_COMMAND(Patch) {
 }
 
 DEFINE_COMMAND(Git) {
+
+    UNUSED(use_flags_ht_ptr);
 
     Tcl_Obj *cmd;
 
@@ -419,6 +427,9 @@ DEFINE_COMMAND(Git) {
 
 DEFINE_COMMAND(Unpack) {
 
+    UNUSED(use_flags_ht_ptr);
+    UNUSED(opts);
+
     Tcl_Obj *cmd;
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "%s unpack %s %s", 3,
@@ -435,6 +446,8 @@ DEFINE_COMMAND(Unpack) {
 }
 
 DEFINE_COMMAND(Cd) {
+
+    UNUSED(use_flags_ht_ptr);
 
     Tcl_Obj *cmd;
 
@@ -728,6 +741,8 @@ skip_options:
 
 DEFINE_COMMAND(CmakeMake) {
 
+    UNUSED(use_flags_ht_ptr);
+
     Tcl_Obj *cmd;
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --build %s", 1,
@@ -822,6 +837,8 @@ skip_options:
 
 DEFINE_COMMAND(CmakeInstall) {
 
+    UNUSED(use_flags_ht_ptr);
+
     Tcl_Obj *cmd;
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --install %s", 1,
@@ -863,7 +880,7 @@ static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *
         {"cmake_make",     "3", 1, ttrek_SpecToObj_CmakeMake},
         {"make_install",   "4", 1, ttrek_SpecToObj_MakeInstall},
         {"cmake_install",  "4", 1, ttrek_SpecToObj_CmakeInstall},
-        {NULL, 0}
+        {NULL, NULL, 0, NULL}
     };
 
     Tcl_Obj *resultList = Tcl_NewListObj(0, NULL);

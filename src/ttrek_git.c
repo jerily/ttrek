@@ -99,7 +99,8 @@ int ttrek_GitInit(ttrek_state_t *state_ptr) {
 }
 
 int list_untracked(git_repository *repo, Tcl_Obj *untracked_files) {
-    git_status_options statusopt = GIT_STATUS_OPTIONS_INIT;
+    git_status_options statusopt;
+    git_status_options_init(&statusopt, GIT_STATUS_OPTIONS_VERSION);
     statusopt.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
 //    statusopt.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
     statusopt.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED;
@@ -138,7 +139,7 @@ int ttrek_GitClean(ttrek_state_t *state_ptr, git_repository *repo) {
         return TCL_ERROR;
     }
 
-    for (size_t i = 0; i < untracked_files_len; ++i) {
+    for (Tcl_Size i = 0; i < untracked_files_len; ++i) {
         Tcl_Obj *file_ptr;
         if (TCL_OK != Tcl_ListObjIndex(NULL, untracked_files, i, &file_ptr)) {
             Tcl_DecrRefCount(untracked_files);

@@ -17,7 +17,7 @@
 
 int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    int option_save_dev = 0;
+//    int option_save_dev = 0;
     int option_user = 0;
     int option_global = 0;
     int option_yes = 0;
@@ -30,14 +30,14 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
             {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "install as a global package",                                        NULL},
             {TCL_ARGV_CONSTANT, "-force",    INT2PTR(1), &option_force,    "force installation of already installed packages",                   NULL},
             {TCL_ARGV_STRING,   "-strategy", NULL,       &option_strategy, "strategy used for resolving dependencies (latest, favored, locked)", NULL},
-            {TCL_ARGV_END, NULL,             NULL, NULL, NULL}
+            {TCL_ARGV_END,      NULL,        NULL,       NULL,             NULL,                                                                 NULL}
 //            TCL_ARGV_AUTO_REST, TCL_ARGV_AUTO_HELP, TCL_ARGV_TABLE_END
     };
 
     Tcl_Obj **remObjv;
     Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
 
-    DBG(fprintf(stderr, "strategy: %s\n", option_strategy));
+    DBG(fprintf(stderr, "strategy: %s\n", (option_strategy == NULL ? "<NULL>" : option_strategy)));
 
     if (option_user && option_global) {
         fprintf(stderr, "error: conflicting options -u and -g\n");

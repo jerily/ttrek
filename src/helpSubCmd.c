@@ -10,6 +10,8 @@
 
 int ttrek_HelpSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
+    UNUSED(interp);
+
     const char *helpTopic = NULL;
 
     if (objc > 1 && strcmp(Tcl_GetString(objv[1]), "help") != 0) {

@@ -188,7 +188,9 @@ int ttrek_FSMonitor_ReadChanges(Tcl_Interp *interp, Tcl_Obj *project_install_dir
     Tcl_IncrRefCount(state_ptr->files_diff);
 
     Tcl_Size project_install_dir_len;
-    const char *project_install_dir_str = Tcl_GetStringFromObj(project_install_dir_ptr, &project_install_dir_len);
+    // Here we just need to get the length of project_install_dir_ptr in
+    // project_install_dir_len, so we can ignore the result of the function.
+    Tcl_GetStringFromObj(project_install_dir_ptr, &project_install_dir_len);
 
     // project_install_dir_len + 1 to cut the slash in the beginning of the path for file in the diff list
     if (TCL_OK != ttrek_DiffList(interp, files_after, state_ptr->files_before, state_ptr->files_diff, project_install_dir_len + 1)) {
@@ -203,6 +205,7 @@ int ttrek_FSMonitor_ReadChanges(Tcl_Interp *interp, Tcl_Obj *project_install_dir
 }
 
 int ttrek_FSMonitor_RemoveWatch(Tcl_Interp *interp, ttrek_fsmonitor_state_t *state_ptr) {
+    UNUSED(interp);
     Tcl_DecrRefCount(state_ptr->files_before);
     if (state_ptr->files_diff) {
         Tcl_DecrRefCount(state_ptr->files_diff);

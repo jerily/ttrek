@@ -66,9 +66,9 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int option_yes = 0;
     int option_force = 0;
     Tcl_ArgvInfo ArgTable[] = {
-            {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes, "Automatically answer yes to all the questions"},
-            {TCL_ARGV_CONSTANT, "-f", INT2PTR(1), &option_force, "Removes various protections against unfortunate side effects."},
-            {TCL_ARGV_END,      NULL, NULL,               NULL,             NULL}
+            {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes,   "Automatically answer yes to all the questions",                 NULL},
+            {TCL_ARGV_CONSTANT, "-f", INT2PTR(1), &option_force, "Removes various protections against unfortunate side effects.", NULL},
+            {TCL_ARGV_END,      NULL, NULL,       NULL,          NULL,                                                            NULL}
     };
 
     Tcl_Obj **remObjv;
@@ -82,9 +82,13 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     if (!option_yes) {
         // read "name" and "version" from stdin
         fprintf(stdout, "name: ");
-        fgets(project_name, sizeof(project_name), stdin);
+        if (fgets(project_name, sizeof(project_name), stdin) == NULL) {
+            return TCL_ERROR;
+        }
         fprintf(stdout, "version: ");
-        fgets(project_version, sizeof(project_version), stdin);
+        if (fgets(project_version, sizeof(project_version), stdin) == NULL) {
+            return TCL_ERROR;
+        }
 
         // remove trailing newline
         project_name[strcspn(project_name, "\n")] = 0;

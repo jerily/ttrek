@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(ttrek VERSION 1.0.0 LANGUAGES C CXX)
 
+option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
+
 if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
 endif()
@@ -26,15 +28,46 @@ else()
     set(EXTRA_LIBS "-framework CoreFoundation -framework SystemConfiguration")
 endif()
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_C_FLAGS "-DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_C_FLAGS}")
-set(CMAKE_CXX_FLAGS  "-DTCL_THREADS -DPROJECT_VERSION=${PROJECT_VERSION} ${CMAKE_CXX_FLAGS}")
-set(CMAKE_C_FLAGS_DEBUG "-fPIE -g -fsanitize=undefined -fsanitize=address")
-set(CMAKE_CXX_FLAGS_DEBUG  "-fPIE -g -fsanitize=undefined -fsanitize=address")
-set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE  "-DNDEBUG")
+#set(CMAKE_VERBOSE_MAKEFILE ON)
 
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=undefined -fsanitize=address")
+add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_definitions(TCL_THREADS PROJECT_VERSION=${PROJECT_VERSION})
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+    add_compile_options(-fPIE -g -fsanitize=undefined -fsanitize=address)
+    add_link_options(-fsanitize=undefined -fsanitize=address)
+    set(CMAKE_C_FLAGS "-DDEBUG ${CMAKE_C_FLAGS}")
+else()
+    add_compile_definitions(NDEBUG)
+endif ()
+
+if(USE_CPPCHECK)
+    find_program(cppcheck NAMES cppcheck)
+    message(STATUS "cppcheck: ${cppcheck}")
+    if(NOT (cppcheck MATCHES "NOTFOUND"))
+
+        set (CPPCHECK_COMMON_OPTIONS
+            --quiet
+            --enable=all
+            --inconclusive
+            --inline-suppr
+            --error-exitcode=0
+            --suppress=missingIncludeSystem
+            --suppress=constParameterPointer
+            --suppress=constVariablePointer
+            --suppress=unusedFunction
+            --suppress=unmatchedSuppression
+            --suppress=checkersReport
+            -I"${CMAKE_INSTALL_PREFIX}/include"
+            -I"${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
+
+        set (CMAKE_CXX_CPPCHECK "${cppcheck}" --language=c++ "${CPPCHECK_COMMON_OPTIONS}")
+        set (CMAKE_C_CPPCHECK "${cppcheck}" --language=c "${CPPCHECK_COMMON_OPTIONS}")
+
+    endif()
+else()
+    message(STATUS "cppcheck: is not enabled")
+endif()
 
 #add_library(foo STATIC IMPORTED)
 #

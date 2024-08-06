@@ -15,7 +15,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_ArgvInfo ArgTable[] = {
             {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "run in user mode",                                          NULL},
             {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "run in global mode",                                        NULL},
-            {TCL_ARGV_END, NULL,             NULL, NULL, NULL}
+            {TCL_ARGV_END,      NULL,        NULL,       NULL,             NULL,                                                        NULL}
     };
 
     Tcl_Obj **remObjv;

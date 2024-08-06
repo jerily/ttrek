@@ -186,6 +186,8 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
             std::map<std::string, std::string> &requirements,
             std::vector<std::string> &installs) {
 
+    UNUSED(interp);
+
     // Parse additional requirements from spec file
     ttrek_ParseRequirementsFromLockFile(state_ptr, requirements);
     ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
@@ -207,8 +209,8 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
         // alloc_candidate for both polarities, no deps
         auto use_flag_str = "use:" + use_flag.name;
-        auto id0 = db.alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
-        auto id1 = db.alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
+        db.alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
+        db.alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
 
     }
 
@@ -609,14 +611,14 @@ static const std::string &ttrek_RewriteUnsatMessage(const std::string &message) 
 
     std::istringstream iss(message);
     std::string line;
-    bool skip = false;
+//    bool skip = false;
     while (std::getline(iss, line)) {
 //        if (skip) {
 //            skip = false;
 //            continue;
 //        }
         if (line.find("use:") != std::string::npos) {
-            skip = true;
+//            skip = true;
             auto index = line.find("use:");
             auto index2 = line.find(' ', index);
             auto use_flag = line.substr(index + 4, index2 - index - 4);

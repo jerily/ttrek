@@ -44,6 +44,8 @@ int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
 
 int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
+    UNUSED(interp);
+
     cJSON *use_node = cJSON_CreateArray();
 
     for (Tcl_Size i = 0; i < objc; i++) {
@@ -213,12 +215,7 @@ int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
     for (Tcl_Size i = 0; i < objc; i++) {
         Tcl_Obj *use_flag = objv[i];
         const char *use_flag_str = Tcl_GetString(use_flag);
-        int polarity = 0;
-        if (use_flag_str[0] == '+') {
-            polarity = 1;
-        } else if (use_flag_str[0] == '-') {
-            polarity = 0;
-        } else {
+        if (!ttrek_IsValidUseFlag(use_flag_str)) {
             Tcl_DecrRefCount(list_ptr);
             Tcl_DeleteHashTable(&ht);
             return TCL_ERROR;
@@ -262,6 +259,8 @@ int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_O
 }
 
 int ttrek_HashTableContainsUseFlag(Tcl_Interp *interp, Tcl_HashTable *ht, const char *use_flag_str, int *contains_p) {
+
+    UNUSED(interp);
 
     *contains_p = 0;
 

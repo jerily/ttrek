@@ -8,12 +8,7 @@
 #include "common.h"
 #include "ttrek_telemetry.h"
 
-struct MemoryStruct {
-    char *memory;
-    Tcl_Size size;
-};
-
-static size_t write_memory_cb(void *contents, size_t size, size_t nmemb, void *userp)
+static size_t write_memory_cb(const void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t realsize = size * nmemb;
     Tcl_DString *dsPtr = (Tcl_DString *)userp;
@@ -53,7 +48,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
     char *postDataStr = NULL;
     if (postData != NULL) {
         DBG2(printf("prepare POST request"));
-        char *postDataStr = cJSON_PrintUnformatted(postData);
+        postDataStr = cJSON_PrintUnformatted(postData);
         if (postDataStr == NULL) {
             goto error;
         }
