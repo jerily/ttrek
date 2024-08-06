@@ -842,26 +842,27 @@ DEFINE_COMMAND(CmakeInstall) {
 }
 
 
-Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr) {
+static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr, int is_local_build) {
 
     static const struct {
         const char *cmd;
         const char *stage;
+        int enable_in_local_build;
         int (*handler)(Tcl_Interp *interp, const cJSON *opts, Tcl_HashTable *use_flags_ht_ptr, Tcl_Obj *resultList);
     } commands[] = {
-        {"download",       "1", ttrek_SpecToObj_Download},
-        {"git",            "1", ttrek_SpecToObj_Git},
-        {"unpack",         "1", ttrek_SpecToObj_Unpack},
-        {"patch",          "1", ttrek_SpecToObj_Patch},
-        {"cd",            NULL, ttrek_SpecToObj_Cd},
-        {"env_variable",  NULL, ttrek_SpecToObj_EnvVariable},
-        {"autogen",        "2", ttrek_SpecToObj_Autogen},
-        {"configure",      "2", ttrek_SpecToObj_Configure},
-        {"cmake_config",   "2", ttrek_SpecToObj_CmakeConfig},
-        {"make",           "3", ttrek_SpecToObj_Make},
-        {"cmake_make",     "3", ttrek_SpecToObj_CmakeMake},
-        {"make_install",   "4", ttrek_SpecToObj_MakeInstall},
-        {"cmake_install",  "4", ttrek_SpecToObj_CmakeInstall},
+        {"download",       "1", 0, ttrek_SpecToObj_Download},
+        {"git",            "1", 0, ttrek_SpecToObj_Git},
+        {"unpack",         "1", 0, ttrek_SpecToObj_Unpack},
+        {"patch",          "1", 0, ttrek_SpecToObj_Patch},
+        {"cd",            NULL, 1, ttrek_SpecToObj_Cd},
+        {"env_variable",  NULL, 1, ttrek_SpecToObj_EnvVariable},
+        {"autogen",        "2", 1, ttrek_SpecToObj_Autogen},
+        {"configure",      "2", 1, ttrek_SpecToObj_Configure},
+        {"cmake_config",   "2", 1, ttrek_SpecToObj_CmakeConfig},
+        {"make",           "3", 1, ttrek_SpecToObj_Make},
+        {"cmake_make",     "3", 1, ttrek_SpecToObj_CmakeMake},
+        {"make_install",   "4", 1, ttrek_SpecToObj_MakeInstall},
+        {"cmake_install",  "4", 1, ttrek_SpecToObj_CmakeInstall},
         {NULL, 0}
     };
 
@@ -897,6 +898,11 @@ Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_fla
             goto error;
         }
 
+        if (is_local_build && !commands[cmdType].enable_in_local_build) {
+            DBG2(printf("skip in local build: [%s]", commands[cmdType].cmd));
+            continue;
+        }
+
         if (commands[cmdType].stage != NULL) {
             Tcl_Obj *stageCmd = Tcl_NewStringObj("stage ", -1);
             Tcl_AppendToObj(stageCmd, commands[cmdType].stage, -1);
@@ -918,19 +924,24 @@ error:
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
     const char *package_version, const char *project_build_dir,
-    const char *project_install_dir, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr)
+    const char *project_install_dir, const char *source_dir,
+    cJSON *spec, Tcl_HashTable *use_flags_ht_ptr, int is_local_build)
 {
 
-    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ht_ptr);
+    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ht_ptr, is_local_build);
     if (install_specific == NULL) {
         return NULL;
     }
 
     Tcl_Obj *install_common = Tcl_NewObj();
 
-    ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 4,
+    if (source_dir == NULL) {
+        source_dir = "";
+    }
+
+    ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 5,
         sq(package_name), sq(package_version), sq(project_build_dir),
-        sq(project_install_dir));
+        sq(project_install_dir), sq(source_dir));
 
     Tcl_AppendToObj(install_common, install_script_common_static, -1);
 

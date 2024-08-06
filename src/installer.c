@@ -167,8 +167,9 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
         package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-        Tcl_GetString(state_ptr->project_install_dir_ptr), install_script_node,
-        use_flags_ht_ptr);
+        Tcl_GetString(state_ptr->project_install_dir_ptr), NULL, install_script_node,
+        use_flags_ht_ptr, 0);
+
     if (install_script_full == NULL) {
         fprintf(stderr, "error: could not generate install script: %s\n",
             Tcl_GetStringResult(interp));

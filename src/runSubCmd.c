@@ -44,6 +44,14 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     }
 
+    DBG2(printf("objc: %" TCL_SIZE_MODIFIER "d", objc));
+    if (objc < 2) {
+        SetResult("no command to execute");
+        ttrek_DestroyState(state_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     Tcl_Obj *filename_ptr = Tcl_NewStringObj("bin/", -1);
     Tcl_IncrRefCount(filename_ptr);
     Tcl_AppendObjToObj(filename_ptr, remObjv[1]);
@@ -58,15 +66,18 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     char ld_library_path_str[1024];
     snprintf(ld_library_path_str, 1024, "%s/lib", Tcl_GetString(state_ptr->project_install_dir_ptr));
+    setenv("LD_LIBRARY_PATH", ld_library_path_str, 1);
 
     Tcl_Size argc = objc - 1;
     const char *argv[objc];
-    setenv("LD_LIBRARY_PATH", ld_library_path_str, 1);
     argv[0] = Tcl_GetString(path_to_file_ptr);
-    fprintf(stderr, "path_to_file: %s\n", Tcl_GetString(path_to_file_ptr));
-    for (Tcl_Size i = 2; i < objc - 1; i++) {
-        argv[i] = Tcl_GetString(remObjv[i]);
+    DBG2(printf("add arg #0: [%s]", Tcl_GetString(path_to_file_ptr)));
+    Tcl_Size i;
+    for (i = 2; i < objc; i++) {
+        DBG2(printf("add arg #%" TCL_SIZE_MODIFIER "d: [%s]", i - 1, Tcl_GetString(remObjv[i])));
+        argv[i - 1] = Tcl_GetString(remObjv[i]);
     }
+    argv[i - 1] = NULL;
     if (ttrek_ExecuteCommand(interp, argc, argv, NULL) != TCL_OK) {
         ckfree(remObjv);
         return TCL_ERROR;

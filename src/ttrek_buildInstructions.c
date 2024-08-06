@@ -77,8 +77,9 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
 
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
         package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-        Tcl_GetString(state_ptr->project_install_dir_ptr), install_script_node,
-        &use_flags_ht);
+        Tcl_GetString(state_ptr->project_install_dir_ptr),
+        Tcl_GetString(state_ptr->project_home_dir_ptr),
+        install_script_node, &use_flags_ht, 1);
 
     Tcl_DecrRefCount(use_flags_list_ptr);
     Tcl_DeleteHashTable(&use_flags_ht);
