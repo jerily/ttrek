@@ -11,6 +11,7 @@
 #include "common.h"
 #include "ttrek_resolvo.h"
 #include "ttrek_git.h"
+#include "ttrek_buildInstructions.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
@@ -70,6 +71,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 
     Tcl_Size installObjc = objc - 1;
     Tcl_Obj **installObjv = NULL;
+    int do_local_build = 0;
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(list_ptr);
@@ -91,6 +93,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
             return TCL_ERROR;
         }
 
+        do_local_build = 1;
     } else {
         installObjv = &remObjv[1];
     }
@@ -122,6 +125,17 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 
     if (TCL_OK != Tcl_FSDeleteFile(state_ptr->dirty_file_path_ptr)) {
         fprintf(stderr, "error: removing dirty file failed\n");
+        ttrek_DestroyState(state_ptr);
+        return TCL_ERROR;
+    }
+
+    if (!do_local_build) {
+        ttrek_DestroyState(state_ptr);
+        return TCL_OK;
+    }
+
+    if (TCL_OK != ttrek_RunBuildInstructions(interp, state_ptr)) {
+        fprintf(stderr, "error: build instructions failed\n");
         ttrek_DestroyState(state_ptr);
         return TCL_ERROR;
     }
