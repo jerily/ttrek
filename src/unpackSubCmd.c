@@ -12,14 +12,13 @@ static int ttrek_UnpackCopyData(Tcl_Interp *interp, struct archive *ar,
     struct archive *aw)
 {
 
-  int r;
   const void *buff;
   size_t size;
   la_int64_t offset;
 
   for (;;) {
 
-      r = archive_read_data_block(ar, &buff, &size, &offset);
+      int r = archive_read_data_block(ar, &buff, &size, &offset);
 
       if (r == ARCHIVE_EOF) {
           break;

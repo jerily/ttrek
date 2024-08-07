@@ -11,6 +11,8 @@
 
 static int ttrek_GetBuildInstructions(Tcl_Interp *interp, cJSON *spec_root, cJSON **instructions_node_ptr) {
 
+     UNUSED(interp);
+
     *instructions_node_ptr = NULL;
 
     if (!cJSON_HasObjectItem(spec_root, "build")) {

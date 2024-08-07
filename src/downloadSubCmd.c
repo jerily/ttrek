@@ -9,7 +9,7 @@
 
 #define TTREK_DOWNLOAD_DEFAULT_RETRY_COUNT 3
 
-static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
+static size_t write_callback(const char *ptr, size_t size, size_t nmemb, void *userdata) {
     return Tcl_Write((Tcl_Channel)userdata, ptr, size * nmemb);
 }
 

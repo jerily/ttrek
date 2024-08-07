@@ -62,6 +62,7 @@ struct Unbounded {
     }
 
     bool operator==(const Unbounded &other) const {
+        (void)other;
         return true;
     }
 };
@@ -342,7 +343,7 @@ public:
             auto end = std::visit([](auto &arg_l, auto &arg_r) -> BoundVariant<V> {
                 using T_l = std::decay_t<decltype(arg_l)>;
                 using T_r = std::decay_t<decltype(arg_r)>;
-                
+
                 if constexpr (std::is_same_v<T_l, Included<V>> && std::is_same_v<T_r, Included<V>>) {
                     auto l = std::any_cast<Included<V>>(arg_l);
                     auto r = std::any_cast<Included<V>>(arg_r);

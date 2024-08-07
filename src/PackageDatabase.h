@@ -151,7 +151,7 @@ std::map<std::string_view, std::vector<std::pair<std::string_view, DependencyInf
 static char EMPTY_STRING[] = "";
 
 struct Pack {
-    semver_t version = {0};
+    semver_t version = {0, 0, 0, NULL, NULL};
 
     explicit Pack(const std::string& version_str) {
         if (-1 == semver_parse(version_str.c_str(), &version)) {

@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
 #include <tcl.h>
+#include <stdint.h>
 #include "cjson/cJSON.h"
 
 #ifndef TCL_SIZE_MAX
@@ -24,6 +25,8 @@ typedef int Tcl_Size;
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
+
+#define UNUSED(expr) do { (void)(expr); } while (0)
 
 #ifdef DEBUG
 # define DBG(x) x
@@ -52,7 +55,7 @@ typedef int Tcl_Size;
  */
 
 #if !defined(INT2PTR) && !defined(PTR2INT)
-#   if defined(HAVE_INTPTR_T) || defined(intptr_t)
+#   if defined(HAVE_INTPTR_T) || defined(INTPTR_MAX)
 #	define INT2PTR(p) ((void *)(intptr_t)(p))
 #	define PTR2INT(p) ((int)(intptr_t)(p))
 #   else
@@ -61,27 +64,23 @@ typedef int Tcl_Size;
 #   endif
 #endif
 
-
-static const char *VERSION = XSTR(PROJECT_VERSION);
-
-
 #define TTREK_REGISTRY_BASE_URL "http://localhost:8080"
 
-static const char *REGISTRY_URL = TTREK_REGISTRY_BASE_URL "/registry";
-static const char *TELEMETRY_REGISTER_URL = TTREK_REGISTRY_BASE_URL "/telemetry/register";
-static const char *TELEMETRY_COLLECT_URL = TTREK_REGISTRY_BASE_URL "/telemetry/collect";
-static const char *DOWNLOAD_URL = TTREK_REGISTRY_BASE_URL "/download";
-static const char *SPEC_JSON_FILE = "ttrek.json";
-static const char *LOCK_JSON_FILE = "ttrek-lock.json";
-static const char *MANIFEST_JSON_FILE = "ttrek-manifest.json";
-static const char *DIRTY_FILE = ".dirty";
-static const char *LOCKING_FILE = ".lock";
-static const char *LOCKING_FILE_IGNORE_RULE = "/.lock";
-static const char *BUILD_DIR_IGNORE_RULE = "/build";
-static const char *VENV_DIR = "ttrek-venv";
-static const char *INSTALL_DIR = "local";
-static const char *BUILD_DIR = "build";
-static const char *TEMP_DIR = "tmp";
+#define REGISTRY_URL           (TTREK_REGISTRY_BASE_URL "/registry")
+#define TELEMETRY_REGISTER_URL (TTREK_REGISTRY_BASE_URL "/telemetry/register")
+#define TELEMETRY_COLLECT_URL  (TTREK_REGISTRY_BASE_URL "/telemetry/collect")
+#define DOWNLOAD_URL           (TTREK_REGISTRY_BASE_URL "/download")
+#define SPEC_JSON_FILE     "ttrek.json"
+#define LOCK_JSON_FILE     "ttrek-lock.json"
+#define MANIFEST_JSON_FILE "ttrek-manifest.json"
+#define DIRTY_FILE   ".dirty"
+#define LOCKING_FILE ".lock"
+#define LOCKING_FILE_IGNORE_RULE "/.lock"
+#define BUILD_DIR_IGNORE_RULE    "/build"
+#define VENV_DIR    "ttrek-venv"
+#define INSTALL_DIR "local"
+#define BUILD_DIR   "build"
+#define TEMP_DIR    "tmp"
 
 typedef enum {
     MODE_LOCAL,

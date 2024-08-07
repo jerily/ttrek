@@ -58,7 +58,8 @@ int ttrek_ResolvePath(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *filename_p
     *output_path_ptr = Tcl_FSJoinToPath(path_ptr, 1, objv);
 
     if (!*output_path_ptr) {
-        fprintf(stderr, "error: could not resolve path for %s\n", Tcl_GetString(filename_ptr));
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("could not resolve path for %s",
+            Tcl_GetString(filename_ptr)));
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(*output_path_ptr);
@@ -75,6 +76,7 @@ int ttrek_CheckFileExists(Tcl_Obj *path_ptr) {
 }
 
 int ttrek_FileExists(Tcl_Interp *interp, Tcl_Obj *path_ptr, int *exists) {
+    UNUSED(interp);
     if (TCL_OK != ttrek_CheckFileExists(path_ptr)) {
         *exists = 0;
     } else {

@@ -23,7 +23,6 @@ enum usecommand {
     USECMD_GET
 };
 
-
 static int ttrek_UseSubCmdAdd(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_Size objc, Tcl_Obj *const objv[]) {
     if (objc < 2) {
         fprintf(stderr, "error: missing use flags\n");
@@ -58,6 +57,9 @@ static int ttrek_UseSubCmdSet(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_
 }
 
 static int ttrek_UseSubCmdGet(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_Size objc, Tcl_Obj *const objv[]) {
+
+    UNUSED(objv);
+
     if (objc > 1) {
         fprintf(stderr, "error: too many arguments\n");
         return TCL_ERROR;
@@ -110,7 +112,7 @@ int ttrek_UseSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_ArgvInfo ArgTable[] = {
             {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "set use flags for user mode",                                          NULL},
             {TCL_ARGV_CONSTANT, "-g",        INT2PTR(1), &option_global,   "set use flags for global mode",                                        NULL},
-            {TCL_ARGV_END, NULL,             NULL, NULL, NULL}
+            {TCL_ARGV_END,      NULL,        NULL,       NULL,             NULL,                                                                   NULL}
     };
 
     Tcl_Obj **remObjv;
