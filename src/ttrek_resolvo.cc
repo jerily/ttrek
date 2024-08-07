@@ -317,52 +317,48 @@ struct InstallSpec {
     int exact_use_flags_p;
 };
 
-static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
+static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTable *global_use_flags_ht_ptr,
                                                 std::set<UseFlag> &iuse_flags,
                                                 std::set<UseFlag> &use_flags) {
 
-    Tcl_HashTable iuse_flags_ht;
-    Tcl_InitHashTable(&iuse_flags_ht, TCL_STRING_KEYS);
-    for (const auto &iuse_flag: iuse_flags) {
-        auto iuse_flag_name = iuse_flag.name.c_str();
-        auto iuse_flag_polarity = iuse_flag.polarity ? "1" : "0";
+    // iterate over the hashtable use_flags_ht_ptr
+    // for each entry, check if it is in iuse_flags
+    // if it is, check if the value also exists in use_flags
 
-        // create hash table entry for iuse_flag_name and set the value to iuse_flag_polarity
-
-
-        int newEntry = 0;
-        Tcl_HashEntry *entry = Tcl_CreateHashEntry(&iuse_flags_ht, iuse_flag_name, &newEntry);
-        Tcl_SetHashValue(entry, INT2PTR(iuse_flag_polarity));
-
-
+    // first check all global use flags that are in iuse flags are also in use flags
+    Tcl_HashSearch search;
+    Tcl_HashEntry *entry;
+    for (entry = Tcl_FirstHashEntry(global_use_flags_ht_ptr, &search);
+         entry != nullptr;
+         entry = Tcl_NextHashEntry(&search)) {
+        const char *use_flag_name = (const char *) Tcl_GetHashKey(global_use_flags_ht_ptr, entry);
+        int use_flag_polarity = PTR2INT(Tcl_GetHashValue(entry));
+        auto use_flag = UseFlag(use_flag_name, use_flag_polarity);
+        if (iuse_flags.find(use_flag) != iuse_flags.end()) {
+            if (use_flags.find(use_flag) == use_flags.end()) {
+                // if the global use flag exists in iuse flags
+                // but it does not exist in the use flags used previously
+                // to build the package then return false
+                return false;
+            }
+        }
     }
 
-
-    Tcl_Size count = 0;
-    for (const auto &use_flag: use_flags) {
-        auto use_flag_str = use_flag.to_string();
-
-        int iuse_contains_p;
-        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, &iuse_flags_ht, use_flag_str.c_str(), &iuse_contains_p)) {
+    // then check all use flags are in global use flags
+    for (auto &use_flag: use_flags) {
+        const char *use_flag_name = use_flag.name.c_str();
+        int use_flag_polarity = use_flag.polarity;
+        entry = Tcl_FindHashEntry(global_use_flags_ht_ptr, use_flag_name);
+        if (entry == nullptr) {
+            // if the use flag does not exist in the global use flags
+            // then return false
             return false;
         }
-
-        if (iuse_contains_p) {
-            int use_contains_p;
-            if (TCL_OK !=
-                ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, use_flag_str.c_str(), &use_contains_p)) {
-                return false;
-            }
-            if (!use_contains_p) {
-                return false;
-            }
+        if (PTR2INT(Tcl_GetHashValue(entry)) != use_flag_polarity) {
+            // if the use flag exists in the global use flags
+            // but the polarity is different then return false
+            return false;
         }
-
-        count++;
-    }
-
-    if (count != use_flags_ht_ptr->numEntries) {
-        return false;
     }
 
     return true;
@@ -370,7 +366,7 @@ static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTabl
 
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install,
                                             const std::map<std::string, std::string> &requirements,
-                                            Tcl_HashTable *use_flags_ht_ptr,
+                                            Tcl_HashTable *global_use_flags_ht_ptr,
                                             std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
                                             std::map<std::string, std::set<UseFlag>> &use_flags_map,
                                             std::vector<InstallSpec> &execution_plan) {
@@ -383,7 +379,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             package_version.c_str(),
                                                             &package_name_exists_in_lock_p);
 
-    bool exact_use_flags_p = ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, use_flags_ht_ptr,
+    bool exact_use_flags_p = ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, global_use_flags_ht_ptr,
                                                                  iuse_flags_map[package_name],
                                                                  use_flags_map[package_name]);
 
@@ -413,7 +409,7 @@ static void
 ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::string> &installs,
                             const std::map<std::string, std::string> &requirements,
                             const std::map<std::string, std::unordered_set<std::string>> &dependencies_from_solver_map,
-                            Tcl_HashTable *use_flags_ht_ptr,
+                            Tcl_HashTable *global_use_flags_ht_ptr,
                             std::vector<InstallSpec> &execution_plan) {
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
@@ -441,7 +437,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         if (install.find("use:") != std::string::npos) {
             continue;
         }
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, use_flags_ht_ptr,
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, global_use_flags_ht_ptr,
                                         iuse_flags_map, use_flags_map, execution_plan);
     }
 
@@ -675,17 +671,17 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
-        Tcl_HashTable use_flags_ht;
-        Tcl_InitHashTable(&use_flags_ht, TCL_STRING_KEYS);
-        if (TCL_OK != ttrek_PopulateHashTableFromUseFlagsList(interp, use_flags_list_ptr, &use_flags_ht)) {
+        Tcl_HashTable global_use_flags_ht;
+        Tcl_InitHashTable(&global_use_flags_ht, TCL_STRING_KEYS);
+        if (TCL_OK != ttrek_PopulateHashTableFromUseFlagsList(interp, use_flags_list_ptr, &global_use_flags_ht)) {
             Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&use_flags_ht);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_ERROR;
         }
 
         // generate the execution plan
         std::vector<InstallSpec> execution_plan;
-        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), &use_flags_ht,
+        ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), &global_use_flags_ht,
                                     execution_plan);
 
         // print the execution plan
@@ -694,7 +690,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             *abort = 1;
             std::cout << "Nothing to install!" << std::endl;
             Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&use_flags_ht);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_OK;
         }
 
@@ -709,7 +705,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             if (answer != "y") {
                 *abort = 1;
                 Tcl_DecrRefCount(use_flags_list_ptr);
-                Tcl_DeleteHashTable(&use_flags_ht);
+                Tcl_DeleteHashTable(&global_use_flags_ht);
                 return TCL_OK;
             }
         }
@@ -720,7 +716,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
             fprintf(stderr, "error: could not ensure directory skeleton exists\n");
             Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&use_flags_ht);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_ERROR;
         }
 
@@ -739,7 +735,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         if (uname(&sysinfo)) {
             fprintf(stderr, "error: could not get system information\n");
             Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&use_flags_ht);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_ERROR;
         }
 
@@ -756,7 +752,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
-            auto outcome = ttrek_InstallPackage(interp, state_ptr, &use_flags_ht, package_name.c_str(),
+            auto outcome = ttrek_InstallPackage(interp, state_ptr, &global_use_flags_ht, package_name.c_str(),
                                                 package_version.c_str(), sysinfo.sysname, sysinfo.machine,
                                                 direct_version_requirement.c_str(), package_name_exists_in_lock_p,
                                                 ++package_num_current, package_num_total);
@@ -778,7 +774,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
                 }
 
                 Tcl_DecrRefCount(use_flags_list_ptr);
-                Tcl_DeleteHashTable(&use_flags_ht);
+                Tcl_DeleteHashTable(&global_use_flags_ht);
                 return TCL_ERROR;
 
             }
@@ -788,7 +784,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             }
         }
         Tcl_DecrRefCount(use_flags_list_ptr);
-        Tcl_DeleteHashTable(&use_flags_ht);
+        Tcl_DeleteHashTable(&global_use_flags_ht);
 
         if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;

@@ -557,13 +557,13 @@ DEFINE_COMMAND(Configure) {
         ttrek_AppendFormatToObj(interp, cmd, "%s", 1, odq(path));
     }
 
-    Tcl_Obj *option_prefix = ttrek_cJSONStringToObject(opts, "option_prefix");
-    if (option_prefix == NULL) {
-        option_prefix = Tcl_NewStringObj("--", 2);
+    Tcl_Obj *cmd_option_prefix = ttrek_cJSONStringToObject(opts, "option_prefix");
+    if (cmd_option_prefix == NULL) {
+        cmd_option_prefix = Tcl_NewStringObj("--", 2);
     }
-    Tcl_IncrRefCount(option_prefix);
+    Tcl_IncrRefCount(cmd_option_prefix);
 
-    ttrek_AppendFormatToObj(interp, cmd, " %sprefix=%s", 2, osq(option_prefix),
+    ttrek_AppendFormatToObj(interp, cmd, " %sprefix=%s", 2, osq(cmd_option_prefix),
         dq("$INSTALL_DIR"));
 
     const cJSON *options = cJSON_GetObjectItem(opts, "options");
@@ -576,13 +576,14 @@ DEFINE_COMMAND(Configure) {
 
         int is_continue;
         if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, option, &is_continue) != TCL_OK) {
-            Tcl_DecrRefCount(option_prefix);
+            Tcl_DecrRefCount(cmd_option_prefix);
             Tcl_BounceRefCount(cmd);
             return TCL_ERROR;
         }
         if (!is_continue) {
             continue;
         }
+        DBG(fprintf(stderr, "enabled option: %s\n", cJSON_Print(option)));
 
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
@@ -591,19 +592,26 @@ DEFINE_COMMAND(Configure) {
 
         Tcl_Obj *value = ttrek_cJSONStringToObject(option, "value");
 
+        Tcl_Obj *option_prefix = ttrek_cJSONStringToObject(option, "option_prefix");
+        if (option_prefix == NULL) {
+            option_prefix = Tcl_NewStringObj("--", 2);
+        }
+        Tcl_IncrRefCount(option_prefix);
+
         if (value == NULL) {
-            ttrek_AppendFormatToObj(interp, cmd, " %s", 1, odq(name));
+            ttrek_AppendFormatToObj(interp, cmd, " %s%s", 2, osq(option_prefix), odq(name));
         } else {
             ttrek_AppendFormatToObj(interp, cmd, " %s%s=%s", 3, osq(option_prefix),
                 osq(name), odq(value));
         }
 
+        Tcl_DecrRefCount(option_prefix);
     }
 
 skip_options:
 
-    Tcl_DecrRefCount(option_prefix);
-
+    Tcl_DecrRefCount(cmd_option_prefix);
+fprintf(stderr, "cmd: %s\n", Tcl_GetString(cmd));
     ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
         dq("$BUILD_LOG_DIR/configure.log"));
 
@@ -859,7 +867,7 @@ DEFINE_COMMAND(CmakeInstall) {
 }
 
 
-static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *use_flags_ht_ptr, int is_local_build) {
+static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr, int is_local_build) {
 
     static const struct {
         const char *cmd;
@@ -890,7 +898,7 @@ static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *
 
 
         int is_continue;
-        if (ttrek_IsUseFlagEnabled(interp, use_flags_ht_ptr, cmd, &is_continue) != TCL_OK) {
+        if (ttrek_IsUseFlagEnabled(interp, global_use_flags_ht_ptr, cmd, &is_continue) != TCL_OK) {
             goto error;
         }
         if (!is_continue) {
@@ -926,7 +934,7 @@ static Tcl_Obj *ttrek_SpecToObj(Tcl_Interp *interp, cJSON *spec, Tcl_HashTable *
             Tcl_ListObjAppendElement(interp, resultList, stageCmd);
         }
 
-        if (commands[cmdType].handler(interp, cmd, use_flags_ht_ptr, resultList) != TCL_OK) {
+        if (commands[cmdType].handler(interp, cmd, global_use_flags_ht_ptr, resultList) != TCL_OK) {
             goto error;
         }
 
@@ -940,12 +948,12 @@ error:
 }
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
-    const char *package_version, const char *project_build_dir,
-    const char *project_install_dir, const char *source_dir,
-    cJSON *spec, Tcl_HashTable *use_flags_ht_ptr, int is_local_build)
+                                     const char *package_version, const char *project_build_dir,
+                                     const char *project_install_dir, const char *source_dir,
+                                     cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr, int is_local_build)
 {
 
-    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, use_flags_ht_ptr, is_local_build);
+    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, global_use_flags_ht_ptr, is_local_build);
     if (install_specific == NULL) {
         return NULL;
     }

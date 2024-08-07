@@ -139,7 +139,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     }
 }
 
-static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *use_flags_ht_ptr, const char *package_name,
+static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
                                          const char *package_version, const char *os, const char *arch,
                                          const char *direct_version_requirement, int package_num_current,
                                          int package_num_total) {
@@ -166,9 +166,9 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
 
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
-        package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-        Tcl_GetString(state_ptr->project_install_dir_ptr), NULL, install_script_node,
-        use_flags_ht_ptr, 0);
+                                                               package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
+                                                               Tcl_GetString(state_ptr->project_install_dir_ptr), NULL, install_script_node,
+                                                               global_use_flags_ht_ptr, 0);
 
     if (install_script_full == NULL) {
         fprintf(stderr, "error: could not generate install script: %s\n",
@@ -278,7 +278,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         ttrek_PopulateIUseFlagsListFromNode(interp, iuse_node, iuse_list_ptr);
 
         // compute intersection with given use flags
-        ttrek_HashTableIntersectionWithIUse(interp, use_flags_ht_ptr, iuse_list_ptr, use_list_ptr);
+        ttrek_HashTableIntersectionWithIUse(interp, global_use_flags_ht_ptr, iuse_list_ptr, use_list_ptr);
     }
 
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
@@ -488,7 +488,7 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
     return result;
 }
 
-int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *use_flags_ht_ptr, const char *package_name,
+int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
                          const char *package_version, const char *os, const char *arch,
                          const char *direct_version_requirement, int package_name_exists_in_lock_p,
                          int package_num_current, int package_num_total) {
@@ -505,7 +505,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashT
     }
 
     if (TCL_OK !=
-        ttrek_InstallScriptAndPatches(interp, state_ptr, use_flags_ht_ptr, package_name, package_version, os, arch,
+        ttrek_InstallScriptAndPatches(interp, state_ptr, global_use_flags_ht_ptr, package_name, package_version, os, arch,
                                       direct_version_requirement, package_num_current, package_num_total)) {
 
         fprintf(stderr, "error: installing script & patches failed\n");

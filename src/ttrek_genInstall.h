@@ -14,9 +14,9 @@ extern "C" {
 #endif
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
-    const char *package_version, const char *project_build_dir,
-    const char *project_install_dir, const char *source_dir,
-    cJSON *spec, Tcl_HashTable *use_flags_ht_ptr, int is_local_build);
+                                     const char *package_version, const char *project_build_dir,
+                                     const char *project_install_dir, const char *source_dir,
+                                     cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr, int is_local_build);
 
 #ifdef __cplusplus
 }

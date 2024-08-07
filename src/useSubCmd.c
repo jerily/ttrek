@@ -100,6 +100,10 @@ static int ttrek_UseSubCmdGet(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_
 
 int ttrek_UseSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
+    if (objc < 1) {
+        fprintf(stderr, "error: missing option\n");
+        return TCL_ERROR;
+    }
 
     int use_cmd_index;
     if (Tcl_GetIndexFromObj(interp, objv[0], use_commands, "option", 0, &use_cmd_index) != TCL_OK) {
