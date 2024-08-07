@@ -23,7 +23,7 @@ static const char *subcommands[] = {
         "download",
         "unpack",
         "help",
-        "use",
+        "use-flags",
         NULL
 };
 
@@ -37,7 +37,7 @@ enum subcommand {
     SUBCMD_DOWNLOAD,
     SUBCMD_UNPACK,
     SUBCMD_HELP,
-    SUBCMD_USE
+    SUBCMD_USE_FLAGS
 };
 
 int main(int argc, char *argv[]) {
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
                 exitcode = 1;
             }
             break;
-        case SUBCMD_USE:
+        case SUBCMD_USE_FLAGS:
             if (TCL_OK != ttrek_UseSubCmd(interp, objc-2, &objv[2])) {
                 fprintf(stderr, "error: use subcommand failed: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;

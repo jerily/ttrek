@@ -46,7 +46,7 @@ static int ttrek_UseSubCmdDel(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_
 }
 
 static int ttrek_UseSubCmdSet(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    if (objc < 2) {
+    if (objc < 1) {
         fprintf(stderr, "error: missing use flags\n");
         return TCL_ERROR;
     }
