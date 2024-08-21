@@ -23,6 +23,7 @@ SubCmdProc(ttrek_DownloadSubCmd);
 SubCmdProc(ttrek_UnpackSubCmd);
 SubCmdProc(ttrek_HelpSubCmd);
 SubCmdProc(ttrek_UseSubCmd);
+SubCmdProc(ttrek_ScriptsSubCmd);
 
 #ifdef __cplusplus
 }

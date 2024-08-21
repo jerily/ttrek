@@ -18,6 +18,111 @@
 
 static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl_DString *dsPtr);
 
+static struct {
+    Tcl_Obj *ld_library_path;
+    Tcl_Obj *path;
+    Tcl_DString cwd;
+    int cwd_initialized;
+    int initialized;
+} env_state = {
+    .initialized = 0
+};
+
+static void ttrek_EnvironmentStateInit(void) {
+    if (!env_state.initialized) {
+
+        const char *env_var;
+
+        env_var = getenv("LD_LIBRARY_PATH");
+        if (env_var == NULL) {
+            env_state.ld_library_path = NULL;
+        } else {
+            env_state.ld_library_path = Tcl_NewStringObj(env_var, -1);
+            Tcl_IncrRefCount(env_state.ld_library_path);
+        }
+
+        env_var = getenv("PATH");
+        if (env_var == NULL) {
+            env_state.path = NULL;
+        } else {
+            env_state.path = Tcl_NewStringObj(env_var, -1);
+            Tcl_IncrRefCount(env_state.path);
+        }
+
+        env_state.cwd_initialized = (Tcl_GetCwd(NULL, &env_state.cwd) != NULL);
+
+        env_state.initialized = 1;
+
+    }
+}
+
+void ttrek_EnvironmentStateFree(void) {
+    if (env_state.initialized) {
+        if (env_state.ld_library_path != NULL) {
+            Tcl_DecrRefCount(env_state.ld_library_path);
+        }
+        if (env_state.path != NULL) {
+            Tcl_DecrRefCount(env_state.path);
+        }
+        if (env_state.cwd_initialized) {
+            Tcl_DStringFree(&env_state.cwd);
+        }
+        env_state.initialized = 0;
+    }
+}
+
+void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr) {
+
+    ttrek_EnvironmentStateInit();
+
+    Tcl_Obj *env_var;
+    env_var = Tcl_ObjPrintf("%s/lib", Tcl_GetString(state_ptr->project_install_dir_ptr));
+    DBG2(printf("setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_var)));
+    setenv("LD_LIBRARY_PATH", Tcl_GetString(env_var), 1);
+    Tcl_BounceRefCount(env_var);
+
+    if (env_state.path == NULL) {
+        env_var = Tcl_ObjPrintf("%s/bin", Tcl_GetString(state_ptr->project_install_dir_ptr));
+    } else {
+        env_var = Tcl_ObjPrintf("%s/bin:%s", Tcl_GetString(state_ptr->project_install_dir_ptr),
+            Tcl_GetString(env_state.path));
+    }
+    DBG2(printf("setenv: %s = [%s]", "PATH", Tcl_GetString(env_var)));
+    setenv("PATH", Tcl_GetString(env_var), 1);
+    Tcl_BounceRefCount(env_var);
+
+    DBG2(printf("cd: [%s]", Tcl_GetString(state_ptr->project_install_dir_ptr)));
+    Tcl_Chdir(Tcl_GetString(state_ptr->project_install_dir_ptr));
+
+}
+
+void ttrek_EnvironmentStateRestore(void) {
+
+    if (env_state.ld_library_path == NULL) {
+        unsetenv("LD_LIBRARY_PATH");
+        DBG2(printf("unsetenv: %s", "LD_LIBRARY_PATH"));
+    } else {
+        DBG2(printf("setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_state.ld_library_path)));
+        setenv("LD_LIBRARY_PATH", Tcl_GetString(env_state.ld_library_path), 1);
+    }
+
+    if (env_state.path == NULL) {
+        unsetenv("PATH");
+        DBG2(printf("unsetenv: %s", "PATH"));
+    } else {
+        DBG2(printf("setenv: %s = [%s]", "PATH", Tcl_GetString(env_state.path)));
+        setenv("PATH", Tcl_GetString(env_state.path), 1);
+    }
+
+    if (env_state.cwd_initialized) {
+        DBG2(printf("cd: [%s]", Tcl_DStringValue(&env_state.cwd)));
+        Tcl_Chdir(Tcl_DStringValue(&env_state.cwd));
+    } else {
+        DBG2(printf("cd: <there is no known directory>"));
+    }
+
+}
+
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr) {
     Tcl_Size size;
     unsigned char *str = Tcl_GetByteArrayFromObj(data_ptr, &size);
@@ -534,6 +639,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     if (!state_ptr) {
         return NULL;
     }
+    DBG2(printf("allocated state: %p", (void *)state_ptr));
 
     state_ptr->interp = interp;
 
@@ -625,9 +731,14 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 }
 
 void ttrek_DestroyState(ttrek_state_t *state_ptr) {
+    DBG2(printf("enter"));
     if (state_ptr->with_locking) {
+        // DBG2(printf("unlock the state"));
         ttrek_UnlockFile(state_ptr);
+    } else {
+        // DBG2(printf("the state is not locked"));
     }
+    // DBG2(printf("release Tcl objects"));
     Tcl_DecrRefCount(state_ptr->project_home_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_venv_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
@@ -636,10 +747,15 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->manifest_json_path_ptr);
+    // DBG2(printf("release spec_root: %p", (void *)state_ptr->spec_root));
     cJSON_Delete(state_ptr->spec_root);
+    // DBG2(printf("release lock_root: %p", (void *)state_ptr->lock_root));
     cJSON_Delete(state_ptr->lock_root);
+    // DBG2(printf("release manifest_root: %p", (void *)state_ptr->manifest_root));
     cJSON_Delete(state_ptr->manifest_root);
+    DBG2(printf("release state: %p", (void *)state_ptr));
     Tcl_Free((char *) state_ptr);
+    DBG2(printf("return: ok"));
 }
 
 #define MAX_STRATEGY_LEN 7

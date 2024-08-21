@@ -24,6 +24,7 @@ static const char *subcommands[] = {
         "unpack",
         "help",
         "use-flags",
+        "scripts",
         NULL
 };
 
@@ -37,7 +38,8 @@ enum subcommand {
     SUBCMD_DOWNLOAD,
     SUBCMD_UNPACK,
     SUBCMD_HELP,
-    SUBCMD_USE_FLAGS
+    SUBCMD_USE_FLAGS,
+    SUBCMD_SCRIPTS,
 };
 
 int main(int argc, char *argv[]) {
@@ -144,6 +146,12 @@ int main(int argc, char *argv[]) {
                 exitcode = 1;
             }
             break;
+        case SUBCMD_SCRIPTS:
+            if (TCL_OK != ttrek_ScriptsSubCmd(interp, objc-1, &objv[1])) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
     }
 
     goto done;
@@ -153,19 +161,27 @@ usage:
     exitcode = 1;
 
 done:
+    // DBG2(printf("free telemetry..."));
     ttrek_TelemetryFree();
+    // DBG2(printf("free environment state..."));
+    ttrek_EnvironmentStateFree();
 
     if (isCurlInitialized == CURLE_OK) {
+        // DBG2(printf("free curl..."));
         curl_global_cleanup();
     }
     if (objc) {
         for (Tcl_Size i = 0; i < objc; i++) {
+            // DBG2(printf("free objv#%" TCL_SIZE_MODIFIER "d ...", i));
             Tcl_DecrRefCount(objv[i]);
         }
+        // DBG2(printf("free objv"));
         ckfree(objv);
     }
     if (interp != NULL) {
+        // DBG2(printf("delete interp"));
         Tcl_DeleteInterp(interp);
     }
+    DBG2(printf("exit: %d", exitcode));
     return exitcode;
 }

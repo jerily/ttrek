@@ -152,6 +152,10 @@ int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr);
 
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
 
+void ttrek_EnvironmentStateFree(void);
+void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr);
+void ttrek_EnvironmentStateRestore(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -12,8 +12,56 @@
 #include "ttrek_resolvo.h"
 #include "ttrek_git.h"
 #include "ttrek_buildInstructions.h"
+#include "ttrek_scripts.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
+
+static int ttrek_InstallRunHook(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *hook_str) {
+
+    int rc = TCL_OK;
+    const char **argv = NULL;
+    Tcl_Size argc;
+    Tcl_Obj *temp_file = NULL;
+
+    DBG2(printf("want to run hook [%s]", hook_str));
+
+    if (ttrek_ScriptsMakeTempFile(interp, state_ptr, hook_str, &temp_file) != TCL_OK) {
+        goto error;
+    }
+
+    if (temp_file == NULL) {
+        DBG2(printf("no hook [%s] defined", hook_str));
+        goto done;
+    }
+
+    Tcl_IncrRefCount(temp_file);
+
+    if (ttrek_ScriptsDefineRunArgs(interp, temp_file, &argc, &argv) != TCL_OK) {
+        goto error;
+    }
+
+    ttrek_EnvironmentStateSetVenv(state_ptr);
+    rc = ttrek_ExecuteCommand(interp, argc, argv, NULL);
+    ttrek_EnvironmentStateRestore();
+
+    goto done;
+
+error:
+
+    rc = TCL_ERROR;
+
+done:
+
+    if (temp_file != NULL) {
+        Tcl_FSDeleteFile(temp_file);
+        Tcl_DecrRefCount(temp_file);
+    }
+    if (argv != NULL) {
+        ckfree(argv);
+    }
+    return rc;
+
+}
 
 int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -105,6 +153,13 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     setenv("IS_TTY", (isatty(1) ? "1" : "0"), 1);
     DBG2(printf("set IS_TTY: %d", isatty(1)));
 
+    if (ttrek_InstallRunHook(interp, state_ptr, "preInstall") != TCL_OK) {
+        ttrek_DestroyState(state_ptr);
+        Tcl_DecrRefCount(list_ptr);
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     int abort = 0;
     if (TCL_OK != ttrek_InstallOrUpdate(interp, installObjc, installObjv, state_ptr, &abort)) {
         ttrek_DestroyState(state_ptr);
@@ -129,17 +184,22 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         return TCL_ERROR;
     }
 
-    if (!do_local_build) {
-        ttrek_DestroyState(state_ptr);
-        return TCL_OK;
+    if (do_local_build) {
+
+        if (TCL_OK != ttrek_RunBuildInstructions(interp, state_ptr)) {
+            fprintf(stderr, "error: build instructions failed\n");
+            ttrek_DestroyState(state_ptr);
+            return TCL_ERROR;
+        }
+
     }
 
-    if (TCL_OK != ttrek_RunBuildInstructions(interp, state_ptr)) {
-        fprintf(stderr, "error: build instructions failed\n");
+    if (ttrek_InstallRunHook(interp, state_ptr, "postInstall") != TCL_OK) {
         ttrek_DestroyState(state_ptr);
         return TCL_ERROR;
     }
 
     ttrek_DestroyState(state_ptr);
     return TCL_OK;
+
 }
