@@ -21,6 +21,7 @@ static int tjson_TreeToJson(Tcl_Interp *interp, cJSON *item, int num_spaces, Tcl
 static struct {
     Tcl_Obj *ld_library_path;
     Tcl_Obj *path;
+    Tcl_Obj *project_home;
     Tcl_DString cwd;
     int cwd_initialized;
     int initialized;
@@ -49,6 +50,14 @@ static void ttrek_EnvironmentStateInit(void) {
             Tcl_IncrRefCount(env_state.path);
         }
 
+        env_var = getenv("PROJECT_HOME");
+        if (env_var == NULL) {
+            env_state.project_home = NULL;
+        } else {
+            env_state.project_home = Tcl_NewStringObj(env_var, -1);
+            Tcl_IncrRefCount(env_state.project_home);
+        }
+
         env_state.cwd_initialized = (Tcl_GetCwd(NULL, &env_state.cwd) != NULL);
 
         env_state.initialized = 1;
@@ -64,6 +73,9 @@ void ttrek_EnvironmentStateFree(void) {
         if (env_state.path != NULL) {
             Tcl_DecrRefCount(env_state.path);
         }
+        if (env_state.project_home != NULL) {
+            Tcl_DecrRefCount(env_state.project_home);
+        }
         if (env_state.cwd_initialized) {
             Tcl_DStringFree(&env_state.cwd);
         }
@@ -76,10 +88,14 @@ void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr) {
     ttrek_EnvironmentStateInit();
 
     Tcl_Obj *env_var;
+
     env_var = Tcl_ObjPrintf("%s/lib", Tcl_GetString(state_ptr->project_install_dir_ptr));
     DBG2(printf("setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_var)));
     setenv("LD_LIBRARY_PATH", Tcl_GetString(env_var), 1);
     Tcl_BounceRefCount(env_var);
+
+    DBG2(printf("setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr)));
+    setenv("PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr), 1);
 
     if (env_state.path == NULL) {
         env_var = Tcl_ObjPrintf("%s/bin", Tcl_GetString(state_ptr->project_install_dir_ptr));
@@ -112,6 +128,14 @@ void ttrek_EnvironmentStateRestore(void) {
     } else {
         DBG2(printf("setenv: %s = [%s]", "PATH", Tcl_GetString(env_state.path)));
         setenv("PATH", Tcl_GetString(env_state.path), 1);
+    }
+
+    if (env_state.project_home == NULL) {
+        unsetenv("PROJECT_HOME");
+        DBG2(printf("unsetenv: %s", "PROJECT_HOME"));
+    } else {
+        DBG2(printf("setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(env_state.project_home)));
+        setenv("PROJECT_HOME", Tcl_GetString(env_state.project_home), 1);
     }
 
     if (env_state.cwd_initialized) {

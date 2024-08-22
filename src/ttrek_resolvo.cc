@@ -321,6 +321,8 @@ static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTabl
                                                 std::set<UseFlag> &iuse_flags,
                                                 std::set<UseFlag> &use_flags) {
 
+    UNUSED(interp);
+
     // iterate over the hashtable use_flags_ht_ptr
     // for each entry, check if it is in iuse_flags
     // if it is, check if the value also exists in use_flags
