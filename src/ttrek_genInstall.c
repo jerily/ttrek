@@ -797,8 +797,13 @@ DEFINE_COMMAND(MakeInstall) {
         ttrek_AppendFormatToObj(interp, cmd, "LD_LIBRARY_PATH=%s ", 1,
             odq(ld_library_path));
     }
+    Tcl_Obj *target = ttrek_cJSONStringToObject(opts, "target");
+    if (target == NULL) {
+        Tcl_AppendToObj(cmd, "make install", -1);
+    } else {
+        ttrek_AppendFormatToObj(interp, cmd, "make %s", 1, odq(target));
+    }
 
-    Tcl_AppendToObj(cmd, "make install", -1);
 
     const cJSON *options = cJSON_GetObjectItem(opts, "options");
     if (options == NULL) {
