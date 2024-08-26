@@ -27,6 +27,7 @@ cd $BUILD_DIR/openssl-3.2.1
 ./Configure --prefix=$INSTALL_DIR -no-shared -no-pinshared no-docs
 make
 make install
+make install_dev
 
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
