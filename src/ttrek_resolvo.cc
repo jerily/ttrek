@@ -197,6 +197,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
     std::unordered_set<UseFlag> use_flags;
     ttrek_ParseUseFlagsFromSpecFile(state_ptr, use_flags);
+    db.set_global_use_flags(use_flags);
 
     // Construct a problem to be solved by the solver
     resolvo::Vector<resolvo::VersionSetId> requirements_vector;

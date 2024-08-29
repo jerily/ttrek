@@ -323,6 +323,7 @@ struct PackageDatabase : public resolvo::DependencyProvider {
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     std::map<std::string, std::vector<std::pair<std::string, std::unordered_set<UseFlag>>>> use_flag_dependencies_map;
+    std::unordered_set<UseFlag> global_use_flags;
     std::map<std::string, std::string> locked_packages;
     ttrek_strategy_t the_strategy;
 
@@ -481,25 +482,32 @@ struct PackageDatabase : public resolvo::DependencyProvider {
                 auto dependencies = resolvo::Dependencies();
 
                 // add use flag dependencies
-                if (use_flag_dependencies_map.find(package_name) != use_flag_dependencies_map.end()) {
-                    std::cout << "package: " << package_name << " has use flag dependencies" << std::endl;
-                    for (const auto &use_flag_dep : use_flag_dependencies_map.at(package_name)) {
-                        auto use_flag_dep_versions = std::string_view(use_flag_dep.first);
-                        auto version_requirement = version_range(use_flag_dep_versions.empty() ? std::nullopt : std::optional(use_flag_dep_versions));
-                        std::cout << "use flag version requirement: " << use_flag_dep_versions << std::endl;
-                        std::cout << "package version: " << package_version << std::endl;
-                        if (version_requirement.contains(Pack(package_version))) {
-                            auto use_flags = use_flag_dep.second;
-                            for (const auto &use_flag : use_flags) {
-                                auto use_flag_version_set = alloc_requirement_from_use_flag(use_flag);
-                                dependencies.requirements.push_back(use_flag_version_set);
-                            }
-                        }
-                    }
-                }
+//                if (use_flag_dependencies_map.find(package_name) != use_flag_dependencies_map.end()) {
+//                    std::cout << "package: " << package_name << " has use flag dependencies" << std::endl;
+//                    for (const auto &use_flag_dep : use_flag_dependencies_map.at(package_name)) {
+//                        auto use_flag_dep_versions = std::string_view(use_flag_dep.first);
+//                        auto version_requirement = version_range(use_flag_dep_versions.empty() ? std::nullopt : std::optional(use_flag_dep_versions));
+//                        std::cout << "use flag version requirement: " << use_flag_dep_versions << std::endl;
+//                        std::cout << "package version: " << package_version << std::endl;
+//                        if (version_requirement.contains(Pack(package_version))) {
+//                            auto use_flags = use_flag_dep.second;
+//                            for (const auto &use_flag : use_flags) {
+//                                auto use_flag_version_set = alloc_requirement_from_use_flag(use_flag);
+//                                dependencies.requirements.push_back(use_flag_version_set);
+//                            }
+//                        }
+//                    }
+//                }
 
                 // add the dependencies for the package
                 for (const auto &dep : package_version_deps) {
+                    if (!dep.second.if_use_flags.empty()) {
+                        if (!satisfies_use_flags(dep.second.if_use_flags)) {
+                            DBG(std::cout << "skipping package... use flags not satisfied for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
+                            continue;
+                        }
+                    }
+
                     auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second.version_requirement);
                     dependencies.requirements.push_back(dep_version_set);
                     DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
@@ -629,6 +637,19 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         std::sort(installs.begin(), installs.end(), [&package_to_index](const std::string &a, const std::string &b) {
             return package_to_index[a.substr(0, a.find('='))] < package_to_index[b.substr(0, b.find('='))];
         });
+    }
+
+    void set_global_use_flags(std::unordered_set<UseFlag> use_flags) {
+        global_use_flags.insert(use_flags.begin(), use_flags.end());
+    }
+
+    bool satisfies_use_flags(const std::unordered_set<UseFlag> &use_flags) {
+        for (const auto &use_flag : use_flags) {
+            if (global_use_flags.find(use_flag) == global_use_flags.end()) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
