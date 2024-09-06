@@ -16,8 +16,10 @@ INSTALL_DIR="$PROJECT_HOME/build/install"
 export PROJECT_HOME
 
 DOWNLOAD_DIR="$ROOT_BUILD_DIR/download"
+PATCH_DIR="$ROOT_BUILD_DIR/source"
 
 mkdir -p "$DOWNLOAD_DIR"
+mkdir -p "$PATCH_DIR"
 mkdir -p "$INSTALL_DIR"
 
 if [ -n "$TTREK_MAKE_THREADS" ]; then

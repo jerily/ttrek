@@ -177,20 +177,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
     Tcl_IncrRefCount(install_script_full);
 
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
-        DBG2(printf("send install script to stdout in bootstrap mode"));
-
-        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, package_num_current, package_num_total);
-        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(package_counter));
-        Tcl_BounceRefCount(package_counter);
-
-        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(install_script_full));
-
-        cJSON_free(install_spec_root);
-        Tcl_DecrRefCount(install_script_full);
-        return TCL_OK;
-    }
-
     cJSON *patches = cJSON_GetObjectItem(install_spec_root, "patches");
     if (patches) {
         for (int i = 0; i < cJSON_GetArraySize(patches); i++) {
@@ -209,11 +195,40 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             snprintf(patch_filename, sizeof(patch_filename), "source/patch-%s-%s-%s", package_name, package_version,
                      patch_name);
 
-            Tcl_Obj *patch_file_path_ptr;
-            ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1),
-                              &patch_file_path_ptr);
-            ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0644);
+            if (state_ptr->mode == MODE_BOOTSTRAP) {
+
+                Tcl_Obj *patch_bootstrap = Tcl_ObjPrintf(
+                    "\n"
+                    "cat <<'__TTREK_PATCH_EOF__' > \"$ROOT_BUILD_DIR/%s\"\n"
+                    "%s\n"
+                    "__TTREK_PATCH_EOF__\n", patch_filename, patch_diff);
+
+                ttrek_OutputBootstrap(state_ptr, Tcl_GetString(patch_bootstrap));
+                Tcl_BounceRefCount(patch_bootstrap);
+
+            } else {
+
+                Tcl_Obj *patch_file_path_ptr;
+                ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1),
+                                  &patch_file_path_ptr);
+                ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0644);
+
+            }
         }
+    }
+
+    if (state_ptr->mode == MODE_BOOTSTRAP) {
+        DBG2(printf("send install script to stdout in bootstrap mode"));
+
+        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, package_num_current, package_num_total);
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(package_counter));
+        Tcl_BounceRefCount(package_counter);
+
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(install_script_full));
+
+        cJSON_free(install_spec_root);
+        Tcl_DecrRefCount(install_script_full);
+        return TCL_OK;
     }
 
     char install_filename[256];
