@@ -15,10 +15,27 @@ static const char install_script_common_dynamic[] = {
     0x00
 };
 
+static const char bootstrap_script_common_dynamic[] = {
+#include "bootstrap_common_dynamic.sh.h"
+    0x00
+};
+
 static const char install_script_common_static[] = {
 #include "install_common_static.sh.h"
     0x00
 };
+
+static const char bootstrap_script[] = {
+#include "bootstrap.sh.h"
+    0x00
+};
+
+static const char *pkg_counter_script =
+    "\n"
+    "PKG_CUR=%s\n"
+    "PKG_TOT=%s\n";
+
+static const char *pkg_counter_template = "${%d:-1}";
 
 static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
                                   const cJSON *json, int *result)
@@ -211,9 +228,21 @@ static Tcl_Obj *ttrek_AppendFormatToObj(Tcl_Interp *interp, Tcl_Obj *result, con
     return result;
 }
 
-static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultList, Tcl_Obj *cmd) {
-    DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
+static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultList, Tcl_Obj *cmd, Tcl_Obj *log_file) {
+    if (log_file != NULL) {
+        DBG2(printf("new cmd: [%s]; log file: [%s]", Tcl_GetString(cmd), Tcl_GetString(log_file)));
+        Tcl_AppendToObj(cmd, " >", 2);
+        Tcl_AppendObjToObj(cmd, log_file);
+        Tcl_AppendToObj(cmd, " 2>&1", 5);
+    } else {
+        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
+    }
     Tcl_AppendToObj(cmd, " || fail", -1);
+    if (log_file != NULL) {
+        Tcl_AppendToObj(cmd, " ", 1);
+        Tcl_AppendObjToObj(cmd, log_file);
+        Tcl_BounceRefCount(log_file);
+    }
     Tcl_ListObjAppendElement(interp, resultList, cmd);
 }
 
@@ -222,7 +251,7 @@ static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultLis
 #define osq(x) ttrek_ObjectToSingleQuotedObj(x)
 #define odq(x) ttrek_ObjectToDoubleQuotedObj(x)
 
-#define APPEND_CMD(x) ttrek_SpecToObj_AppendCommand(interp, resultList, (x));
+#define APPEND_CMD(x, y) ttrek_SpecToObj_AppendCommand(interp, resultList, (x), (y));
 
 #define DEFINE_COMMAND(x) static int ttrek_SpecToObj_##x(Tcl_Interp *interp, const cJSON *opts, Tcl_HashTable *use_flags_ht_ptr, Tcl_Obj *resultList)
 
@@ -271,7 +300,7 @@ DEFINE_COMMAND(EnvVariable) {
     if (op_mode == OP_ENV_UNSET) {
 
         cmd = ttrek_AppendFormatToObj(interp, NULL, "unset %s", 1, name);
-        APPEND_CMD(cmd);
+        APPEND_CMD(cmd, NULL);
 
     } else {
 
@@ -302,10 +331,10 @@ DEFINE_COMMAND(EnvVariable) {
             }
         }
 
-        APPEND_CMD(cmd);
+        APPEND_CMD(cmd, NULL);
 
         cmd = ttrek_AppendFormatToObj(interp, NULL, "export %s", 1, name);
-        APPEND_CMD(cmd);
+        APPEND_CMD(cmd, NULL);
 
         Tcl_DecrRefCount(name);
 
@@ -327,14 +356,11 @@ DEFINE_COMMAND(Download) {
         return TCL_ERROR;
     }
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "%s download %s %s",
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s",
         3, osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)), osq(url),
         dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"));
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/download.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/download.log"));
 
     return TCL_OK;
 
@@ -358,9 +384,9 @@ DEFINE_COMMAND(Patch) {
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1, dq("$SOURCE_DIR"));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, NULL);
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cat %s/patch-%s-%s-%s | patch", 4,
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cat %s/patch-%s-%s-%s | cmd patch", 4,
         dq("$PATCH_DIR"), dq("$PACKAGE"), dq("$VERSION"), osq(filename));
 
     Tcl_Obj *p_num = ttrek_cJSONStringToObject(opts, "p_num");
@@ -368,10 +394,10 @@ DEFINE_COMMAND(Patch) {
         ttrek_AppendFormatToObj(interp, cmd, " -p%s", 1, osq(p_num));
     }
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s/patch-%s.log 2>&1", 2,
+    Tcl_Obj *log_file = ttrek_AppendFormatToObj(interp, NULL, "%s/patch-%s.log", 2,
         dq("$BUILD_LOG_DIR"), osq(filename));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, log_file);
 
     Tcl_DecrRefCount(filename);
 
@@ -391,7 +417,7 @@ DEFINE_COMMAND(Git) {
         return TCL_ERROR;
     }
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "git -C %s clone %s --depth 1"
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd git -C %s clone %s --depth 1"
         " --single-branch", 2, dq("$SOURCE_DIR"), osq(url));
 
     Tcl_Obj *branch = ttrek_cJSONStringToObject(opts, "branch");
@@ -411,15 +437,12 @@ DEFINE_COMMAND(Git) {
 
     Tcl_AppendToObj(cmd, " .", -1);
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/download.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/download.log"));
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "find %s -name '.git' -print0 |"
         " xargs -0 rm -rf", 1, dq("$SOURCE_DIR"));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, NULL);
 
     return TCL_OK;
 
@@ -432,14 +455,11 @@ DEFINE_COMMAND(Unpack) {
 
     Tcl_Obj *cmd;
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "%s unpack %s %s", 3,
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s unpack %s %s", 3,
         osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)),
         dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/unpack.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
 
     return TCL_OK;
 
@@ -453,10 +473,10 @@ DEFINE_COMMAND(Cd) {
 
     Tcl_Obj *dirname = ttrek_cJSONStringToObject(opts, "dirname");
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1,
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cd %s", 1,
         (dirname == NULL ? dq("$BUILD_DIR") : odq(dirname)));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, NULL);
 
     return TCL_OK;
 
@@ -466,9 +486,9 @@ DEFINE_COMMAND(Autogen) {
 
     Tcl_Obj *cmd;
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cd %s", 1, dq("$SOURCE_DIR"));
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cd %s", 1, dq("$SOURCE_DIR"));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, NULL);
 
     cmd = Tcl_NewObj();
 
@@ -480,10 +500,10 @@ DEFINE_COMMAND(Autogen) {
 
     Tcl_Obj *path = ttrek_cJSONStringToObject(opts, "path");
     if (path == NULL) {
-        ttrek_AppendFormatToObj(interp, cmd, "%s", 1, dq("./autogen.sh"));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd %s", 1, dq("./autogen.sh"));
     } else {
         // TODO: make sure the path is under $SOURCE_DIR
-        ttrek_AppendFormatToObj(interp, cmd, "%s", 1, odq(path));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd %s", 1, odq(path));
     }
 
     const cJSON *options = cJSON_GetObjectItem(opts, "options");
@@ -530,10 +550,7 @@ DEFINE_COMMAND(Autogen) {
 
 skip_options:
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/autogen.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/autogen.log"));
 
     return TCL_OK;
 
@@ -551,10 +568,10 @@ DEFINE_COMMAND(Configure) {
 
     Tcl_Obj *path = ttrek_cJSONStringToObject(opts, "path");
     if (path == NULL) {
-        ttrek_AppendFormatToObj(interp, cmd, "%s", 1, dq("$SOURCE_DIR/configure"));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd %s", 1, dq("$SOURCE_DIR/configure"));
     } else {
         // TODO: make sure the path is under $SOURCE_DIR
-        ttrek_AppendFormatToObj(interp, cmd, "%s", 1, odq(path));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd %s", 1, odq(path));
     }
 
     Tcl_Obj *cmd_option_prefix = ttrek_cJSONStringToObject(opts, "option_prefix");
@@ -583,7 +600,6 @@ DEFINE_COMMAND(Configure) {
         if (!is_continue) {
             continue;
         }
-        DBG(fprintf(stderr, "enabled option: %s\n", cJSON_Print(option)));
 
         Tcl_Obj *name = ttrek_cJSONStringToObject(option, "name");
         if (name == NULL) {
@@ -611,11 +627,8 @@ DEFINE_COMMAND(Configure) {
 skip_options:
 
     Tcl_DecrRefCount(cmd_option_prefix);
-fprintf(stderr, "cmd: %s\n", Tcl_GetString(cmd));
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/configure.log"));
 
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/configure.log"));
 
     return TCL_OK;
 
@@ -631,7 +644,7 @@ DEFINE_COMMAND(CmakeConfig) {
             odq(ld_library_path));
     }
 
-    ttrek_AppendFormatToObj(interp, cmd, "cmake %s", 1, dq("$SOURCE_DIR"));
+    ttrek_AppendFormatToObj(interp, cmd, "cmd cmake %s", 1, dq("$SOURCE_DIR"));
 
     ttrek_AppendFormatToObj(interp, cmd, " -DCMAKE_INSTALL_PREFIX=%s", 1,
         dq("$INSTALL_DIR"));
@@ -673,10 +686,7 @@ DEFINE_COMMAND(CmakeConfig) {
 
 skip_options:
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/configure.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/configure.log"));
 
     return TCL_OK;
 
@@ -684,7 +694,7 @@ skip_options:
 
 DEFINE_COMMAND(Make) {
 
-    Tcl_Obj *cmd = Tcl_NewStringObj("make", -1);
+    Tcl_Obj *cmd = Tcl_NewStringObj("cmd make", -1);
 
     const cJSON *parallel = cJSON_GetObjectItem(opts, "parallel");
     if (parallel != NULL) {
@@ -738,10 +748,7 @@ DEFINE_COMMAND(Make) {
 
 skip_options:
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/build.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/build.log"));
 
     return TCL_OK;
 
@@ -753,7 +760,7 @@ DEFINE_COMMAND(CmakeMake) {
 
     Tcl_Obj *cmd;
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --build %s", 1,
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cmake --build %s", 1,
             dq("$BUILD_DIR"));
 
     const cJSON *parallel = cJSON_GetObjectItem(opts, "parallel");
@@ -779,10 +786,7 @@ DEFINE_COMMAND(CmakeMake) {
         ttrek_AppendFormatToObj(interp, cmd, " --config=%s", 1, osq(config));
     }
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/build.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/build.log"));
 
     return TCL_OK;
 
@@ -799,9 +803,9 @@ DEFINE_COMMAND(MakeInstall) {
     }
     Tcl_Obj *target = ttrek_cJSONStringToObject(opts, "target");
     if (target == NULL) {
-        Tcl_AppendToObj(cmd, "make install", -1);
+        Tcl_AppendToObj(cmd, "cmd make install", -1);
     } else {
-        ttrek_AppendFormatToObj(interp, cmd, "make %s", 1, odq(target));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd make %s", 1, odq(target));
     }
 
 
@@ -839,10 +843,7 @@ DEFINE_COMMAND(MakeInstall) {
 
 skip_options:
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/install.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/install.log"));
 
     return TCL_OK;
 
@@ -854,7 +855,7 @@ DEFINE_COMMAND(CmakeInstall) {
 
     Tcl_Obj *cmd;
 
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmake --install %s", 1,
+    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cmake --install %s", 1,
             dq("$BUILD_DIR"));
 
     Tcl_Obj *config = ttrek_cJSONStringToObject(opts, "config");
@@ -862,10 +863,7 @@ DEFINE_COMMAND(CmakeInstall) {
         ttrek_AppendFormatToObj(interp, cmd, " --config=%s", 1, osq(config));
     }
 
-    ttrek_AppendFormatToObj(interp, cmd, " >%s 2>&1", 1,
-        dq("$BUILD_LOG_DIR/install.log"));
-
-    APPEND_CMD(cmd);
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/install.log"));
 
     return TCL_OK;
 
@@ -952,13 +950,53 @@ error:
     return NULL;
 }
 
+Tcl_Obj *ttrek_generatePackageCounter(Tcl_Interp *interp, int package_num_current, int package_num_total) {
+
+    Tcl_Obj *pkg_obj_current, *pkg_obj_total;
+
+    if (package_num_current == -1) {
+        pkg_obj_current = Tcl_ObjPrintf(pkg_counter_template, 1);
+    } else {
+        pkg_obj_current = Tcl_NewIntObj(package_num_current);
+    }
+
+    if (package_num_total == -1) {
+        pkg_obj_total = Tcl_ObjPrintf(pkg_counter_template, 2);
+    } else {
+        pkg_obj_total = Tcl_NewIntObj(package_num_total);
+    }
+
+    return ttrek_AppendFormatToObj(interp, NULL, pkg_counter_script, 2,
+        odq(pkg_obj_current), odq(pkg_obj_total));
+
+}
+
+Tcl_Obj *ttrek_generateBootstrapScript(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+
+    UNUSED(interp);
+    UNUSED(state_ptr);
+
+    Tcl_Obj *bootstrap = Tcl_NewObj();
+
+    // ttrek_AppendFormatToObj(interp, bootstrap, bootstrap_script, 3,
+    //     osq(state_ptr->project_build_dir_ptr), osq(state_ptr->project_install_dir_ptr),
+    //     osq(state_ptr->project_home_dir_ptr));
+
+    Tcl_AppendToObj(bootstrap, bootstrap_script, -1);
+
+    Tcl_AppendToObj(bootstrap, install_script_common_static, -1);
+
+    return bootstrap;
+
+}
+
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
-                                     const char *package_version, const char *project_build_dir,
-                                     const char *project_install_dir, const char *source_dir,
-                                     cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr, int is_local_build)
+                                     const char *package_version, const char *source_dir,
+                                     cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr,
+                                     ttrek_state_t *state_ptr)
 {
 
-    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, global_use_flags_ht_ptr, is_local_build);
+    Tcl_Obj *install_specific = ttrek_SpecToObj(interp, spec, global_use_flags_ht_ptr, state_ptr->is_local_build);
     if (install_specific == NULL) {
         return NULL;
     }
@@ -969,11 +1007,24 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
         source_dir = "";
     }
 
-    ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 5,
-        sq(package_name), sq(package_version), sq(project_build_dir),
-        sq(project_install_dir), sq(source_dir));
+    if (state_ptr->mode == MODE_BOOTSTRAP) {
 
-    Tcl_AppendToObj(install_common, install_script_common_static, -1);
+        ttrek_AppendFormatToObj(interp, install_common, bootstrap_script_common_dynamic, 3,
+            sq(package_name), sq(package_version), sq(source_dir));
+
+    } else {
+
+        ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 5,
+            sq(package_name), sq(package_version), osq(state_ptr->project_build_dir_ptr),
+            osq(state_ptr->project_install_dir_ptr), sq(source_dir));
+
+        Tcl_AppendToObj(install_common, install_script_common_static, -1);
+
+        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, -1, -1);
+        Tcl_AppendObjToObj(install_common, package_counter);
+        Tcl_BounceRefCount(package_counter);
+
+    }
 
     Tcl_Obj *install_full = Tcl_NewListObj(0, NULL);
     Tcl_ListObjAppendElement(interp, install_full, install_common);

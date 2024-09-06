@@ -530,7 +530,7 @@ Tcl_Obj *ttrek_GetProjectDirForGlobalMode(Tcl_Interp *interp) {
 }
 
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
-    if (mode == MODE_LOCAL) {
+    if (mode == MODE_LOCAL || mode == MODE_BOOTSTRAP) {
         return ttrek_GetProjectDirForLocalMode(interp);
     } else if (mode == MODE_USER) {
         return ttrek_GetProjectDirForUserMode(interp);
@@ -691,9 +691,14 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     Tcl_Obj *path_lock_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, LOCK_JSON_FILE);
 
     if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
-        if (mode != MODE_LOCAL) {
+        if (mode != MODE_LOCAL && mode != MODE_BOOTSTRAP) {
+            DBG2(printf("initialize the lock file: %s", Tcl_GetString(path_lock_file_ptr)));
             ttrek_InitLockFile(interp, path_lock_file_ptr);
+        } else {
+            DBG2(printf("no need to initialize the lock file"));
         }
+    } else {
+        DBG2(printf("the lock file doesn't exist"));
     }
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
@@ -702,6 +707,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
     state_ptr->mode = mode;
+    state_ptr->is_local_build = 0;
     state_ptr->strategy = strategy;
     state_ptr->project_home_dir_ptr = project_home_dir_ptr;
     state_ptr->project_venv_dir_ptr = project_venv_dir_ptr;
@@ -716,8 +722,13 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
-    state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
-    state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
+    if (mode == MODE_BOOTSTRAP) {
+        state_ptr->lock_root = cJSON_CreateObject();
+        state_ptr->manifest_root = cJSON_CreateObject();
+    } else {
+        state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
+        state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
+    }
 
     // print all refCount for all dir_ptr in state_ptr
     DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
@@ -1057,3 +1068,9 @@ int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr) {
     cJSON_Delete(lock_root);
     return TCL_OK;
 }
+
+void ttrek_OutputBootstrap(ttrek_state_t *state_ptr, const char *script) {
+    UNUSED(state_ptr);
+    printf("%s", script);
+}
+

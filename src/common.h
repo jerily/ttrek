@@ -85,7 +85,8 @@ typedef int Tcl_Size;
 typedef enum {
     MODE_LOCAL,
     MODE_USER,
-    MODE_GLOBAL
+    MODE_GLOBAL,
+    MODE_BOOTSTRAP
 } ttrek_mode_t;
 
 typedef enum {
@@ -113,6 +114,7 @@ typedef struct {
     int option_yes;
     int option_force;
     ttrek_mode_t mode;
+    int is_local_build;
     ttrek_strategy_t strategy;
     int lock_fd;
 } ttrek_state_t;
@@ -155,6 +157,8 @@ Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
 void ttrek_EnvironmentStateFree(void);
 void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr);
 void ttrek_EnvironmentStateRestore(void);
+
+void ttrek_OutputBootstrap(ttrek_state_t *state_ptr, const char *script);
 
 #ifdef __cplusplus
 }

@@ -691,10 +691,16 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         if (execution_plan.empty()) {
             *abort = 1;
-            std::cout << "Nothing to install!" << std::endl;
+            if (state_ptr->mode != MODE_BOOTSTRAP) {
+                std::cout << "Nothing to install!" << std::endl;
+            }
             Tcl_DecrRefCount(use_flags_list_ptr);
             Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_OK;
+        }
+
+        if (state_ptr->mode == MODE_BOOTSTRAP) {
+            goto skipConfirmation;
         }
 
         std::cout << "The following packages will be installed:" << std::endl;
@@ -714,6 +720,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
 
         std::cout << std::endl;
+
+skipConfirmation:
 
         // ensure the directory skeleton exists
         if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
@@ -789,21 +797,25 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         Tcl_DecrRefCount(use_flags_list_ptr);
         Tcl_DeleteHashTable(&global_use_flags_ht);
 
-        if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
-            return TCL_ERROR;
-        }
+        if (state_ptr->mode != MODE_BOOTSTRAP) {
 
-        if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
-            return TCL_ERROR;
-        }
+            if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
+                return TCL_ERROR;
+            }
 
-        if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
-            fprintf(stderr, "error: could not update manifest file\n");
-            return TCL_ERROR;
-        }
+            if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
+                return TCL_ERROR;
+            }
 
-        for (const auto &install_spec: installs_from_lock_file_sofar) {
-            ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
+            if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
+                fprintf(stderr, "error: could not update manifest file\n");
+                return TCL_ERROR;
+            }
+
+            for (const auto &install_spec: installs_from_lock_file_sofar) {
+                ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
+            }
+
         }
 
     }

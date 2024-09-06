@@ -166,9 +166,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
 
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
-                                                               package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-                                                               Tcl_GetString(state_ptr->project_install_dir_ptr), NULL, install_script_node,
-                                                               global_use_flags_ht_ptr, 0);
+                                                               package_version, NULL, install_script_node,
+                                                               global_use_flags_ht_ptr, state_ptr);
 
     if (install_script_full == NULL) {
         fprintf(stderr, "error: could not generate install script: %s\n",
@@ -177,6 +176,20 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(install_script_full);
+
+    if (state_ptr->mode == MODE_BOOTSTRAP) {
+        DBG2(printf("send install script to stdout in bootstrap mode"));
+
+        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, package_num_current, package_num_total);
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(package_counter));
+        Tcl_BounceRefCount(package_counter);
+
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(install_script_full));
+
+        cJSON_free(install_spec_root);
+        Tcl_DecrRefCount(install_script_full);
+        return TCL_OK;
+    }
 
     cJSON *patches = cJSON_GetObjectItem(install_spec_root, "patches");
     if (patches) {

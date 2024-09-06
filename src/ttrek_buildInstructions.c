@@ -77,11 +77,11 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
         package_version = cJSON_GetStringValue(package_version_node);
     }
 
+    state_ptr->is_local_build = 1;
+
     Tcl_Obj *install_script_full = ttrek_generateInstallScript(interp, package_name,
-        package_version, Tcl_GetString(state_ptr->project_build_dir_ptr),
-        Tcl_GetString(state_ptr->project_install_dir_ptr),
-        Tcl_GetString(state_ptr->project_home_dir_ptr),
-        install_script_node, &use_flags_ht, 1);
+        package_version, Tcl_GetString(state_ptr->project_home_dir_ptr),
+        install_script_node, &use_flags_ht, state_ptr);
 
     Tcl_DecrRefCount(use_flags_list_ptr);
     Tcl_DeleteHashTable(&use_flags_ht);
@@ -90,6 +90,19 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(install_script_full);
+
+    if (state_ptr->mode == MODE_BOOTSTRAP) {
+        DBG2(printf("send build script to output in bootstrap mode"));
+
+        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, 1, 1);
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(package_counter));
+        Tcl_BounceRefCount(package_counter);
+
+        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(install_script_full));
+
+        Tcl_DecrRefCount(install_script_full);
+        return TCL_OK;
+    }
 
     Tcl_Obj *path_to_install_file_ptr;
     ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_ObjPrintf("install-%s-%s.sh", package_name, package_version),

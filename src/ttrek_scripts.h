@@ -13,6 +13,7 @@
 extern "C" {
 #endif
 
+const char *ttrek_ScriptsGet(cJSON *spec_root, const char *name_str);
 int ttrek_ScriptsAdd(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr, Tcl_Obj *body_ptr);
 int ttrek_ScriptsList(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj **list_ptr_ptr);
 int ttrek_ScriptsDel(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr);

@@ -1,6 +1,8 @@
 
-PKG_CUR="${1:-1}"
-PKG_TOT="${2:-1}"
+if [ "$1" = "-v" ] || [ "$1" = "-fail-verbose" ]; then
+    TTREK_FAIL_VERBOSE=1
+    shift
+fi
 
 init_tty() {
     [ "$IS_TTY" != '0' ] || return 0
@@ -65,6 +67,24 @@ stage() {
 }
 
 ok() { stage ok; }
-fail() { stage fail $?; }
+fail() {
+    R=$?
+    stage fail
+    echo "${_R}Failed command${_A}:${_T} $LATEST_COMMAND"
+    if [ -n "$1" ] && [ -e "$1" ]; then
+        if [ -z "$TTREK_FAIL_VERBOSE" ]; then
+            echo "${_R}Check the details in the log file${_A}:${_T} $1"
+        else
+            echo "${_R}Log file${_A}:${_T} $1"
+            cat "$1"
+        fi
+    fi
+    echo
+    exit $R
+}
+cmd() {
+    LATEST_COMMAND="$@"
+    "$@"
+}
 
 init_tty
