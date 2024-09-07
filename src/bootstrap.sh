@@ -37,3 +37,19 @@ export PKG_CONFIG_PATH
 
 PATH="$INSTALL_DIR/bin:$PATH"
 export PATH
+
+unpack() {
+  local archive="$1"
+  local output_directory="$2"
+
+  # try with tar
+  if tar -C "$output_directory" --strip-components 1 -xzf "$archive"; then
+    return 0
+  fi
+
+  # try with unzip
+  if unzip -d "$output_directory" "$archive"; then
+    mv "$output_directory"/*/* "$output_directory"
+    return 0
+  fi
+}

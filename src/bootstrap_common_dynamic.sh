@@ -9,10 +9,10 @@ BUILD_LOG_DIR="$ROOT_BUILD_DIR/logs/${PACKAGE}-${VERSION}"
 
 if [ -z "$SOURCE_DIR" ]; then
     SOURCE_DIR="$ROOT_BUILD_DIR/source/${PACKAGE}-${VERSION}"
-    rm -rf "$SOURCE_DIR"
-    mkdir -p "$SOURCE_DIR"
 fi
 
+rm -rf "$SOURCE_DIR"
+mkdir -p "$SOURCE_DIR"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 rm -rf "$BUILD_LOG_DIR"
