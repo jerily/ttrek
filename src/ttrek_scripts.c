@@ -75,7 +75,7 @@ int ttrek_ScriptsDel(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr) {
 
 }
 
-static const char *ttrek_ScriptsGet(cJSON *spec_root, const char *name_str) {
+const char *ttrek_ScriptsGet(cJSON *spec_root, const char *name_str) {
 
     cJSON *scripts_node = cJSON_GetObjectItem(spec_root, "scripts");
     if (scripts_node != NULL) {

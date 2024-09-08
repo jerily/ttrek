@@ -97,9 +97,21 @@ add_custom_command(
 )
 
 add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap_common_dynamic.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap_common_dynamic.sh
+)
+
+add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
   COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/install_common_static.sh
+)
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap.sh
 )
 
 file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
@@ -116,7 +128,9 @@ endforeach()
 
 add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
         ${HELP_TOPICS_H}
         src/ttrek_resolvo.cc
         src/ttrek_resolvo.h
