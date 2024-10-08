@@ -256,9 +256,62 @@ static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultLis
 
 #define DEFINE_COMMAND(x) static int ttrek_SpecToObj_##x(Tcl_Interp *interp, ttrek_state_t *state_ptr, const cJSON *opts, Tcl_HashTable *use_flags_ht_ptr, Tcl_Obj *resultList)
 
+DEFINE_COMMAND(NpmInstall) {
+
+    UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
+
+    Tcl_Obj *cmd;
+
+    cmd = Tcl_NewStringObj("_NPM_SAVE_PWD=\"$(pwd)\" && cd \"$PROJECT_HOME\"", -1);
+    APPEND_CMD(cmd, NULL);
+
+    cmd = Tcl_NewStringObj("[ -f package.json -a -d node_modules ] || npm init -y", -1);
+
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/npm_init.log"));
+
+    cmd = Tcl_NewStringObj("npm install", -1);
+
+    const cJSON *packages = cJSON_GetObjectItem(opts, "packages");
+    if (packages == NULL) {
+        goto skip_packages;
+    }
+
+    if (!cJSON_IsArray(packages)) {
+        Tcl_BounceRefCount(cmd);
+        SetResult("the package property is not an array");
+        return TCL_ERROR;
+    }
+
+    const cJSON *package;
+    cJSON_ArrayForEach(package, packages) {
+
+        if (!cJSON_IsString(package)) {
+            Tcl_BounceRefCount(cmd);
+            SetResult("element in the package property does not have a string type");
+            return TCL_ERROR;
+        }
+
+        ttrek_AppendFormatToObj(interp, cmd, " %s", 1, sq(cJSON_GetStringValue(package)));
+
+    }
+
+
+skip_packages:
+
+    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/npm_install.log"));
+
+    cmd = Tcl_NewStringObj("cd \"$_NPM_SAVE_PWD\"", -1);
+    APPEND_CMD(cmd, NULL);
+
+    return TCL_OK;
+
+}
+
 DEFINE_COMMAND(EnvVariable) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -375,6 +428,7 @@ DEFINE_COMMAND(Download) {
 DEFINE_COMMAND(Patch) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -414,6 +468,7 @@ DEFINE_COMMAND(Patch) {
 DEFINE_COMMAND(Git) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -479,6 +534,7 @@ DEFINE_COMMAND(Unpack) {
 DEFINE_COMMAND(Cd) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -494,6 +550,8 @@ DEFINE_COMMAND(Cd) {
 }
 
 DEFINE_COMMAND(Autogen) {
+
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -568,6 +626,8 @@ DEFINE_COMMAND(Autogen) {
 }
 
 DEFINE_COMMAND(Configure) {
+
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
@@ -647,6 +707,8 @@ DEFINE_COMMAND(Configure) {
 
 DEFINE_COMMAND(CmakeConfig) {
 
+    UNUSED(state_ptr);
+
     Tcl_Obj *cmd = Tcl_NewObj();
 
     Tcl_Obj *ld_library_path = ttrek_cJSONStringToObject(opts, "ld_library_path");
@@ -704,6 +766,8 @@ DEFINE_COMMAND(CmakeConfig) {
 }
 
 DEFINE_COMMAND(Make) {
+
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd = Tcl_NewStringObj("cmd make", -1);
 
@@ -768,6 +832,7 @@ DEFINE_COMMAND(Make) {
 DEFINE_COMMAND(CmakeMake) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -804,6 +869,8 @@ DEFINE_COMMAND(CmakeMake) {
 }
 
 DEFINE_COMMAND(MakeInstall) {
+
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd = Tcl_NewObj();
 
@@ -863,6 +930,7 @@ DEFINE_COMMAND(MakeInstall) {
 DEFINE_COMMAND(CmakeInstall) {
 
     UNUSED(use_flags_ht_ptr);
+    UNUSED(state_ptr);
 
     Tcl_Obj *cmd;
 
@@ -897,6 +965,7 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
             {"git",           "1", 0, ttrek_SpecToObj_Git},
             {"unpack",        "1", 0, ttrek_SpecToObj_Unpack},
             {"patch",         "1", 0, ttrek_SpecToObj_Patch},
+            {"npm_install",   "2", 1, ttrek_SpecToObj_NpmInstall},
             {"cd",           NULL, 1, ttrek_SpecToObj_Cd},
             {"env_variable", NULL, 1, ttrek_SpecToObj_EnvVariable},
             {"autogen",       "2", 1, ttrek_SpecToObj_Autogen},
@@ -1029,9 +1098,10 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
 
     } else {
 
-        ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 5,
+        ttrek_AppendFormatToObj(interp, install_common, install_script_common_dynamic, 6,
                                 sq(package_name), sq(package_version), osq(state_ptr->project_build_dir_ptr),
-                                osq(state_ptr->project_install_dir_ptr), sq(source_dir));
+                                osq(state_ptr->project_install_dir_ptr), sq(source_dir),
+                                osq(state_ptr->project_home_dir_ptr));
 
         Tcl_AppendToObj(install_common, install_script_common_static, -1);
 
