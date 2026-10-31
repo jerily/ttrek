@@ -6,7 +6,7 @@
 
 #include "subCmdDecls.h"
 #include "common.h"
-#include "ttrek_resolvo.h"
+#include "ttrek_solver.h"
 #include "ttrek_git.h"
 
 int ttrek_UninstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {

@@ -3,6 +3,7 @@ Usage: ttrek COMMAND [options]
 Available commands:
     init
     install
+    pretend
     update
     uninstall
     ls

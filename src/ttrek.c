@@ -25,6 +25,7 @@ static const char *subcommands[] = {
         "help",
         "use-flags",
         "scripts",
+        "pretend",
         NULL
 };
 
@@ -40,6 +41,7 @@ enum subcommand {
     SUBCMD_HELP,
     SUBCMD_USE_FLAGS,
     SUBCMD_SCRIPTS,
+    SUBCMD_PRETEND,
 };
 
 int main(int argc, char *argv[]) {
@@ -70,7 +72,9 @@ int main(int argc, char *argv[]) {
     Tcl_FindExecutable(argv[0]);
 #endif
 
-    ttrek_TelemetryLoadMachineId(interp);
+    if (strcmp(argv[1], "pretend") != 0) {
+        ttrek_TelemetryLoadMachineId(interp);
+    }
 
     objc = argc;
     objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
@@ -89,6 +93,13 @@ int main(int argc, char *argv[]) {
         case SUBCMD_INIT:
             fprintf(stderr, "init\n");
             ttrek_InitSubCmd(interp, objc-1, &objv[1]);
+            break;
+        case SUBCMD_PRETEND:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
+            if (ttrek_PretendSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
             break;
         case SUBCMD_INSTALL:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
