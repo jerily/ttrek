@@ -62,6 +62,8 @@ static void test_strategies() {
     auto message = solve_packages(locked, {locked.alloc_requirement_from_str("lib", ">=1.2.0")}, {}, result);
     assert(!message.empty());
     assert(result.empty());
+    const auto lock = message.find("is locked");
+    assert(lock != std::string::npos && message.find("is locked", lock + 1) == std::string::npos);
 }
 
 static void test_use_flags() {
@@ -95,6 +97,16 @@ static void test_errors() {
     }
 }
 
+static void test_distinct_requirement_diagnostics() {
+    PackageDatabase db;
+    std::vector<SolvableId> result;
+    auto message = solve_packages(db, {db.alloc_requirement_from_str("distinct-requirements", "")}, {}, result);
+    assert(result.empty());
+    assert(message.find("missing 1.0.0") != std::string::npos);
+    assert(message.find("missing 2.0.0") != std::string::npos);
+    assert(message.find("Error:") == std::string::npos);
+}
+
 static void test_version_ownership_and_hashing() {
     Pack prerelease("9.0.0-beta.2");
     auto copy = prerelease;
@@ -117,6 +129,7 @@ int main() {
     test_strategies();
     test_use_flags();
     test_errors();
+    test_distinct_requirement_diagnostics();
     test_version_ownership_and_hashing();
     return 0;
 }

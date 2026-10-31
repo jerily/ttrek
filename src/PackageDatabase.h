@@ -473,6 +473,10 @@ inline std::string solve_packages(PackageDatabase &db, const std::vector<Version
                             : "Dependency resolution failed";
         } else {
             message = "Dependency resolution cancelled";
+            const auto& cancelled = std::get<UnsolvableOrCancelled::Cancelled>(*error);
+            if (auto* reason = std::any_cast<std::string>(&cancelled.data); reason && !reason->empty()) {
+                message += ": " + *reason;
+            }
         }
     } else {
         result = std::move(selected);
