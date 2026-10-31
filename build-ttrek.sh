@@ -18,7 +18,7 @@ CURL_VERSION=8.23.0
 TCL_VERSION=9.1.0
 LIBGIT2_VERSION=1.9.7
 LIBARCHIVE_VERSION=3.8.11
-SATDEPSOLVER_REVISION=691db3251ab85a692582e661d2e578135419c38e
+SATDEPSOLVER_VERSION=0.6.0
 
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
@@ -102,8 +102,8 @@ if [[ ${TTREK_SKIP_DEPS:-0} != 1 ]]; then
 fi
 
 if [[ -z ${SATDEPSOLVER_SOURCE_DIR:-} ]]; then
-    fetch_source "satdepsolver-$SATDEPSOLVER_REVISION" "https://github.com/jerily/satdepsolver-cpp/archive/$SATDEPSOLVER_REVISION.tar.gz"
-    SATDEPSOLVER_SOURCE_DIR="$SOURCE_DIR/satdepsolver-$SATDEPSOLVER_REVISION"
+    fetch_source "satdepsolver-$SATDEPSOLVER_VERSION" "https://github.com/jerily/satdepsolver-cpp/archive/refs/tags/v$SATDEPSOLVER_VERSION.tar.gz"
+    SATDEPSOLVER_SOURCE_DIR="$SOURCE_DIR/satdepsolver-$SATDEPSOLVER_VERSION"
 fi
 
 SATDEPSOLVER_SOURCE_DIR=$(cd "$SATDEPSOLVER_SOURCE_DIR" && pwd)

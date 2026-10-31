@@ -19,7 +19,8 @@ curl, tar, and the normal platform development tools. Rust and Cargo are no long
 ```
 
 The script builds pinned zlib, OpenSSL, cJSON, curl, Tcl 9.1, libgit2, and libarchive
-sources, installs the pinned satdepsolver CMake package, then builds and tests
+sources, installs the [satdepsolver 0.6.0](https://github.com/jerily/satdepsolver-cpp/releases/tag/v0.6.0)
+CMake package, then builds and tests
 `build/ttrek`. Downloads and extracted sources are cached for reruns. OpenSSL is
 installed under `lib`, and dependency configuration uses the local static prefix.
 Tcl 9.0 static installations remain usable for manual CMake builds.
@@ -53,8 +54,7 @@ ctest --test-dir build --output-on-failure
 CMake normally uses `find_package(satdepsolver 0.6 CONFIG REQUIRED)` and
 `satdepsolver::satdepsolver`. Set `-DSATDEPSOLVER_SOURCE_DIR=/path/to/checkout`
 for an explicit `add_subdirectory` integration. No network download happens at
-CMake configure time. The build script pins a solver commit so its behavior does
-not change when an upstream branch moves.
+CMake configure time. The build script downloads the tagged satdepsolver 0.6.0 release.
 
 ## Run and preview
 
@@ -121,7 +121,7 @@ runs scripts from the configured registry with the invoking user's privileges.
 Resolution validates registry JSON, owns metadata strings, and handles HTTP errors.
 C++ resolution exceptions are converted to Tcl errors. Preview skips installation
 and telemetry; tests use disposable projects. Dependency builds use version-pinned
-HTTPS downloads, and the solver uses a pinned commit.
+HTTPS downloads, and the solver uses a pinned release.
 
 ### Pending
 
