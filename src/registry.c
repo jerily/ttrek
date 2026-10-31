@@ -31,7 +31,9 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
     DBG2(printf("enter url: %s", url));
     struct curl_slist *chunk = NULL;
     CURL *curl_handle = curl_easy_init();
+    if (!curl_handle) { return TCL_ERROR; }
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+    curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, dsPtr);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "ttrek/1.0");

@@ -21,6 +21,7 @@ RUN apk add \
     gdb \
     libunwind-dev
 
+COPY docs /var/ttrek/docs
 COPY src /var/ttrek/src
 COPY CMakeLists.txt /var/ttrek/CMakeLists.txt
 COPY build-ttrek.sh /var/ttrek/build-ttrek.sh

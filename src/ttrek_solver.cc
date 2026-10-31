@@ -10,7 +10,7 @@
 #include <cstring>
 #include <sys/utsname.h>
 #include "PackageDatabase.h"
-#include "ttrek_resolvo.h"
+#include "ttrek_solver.h"
 #include "installer.h"
 #include "ttrek_telemetry.h"
 #include "ttrek_useflags.h"
@@ -175,6 +175,7 @@ static void ttrek_ParseUseFlagsFromSpecFile(ttrek_state_t *state_ptr, std::unord
     if (use) {
         for (int i = 0; i < cJSON_GetArraySize(use); i++) {
             cJSON *use_item = cJSON_GetArrayItem(use, i);
+            if (!cJSON_IsString(use_item)) { throw std::runtime_error("USE flags must be strings"); }
             use_flags.insert(UseFlag(use_item->valuestring));
         }
     }
@@ -184,7 +185,7 @@ int
 ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDatabase &db, ttrek_state_t *state_ptr,
             std::string &message,
             std::map<std::string, std::string> &requirements,
-            std::vector<std::string> &installs) {
+            std::vector<std::string> &installs) try {
 
     UNUSED(interp);
 
@@ -200,7 +201,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
     db.set_global_use_flags(use_flags);
 
     // Construct a problem to be solved by the solver
-    resolvo::Vector<resolvo::VersionSetId> requirements_vector;
+    std::vector<VersionSetId> requirements_vector;
     for (const auto &requirement: requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
     }
@@ -210,22 +211,22 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
         // alloc_candidate for both polarities, no deps
         auto use_flag_str = "use:" + use_flag.name;
-        db.alloc_candidate(use_flag_str, "0.0.0", resolvo::Dependencies());
-        db.alloc_candidate(use_flag_str, "1.2.3", resolvo::Dependencies());
+        db.alloc_candidate(use_flag_str, "0.0.0", KnownDependencies{});
+        db.alloc_candidate(use_flag_str, "1.2.3", KnownDependencies{});
 
     }
 
     std::map<std::string, std::string> constraints;
     // todo: constraints for optional dependencies
 
-    resolvo::Vector<resolvo::VersionSetId> constraints_vector;
+    std::vector<VersionSetId> constraints_vector;
     for (const auto &constraint: constraints) {
         constraints_vector.push_back(db.alloc_requirement_from_str(constraint.first, constraint.second));
     }
 
     // Solve the problem
-    resolvo::Vector<resolvo::SolvableId> result;
-    message = resolvo::solve(db, requirements_vector, constraints_vector, result);
+    std::vector<SolvableId> result;
+    message = solve_packages(db, requirements_vector, constraints_vector, result);
 
     if (!result.empty()) {
         for (auto solvable: result) {
@@ -242,6 +243,9 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
     }
 
     return TCL_OK;
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    return TCL_ERROR;
 }
 
 static int ttrek_UpdateSpecFileAfterInstall(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
@@ -662,6 +666,11 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         return TCL_ERROR;
     }
 
+    if (!message.empty()) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(ttrek_RewriteUnsatMessage(message).c_str(), -1));
+        return TCL_ERROR;
+    }
+
     if (installs.empty()) {
         *abort = 1;
         std::cout << ttrek_RewriteUnsatMessage(message) << std::endl;
@@ -705,6 +714,13 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         std::cout << "The following packages will be installed:" << std::endl;
         ttrek_PrintExecutionPlan(execution_plan);
+
+        if (state_ptr->option_pretend) {
+            *abort = 1;
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
+            return TCL_OK;
+        }
 
         if (!state_ptr->option_yes) {
             // get yes/no from user
@@ -942,4 +958,48 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
     }
 
     return TCL_OK;
+}
+
+// Build a plan with the same resolver and execution planner as install/update,
+// using only the project JSON files. Do not create a venv or run install hooks.
+extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+    const char *strategy = nullptr;
+    int force = 0;
+    Tcl_ArgvInfo options[] = {
+        {TCL_ARGV_STRING, "-strategy", nullptr, &strategy, "latest, favored, or locked", nullptr},
+        {TCL_ARGV_CONSTANT, "-force", INT2PTR(1), &force, "include already installed packages", nullptr},
+        {TCL_ARGV_END, nullptr, nullptr, nullptr, nullptr, nullptr}
+    };
+    Tcl_Obj **remaining = nullptr;
+    if (Tcl_ParseArgsObjv(interp, options, &objc, objv, &remaining) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    int status = TCL_ERROR;
+    auto *project = ttrek_GetProjectHomeDir(interp, MODE_LOCAL);
+    if (!project) { ckfree(remaining); return TCL_ERROR; }
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> spec(ttrek_GetSpecRoot(interp, project), cJSON_Delete);
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> lock(ttrek_GetLockRoot(interp, project), cJSON_Delete);
+    Tcl_DecrRefCount(project);
+    try {
+        if (!cJSON_IsObject(spec.get()) || !cJSON_IsObject(lock.get())) {
+            throw std::runtime_error("Invalid project spec or lock JSON");
+        }
+        if (strategy && std::string(strategy) != "latest" && std::string(strategy) != "favored" && std::string(strategy) != "locked") {
+            throw std::runtime_error("Invalid strategy: expected latest, favored, or locked");
+        }
+        ttrek_state_t state{};
+        state.interp = interp;
+        state.spec_root = spec.get();
+        state.lock_root = lock.get();
+        state.mode = MODE_LOCAL;
+        state.strategy = ttrek_StrategyFromString(strategy, STRATEGY_FAVORED);
+        state.option_force = force;
+        state.option_pretend = 1;
+        int abort = 0;
+        status = ttrek_InstallOrUpdate(interp, objc - 1, remaining + 1, &state, &abort);
+    } catch (const std::exception &error) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    }
+    ckfree(remaining);
+    return status;
 }

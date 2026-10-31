@@ -14,8 +14,9 @@
 # define DBG(x)
 #endif
 
-#include <resolvo.h>
-#include <resolvo_pool.h>
+#include <satdepsolver.h>
+#include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <set>
@@ -27,7 +28,7 @@
 #include "registry.h"
 #include "cjson/cJSON.h"
 
-std::vector<std::string_view> split_string(const std::string_view &str, const char *split_str) {
+inline std::vector<std::string_view> split_string(const std::string_view &str, const char *split_str) {
     std::vector<std::string_view> split;
     size_t start = 0;
     size_t end = str.find(split_str);
@@ -46,6 +47,9 @@ struct UseFlag {
 
     UseFlag(std::string_view use_flag_str) {
         bool polarity = true;
+        if (use_flag_str.empty()) {
+            throw std::runtime_error("Empty use flag");
+        }
         if (use_flag_str[0] == '-') {
             polarity = false;
         } else if (use_flag_str[0] == '+') {
@@ -93,6 +97,7 @@ struct DependencyInfo {
             auto use_flags = split_string(if_value, " ");
             for (const auto &use_flag : use_flags) {
                 bool polarity = true;
+                if (use_flag.empty()) { continue; }
                 if (use_flag[0] == '-') {
                     polarity = false;
                 } else if (use_flag[0] == '+') {
@@ -107,74 +112,62 @@ struct DependencyInfo {
 
 };
 
-std::map<std::string_view, std::vector<std::pair<std::string_view, DependencyInfo>>> fetch_package_versions(const std::string& package_name) {
-    std::map<std::string_view, std::vector<std::pair<std::string_view, DependencyInfo>>> result;
-    char package_versions_url[256];
-    snprintf(package_versions_url, sizeof(package_versions_url), "%s/%s", REGISTRY_URL, package_name.c_str());
-    Tcl_DString versions_ds;
-    Tcl_DStringInit(&versions_ds);
-    if (TCL_OK != ttrek_RegistryGet(package_versions_url, &versions_ds, NULL)) {
-        fprintf(stderr, "error: could not get versions for %s\n", package_name.c_str());
-        return result;
+using PackageVersions = std::map<std::string, std::vector<std::pair<std::string, DependencyInfo>>>;
+
+inline PackageVersions fetch_package_versions(const std::string &package_name) {
+    PackageVersions result;
+    if (package_name.empty() || package_name.find_first_not_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-") != std::string::npos) {
+        throw std::runtime_error("Invalid package name: " + package_name);
     }
-    cJSON *versions_root = cJSON_Parse(Tcl_DStringValue(&versions_ds));
-    Tcl_DStringFree(&versions_ds);
-    for (int i = 0; i < cJSON_GetArraySize(versions_root); i++) {
-        cJSON *version_item = cJSON_GetArrayItem(versions_root, i);
-        const char *version_str = version_item->string;
-        DBG(fprintf(stderr, "version_str: %s\n", version_str));
-        std::vector<std::pair<std::string_view, DependencyInfo>> deps;
-        for (int j = 0; j < cJSON_GetArraySize(version_item); j++) {
-            cJSON *deps_item = cJSON_GetArrayItem(version_item, j);
-            const char *dep_name = deps_item->string;
-            if (cJSON_HasObjectItem(deps_item, "version") && cJSON_HasObjectItem(deps_item, "if")) {
-                cJSON *deps_obj = cJSON_GetObjectItem(deps_item, "version");
-                const char *dep_version = cJSON_GetStringValue(deps_obj);
-                DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
-                cJSON *if_obj = cJSON_GetObjectItem(deps_item, "if");
-                const char *if_value = cJSON_GetStringValue(if_obj);
-                deps.emplace_back(dep_name, DependencyInfo(dep_version, if_value));
-                continue;
-            } else {
-                const char *dep_version = cJSON_GetStringValue(deps_item);
-                DBG(fprintf(stderr, "dep_name: %s, dep_version: %s\n", dep_name, dep_version));
-                deps.emplace_back(dep_name, DependencyInfo(dep_version, ""));
-                continue;
-            }
+    const auto url = std::string(REGISTRY_URL) + "/" + package_name;
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    const auto status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> root(cJSON_Parse(Tcl_DStringValue(&data)), cJSON_Delete);
+    Tcl_DStringFree(&data);
+    if (status != TCL_OK || !cJSON_IsObject(root.get())) {
+        throw std::runtime_error("Could not read registry metadata for " + package_name);
+    }
+    for (auto *version = root->child; version; version = version->next) {
+        if (!cJSON_IsObject(version)) {
+            throw std::runtime_error("Invalid dependency metadata for " + package_name);
         }
-        result[version_str] = deps;
+        auto &deps = result[version->string];
+        for (auto *dep = version->child; dep; dep = dep->next) {
+            const auto *range = cJSON_IsObject(dep) ? cJSON_GetObjectItem(dep, "version") : dep;
+            const auto *condition = cJSON_IsObject(dep) ? cJSON_GetObjectItem(dep, "if") : nullptr;
+            if (!cJSON_IsString(range) || (condition && !cJSON_IsString(condition))) {
+                throw std::runtime_error("Invalid dependency " + std::string(dep->string) + " for " + package_name);
+            }
+            deps.emplace_back(dep->string, DependencyInfo(range->valuestring, condition ? condition->valuestring : ""));
+        }
     }
-    cJSON_free(versions_root);
     return result;
 }
 
-static char EMPTY_STRING[] = "";
+inline char EMPTY_STRING[] = "";
 
 struct Pack {
-    semver_t version = {0, 0, 0, NULL, NULL};
+private:
+    // Copies held by the pool and version ranges share immutable parsed storage.
+    std::shared_ptr<semver_t> parsed;
+public:
+    semver_t version{};
 
-    explicit Pack(const std::string& version_str) {
-        if (-1 == semver_parse(version_str.c_str(), &version)) {
+    explicit Pack(const std::string &version_str)
+        : parsed(new semver_t{}, [](semver_t *value) { semver_free(value); delete value; }) {
+        if (semver_parse(version_str.c_str(), parsed.get()) != 0) {
             throw std::runtime_error("Failed to parse version: " + version_str);
         }
-        if (version.prerelease == nullptr) {
+        version = *parsed;
+        if (!version.prerelease) {
             version.prerelease = EMPTY_STRING;
         }
     }
 
-    explicit Pack(const semver_t &version) : version(version) {}
-
     Pack next_major_version() const {
-        semver_t next_version = version;
-        next_version.major++;
-        next_version.minor = 0;
-        next_version.patch = 0;
-
-        // Needed to make sure 9.0.0-beta.2 does NOT satisfy <9.0.0
-        // in essence the empty string will make sure that the prerelease
-        // precedes any other alpha, beta, and so on versions.
-        next_version.prerelease = EMPTY_STRING;
-        return Pack(next_version);
+        return Pack(std::to_string(version.major + 1) + ".0.0");
     }
 
     bool operator==(const Pack &other) const {
@@ -226,31 +219,16 @@ struct Pack {
 
 };
 
-/**
- * A single candidate for a package.
- */
-struct Candidate {
-    resolvo::NameId name;
-    Pack version;
-    resolvo::Dependencies dependencies;
-    resolvo::SolvableId id;
-};
-
-/**
- * A requirement for a package.
- */
-
-struct Requirement {
-    resolvo::NameId name;
-//    uint32_t version_start;
-//    uint32_t version_end;
-    Range<Pack> versions;
-};
-
-struct ReverseDependency {
-    std::string package_name;
-    std::string package_version;
-};
+namespace std {
+    template<> struct hash<Pack> {
+        size_t operator()(const Pack &pack) const {
+            // Equal versions may differ in build metadata or prerelease spelling.
+            // Hash the numeric core; prereleases with the same core may collide.
+            return hash<int>{}(pack.version.major) ^ (hash<int>{}(pack.version.minor) << 1)
+                   ^ (hash<int>{}(pack.version.patch) << 2);
+        }
+    };
+}
 
 static std::pair<std::string_view, std::string_view> parse_operator(const std::string_view &s) {
     // >=, <=, >, <, =, ==
@@ -279,7 +257,7 @@ static std::pair<std::string_view, std::string_view> parse_operator(const std::s
     }
 }
 
-static Range<Pack> version_range(std::optional<resolvo::String> s) {
+static Range<Pack> version_range(std::optional<std::string_view> s) {
     if (s.has_value()) {
         std::string_view s_view = s.value();
         auto and_parts = split_string(s_view, ",");
@@ -310,282 +288,109 @@ static Range<Pack> version_range(std::optional<resolvo::String> s) {
     }
 };
 
-/**
- * A simple database of packages that also implements resolvos DependencyProvider interface.
- */
-struct PackageDatabase : public resolvo::DependencyProvider {
-    resolvo::Pool<resolvo::NameId, resolvo::String> names;
-    resolvo::Pool<resolvo::StringId, resolvo::String> strings;
-    std::vector<Candidate> candidates;
-    std::vector<Requirement> requirements;
-
+// ttrek owns semantic versions, registry access, USE flags, and install policy.
+struct PackageDatabase : public DependencyProvider<Range<Pack>> {
+    std::unordered_map<SolvableId, KnownDependencies> candidate_dependencies;
     std::set<std::string> candidate_names;
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    std::map<std::string, std::vector<std::pair<std::string, std::unordered_set<UseFlag>>>> use_flag_dependencies_map;
     std::unordered_set<UseFlag> global_use_flags;
     std::map<std::string, std::string> locked_packages;
-    ttrek_strategy_t the_strategy;
+    ttrek_strategy_t the_strategy = STRATEGY_LATEST;
 
-    void set_strategy(ttrek_strategy_t strategy) {
-        the_strategy = strategy;
+    PackageDatabase() {
+        pool = std::make_shared<Pool<Range<Pack>>>();
     }
 
-    void set_reverse_dependencies_map(const std::map<std::string, std::unordered_set<std::string>> &revdependencies_map) {
-        reverse_dependencies_map = revdependencies_map;
+    void set_strategy(ttrek_strategy_t strategy) { the_strategy = strategy; }
+
+    void set_reverse_dependencies_map(const std::map<std::string, std::unordered_set<std::string>> &value) {
+        reverse_dependencies_map = value;
     }
 
-    const std::map<std::string, std::unordered_set<std::string>>& get_dependencies_map() {
-        return dependencies_map;
+    const auto &get_dependencies_map() const { return dependencies_map; }
+
+    std::unordered_set<std::string> get_reverse_dependencies_of_package(const std::string &name) const {
+        auto it = reverse_dependencies_map.find(name);
+        return it == reverse_dependencies_map.end() ? std::unordered_set<std::string>{} : it->second;
     }
 
-    const std::unordered_set<std::string> get_reverse_dependencies_of_package(const std::string &package_name) {
-        if (reverse_dependencies_map.find(package_name) != reverse_dependencies_map.end()) {
-            return reverse_dependencies_map.at(package_name);
-        }
-        return std::unordered_set<std::string>();
+    VersionSetId alloc_requirement_from_str(std::string_view name, std::string_view versions) {
+        auto name_id = pool->intern_package_name(std::string(name));
+        return pool->intern_version_set(name_id, version_range(versions.empty() ? std::nullopt : std::optional(versions)));
     }
 
-    /**
-     * Allocates a new requirement and return the id of the requirement.
-     */
-    resolvo::VersionSetId alloc_requirement_from_str(const std::string_view &package_name, const std::string_view &package_versions) {
-        auto spec_name = names.alloc(package_name);
-        auto spec_versions = version_range(package_versions.empty() ? std::nullopt : std::optional(package_versions));
-        auto requirement = Requirement{spec_name, spec_versions};
-        auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
-        requirements.push_back(requirement);
+    VersionSetId alloc_requirement_from_use_flag(const UseFlag &flag) {
+        return alloc_requirement_from_str("use:" + flag.name, flag.polarity ? "1.2.3" : "0.0.0");
+    }
+
+    void alloc_locked_package(const std::string &name, const std::string &version) {
+        locked_packages[name] = version;
+    }
+
+    SolvableId alloc_candidate(std::string_view name, const std::string &version, KnownDependencies dependencies) {
+        auto name_id = pool->intern_package_name(std::string(name));
+        auto id = pool->intern_solvable(name_id, Pack(version));
+        candidate_dependencies.emplace(id, std::move(dependencies));
+        candidate_names.insert(std::string(name));
         return id;
     }
 
-    resolvo::VersionSetId alloc_requirement_from_use_flag(const UseFlag &use_flag) {
-        auto spec_name = names.alloc(std::string_view("use:" + use_flag.name));
-        auto spec_versions = use_flag.polarity ? Range<Pack>::singleton(Pack("1.2.3")) : Range<Pack>::singleton(Pack("0.0.0"));
-        std::cout << "allocating use flag requirement: " << use_flag.to_string() << std::endl;
-        auto requirement = Requirement{spec_name, spec_versions};
-        auto id = resolvo::VersionSetId{static_cast<uint32_t>(requirements.size())};
-        requirements.push_back(requirement);
-        return id;
+    std::string display_solvable(SolvableId id) const {
+        return DisplaySolvable(pool, pool->resolve_internal_solvable(id)).to_string();
     }
 
-    void alloc_locked_package(const std::string &package_name, const std::string &package_version) {
-        DBG(std::cout << "set locked package: " << package_name << "=" << package_version << std::endl);
-        locked_packages[package_name] = package_version;
-    }
-
-    /**
-     * Allocates a new candidate and return the id of the candidate.
-     */
-    resolvo::SolvableId alloc_candidate(std::string_view name, const std::string& version,
-                                        resolvo::Dependencies dependencies) {
-        // check if the candidate already exists
-        auto package_name = std::string(name);
-        auto install = package_name + "=" + version;
-//        if (candidate_to_solvable_map.find(install) != candidate_to_solvable_map.end()) {
-//            return candidate_to_solvable_map.at(install);
-//        }
-
-        auto name_id = names.alloc(name);
-        auto id = resolvo::SolvableId{static_cast<uint32_t>(candidates.size())};
-        candidates.push_back(Candidate{name_id, Pack(version), std::move(dependencies), id});
-//        candidate_to_solvable_map[install] = id;
-        if (candidate_names.find(package_name) == candidate_names.end()) {
-            candidate_names.insert(package_name);
-        }
-        return id;
-    }
-
-    resolvo::String display_name(resolvo::NameId name) override {
-        return resolvo::String(names[name]);
-    }
-
-    resolvo::String display_solvable(resolvo::SolvableId solvable) override {
-        const auto& candidate = candidates[solvable.id];
-        std::stringstream ss;
-        ss << names[candidate.name] << "=" << candidate.version;
-        return resolvo::String(ss.str());
-    }
-
-    resolvo::String display_merged_solvables(
-            resolvo::Slice<resolvo::SolvableId> solvables) override {
-        if (solvables.empty()) {
-            return resolvo::String();
-        }
-
-        std::stringstream ss;
-        ss << names[candidates[solvables[0].id].name] << " ";
-
-        bool first = true;
-        for (const auto& solvable : solvables) {
-            if (!first) {
-                ss << " | ";
-            }
-
-            ss << candidates[solvable.id].version;
-            first = false;
-        }
-
-        return resolvo::String(ss.str());
-    }
-
-    resolvo::String display_version_set(resolvo::VersionSetId version_set) override {
-        const auto& req = requirements[version_set.id];
-        std::stringstream ss;
-//        ss << req.version_start << ".." << req.version_end;
-        ss << req.versions;
-        return resolvo::String(ss.str());
-    }
-
-    resolvo::String display_string(resolvo::StringId string_id) override {
-        return strings[string_id];
-    }
-
-    resolvo::NameId version_set_name(resolvo::VersionSetId version_set_id) override {
-        return requirements[version_set_id.id].name;
-    }
-
-    resolvo::NameId solvable_name(resolvo::SolvableId solvable_id) override {
-        return candidates[solvable_id.id].name;
-    }
-
-    resolvo::Candidates get_candidates(resolvo::NameId package) override {
-
-        resolvo::Candidates result;
-        result.favored = nullptr;
-        result.locked = nullptr;
-
-        auto package_name = std::string(names[package]);
-        if (package_name.find("use:") == 0) {
-            auto use_flag_name = package_name.substr(4);
-            for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
-                const auto &candidate = candidates[i];
-                if (candidate.name != package) {
-                    continue;
-                }
-                result.candidates.push_back(resolvo::SolvableId{i});
-                result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
-            }
-            return result;
-        }
-        auto set_locked_p = locked_packages.find(package_name) != locked_packages.end();
-        DBG(std::cout << "package: " << package_name << " set_locked_p = " << set_locked_p << std::endl);
-        resolvo::SolvableId locked_candidate_id{};
-//        std::cout << "package=" << names[package] << std::endl;
-        if (candidate_names.find(package_name) == candidate_names.end()) {
-            DBG(std::cout << "fetching from remote: " << names[package] << std::endl);
-            dependencies_map[package_name] = std::unordered_set<std::string>();
-            auto package_versions = fetch_package_versions(package_name);
-            for (const auto & it : package_versions) {
-                auto package_version = std::string(it.first);
-                auto package_version_deps = it.second;
-
-                auto dependencies = resolvo::Dependencies();
-
-                // add use flag dependencies
-//                if (use_flag_dependencies_map.find(package_name) != use_flag_dependencies_map.end()) {
-//                    std::cout << "package: " << package_name << " has use flag dependencies" << std::endl;
-//                    for (const auto &use_flag_dep : use_flag_dependencies_map.at(package_name)) {
-//                        auto use_flag_dep_versions = std::string_view(use_flag_dep.first);
-//                        auto version_requirement = version_range(use_flag_dep_versions.empty() ? std::nullopt : std::optional(use_flag_dep_versions));
-//                        std::cout << "use flag version requirement: " << use_flag_dep_versions << std::endl;
-//                        std::cout << "package version: " << package_version << std::endl;
-//                        if (version_requirement.contains(Pack(package_version))) {
-//                            auto use_flags = use_flag_dep.second;
-//                            for (const auto &use_flag : use_flags) {
-//                                auto use_flag_version_set = alloc_requirement_from_use_flag(use_flag);
-//                                dependencies.requirements.push_back(use_flag_version_set);
-//                            }
-//                        }
-//                    }
-//                }
-
-                // add the dependencies for the package
-                for (const auto &dep : package_version_deps) {
-                    if (!dep.second.if_use_flags.empty()) {
-                        if (!satisfies_use_flags(dep.second.if_use_flags)) {
-                            DBG(std::cout << "skipping package... use flags not satisfied for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
-                            continue;
-                        }
+    std::optional<PackageCandidates> get_candidates(NameId name) override {
+        auto package_name = pool->resolve_package_name(name);
+        if (candidate_names.count(package_name) == 0 && package_name.rfind("use:", 0) != 0) {
+            for (const auto &[version, deps] : fetch_package_versions(package_name)) {
+                KnownDependencies dependencies;
+                for (const auto &[dep_name, info] : deps) {
+                    if (satisfies_use_flags(info.if_use_flags)) {
+                        dependencies.requirements.push_back(alloc_requirement_from_str(dep_name, info.version_requirement));
                     }
-
-                    auto dep_version_set = alloc_requirement_from_str(dep.first, dep.second.version_requirement);
-                    dependencies.requirements.push_back(dep_version_set);
-                    DBG(std::cout << "dependency for " << package_name << ": " << dep.first << "@" << dep.second << std::endl);
-
-                    // keep track of the use flag dependencies for each package
-                    if (!dep.second.if_use_flags.empty()) {
-                        auto dep_name = std::string(dep.first);
-                        auto p = std::pair<std::string, std::unordered_set<UseFlag>>(
-                                dep.second.version_requirement, dep.second.if_use_flags);
-                        if (use_flag_dependencies_map.find(dep_name) == use_flag_dependencies_map.end()) {
-                            use_flag_dependencies_map[dep_name] = std::vector<std::pair<std::string, std::unordered_set<UseFlag>>>();
-                        }
-                        use_flag_dependencies_map.at(dep_name).emplace_back(p);
-                    }
-
-                    // keep track of the dependencies for each package
-                    // so that we can later sort the installs based on
-                    // the topological sort of the dependencies
-                    dependencies_map[package_name].insert(std::string(dep.first));
                 }
-
-                auto id = alloc_candidate(package_name, package_version, dependencies);
-                DBG(std::cout << "candidate: " << package_name << "=" << package_version << std::endl);
-                if (set_locked_p && locked_packages[package_name] == package_version) {
-                    DBG(std::cout << "locked package: " << package_name << "=" << package_version << std::endl);
-                    locked_candidate_id = id;
-                }
+                alloc_candidate(package_name, version, std::move(dependencies));
             }
         }
-
-        for (uint32_t i = 0; i < static_cast<uint32_t>(candidates.size()); ++i) {
-            const auto& candidate = candidates[i];
-            if (candidate.name != package) {
-                continue;
-            }
-
-            if (set_locked_p && locked_candidate_id == candidate.id) {
-                if (the_strategy == STRATEGY_LOCKED) {
-                    result.locked = &candidate.id;
-                } else if (the_strategy == STRATEGY_FAVORED) {
-                    result.favored = &candidate.id;
-                } else {
-                    // do nothing
-                }
-            }
-
-            result.candidates.push_back(resolvo::SolvableId{i});
-            result.hint_dependencies_available.push_back(resolvo::SolvableId{i});
-        }
-        DBG(std::cout << result.candidates.size() << " candidates for " << names[package] << std::endl);
-        return result;
-    }
-
-    void sort_candidates(resolvo::Slice<resolvo::SolvableId> solvables) override {
-        std::sort(solvables.begin(), solvables.end(),
-                  [&](resolvo::SolvableId a, resolvo::SolvableId b) {
-                      return candidates[a.id].version > candidates[b.id].version;
-                  });
-    }
-
-    resolvo::Vector<resolvo::SolvableId> filter_candidates(
-            resolvo::Slice<resolvo::SolvableId> solvables, resolvo::VersionSetId version_set_id,
-            bool inverse) override {
-        resolvo::Vector<resolvo::SolvableId> result;
-        const auto& requirement = requirements[version_set_id.id];
-        for (auto solvable : solvables) {
-            const auto& candidate = candidates[solvable.id];
-            bool matches = requirement.versions.contains(candidate.version);
-            if (matches != inverse) {
-                result.push_back(solvable);
+        PackageCandidates result;
+        for (const auto &[id, dependencies] : candidate_dependencies) {
+            auto candidate = pool->resolve_solvable(id);
+            if (!(candidate.get_name_id() == name)) { continue; }
+            result.candidates.push_back(id);
+            result.hint_dependencies_available.push_back(id);
+            auto locked = locked_packages.find(package_name);
+            if (locked != locked_packages.end() && candidate.get_inner().to_string() == locked->second) {
+                if (the_strategy == STRATEGY_LOCKED) { result.locked = id; }
+                if (the_strategy == STRATEGY_FAVORED) { result.favored = id; }
             }
         }
         return result;
     }
 
-    resolvo::Dependencies get_dependencies(resolvo::SolvableId solvable) override {
-        const auto& candidate = candidates[solvable.id];
-        return candidate.dependencies;
+    void sort_candidates(std::vector<SolvableId> &ids) override {
+        std::sort(ids.begin(), ids.end(), [this](SolvableId a, SolvableId b) {
+            return pool->resolve_solvable(a).get_inner() > pool->resolve_solvable(b).get_inner();
+        });
+    }
+
+    DependenciesVariant get_dependencies(SolvableId id) override {
+        return Dependencies::Known{candidate_dependencies.at(id)};
+    }
+
+    std::optional<std::string> should_cancel_with_value() override { return std::nullopt; }
+
+    void record_selected_dependencies(const std::vector<SolvableId> &selected) {
+        dependencies_map.clear();
+        for (auto id : selected) {
+            auto name = pool->resolve_package_name(pool->resolve_solvable(id).get_name_id());
+            auto &deps = dependencies_map[name];
+            for (const auto &requirement : candidate_dependencies.at(id).requirements) {
+                for (auto version_set : requirement.version_sets(pool)) {
+                    deps.insert(pool->resolve_package_name(pool->resolve_version_set_package_name(version_set)));
+                }
+            }
+        }
     }
 
     void topological_sort(std::vector<std::string> &installs) {
@@ -652,5 +457,33 @@ struct PackageDatabase : public resolvo::DependencyProvider {
         return true;
     }
 };
+
+// The solver owns a provider copy. Return its populated metadata to the installer
+// after formatting conflicts, while all cached IDs still belong to this pool.
+inline std::string solve_packages(PackageDatabase &db, const std::vector<VersionSetId> &requirements,
+                                  const std::vector<VersionSetId> &constraints, std::vector<SolvableId> &result) {
+    Solver<Range<Pack>, std::string, PackageDatabase> solver(db);
+    auto [selected, error] = solver.solve(Problem().requirements(requirements).constraints(constraints));
+    result.clear();
+    std::string message;
+    if (error) {
+        if (auto *unsolvable = std::get_if<UnsolvableOrCancelled::Unsolvable>(&*error)) {
+            auto graph = solver.graph(unsolvable->conflict);
+            message = graph ? DisplayUnsat<Range<Pack>, std::string>(db.pool, *graph).to_string()
+                            : "Dependency resolution failed";
+        } else {
+            message = "Dependency resolution cancelled";
+            const auto& cancelled = std::get<UnsolvableOrCancelled::Cancelled>(*error);
+            if (auto* reason = std::any_cast<std::string>(&cancelled.data); reason && !reason->empty()) {
+                message += ": " + *reason;
+            }
+        }
+    } else {
+        result = std::move(selected);
+    }
+    db = std::move(solver.cache.provider);
+    db.record_selected_dependencies(result);
+    return message;
+}
 
 #endif //TTREK_PACKAGE_DATABASE_H

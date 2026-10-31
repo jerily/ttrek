@@ -58,8 +58,7 @@ if(USE_CPPCHECK)
             --suppress=unusedFunction
             --suppress=unmatchedSuppression
             --suppress=checkersReport
-            -I"${CMAKE_INSTALL_PREFIX}/include"
-            -I"${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
+            -I"${CMAKE_INSTALL_PREFIX}/include")
 
         set (CMAKE_CXX_CPPCHECK "${cppcheck}" --language=c++ "${CPPCHECK_COMMON_OPTIONS}")
         set (CMAKE_C_CPPCHECK "${cppcheck}" --language=c "${CPPCHECK_COMMON_OPTIONS}")
@@ -78,17 +77,12 @@ endif()
 #    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
 #    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
 #)
-add_subdirectory(src/resolvo)
-
-add_executable(test_resolvo
-        src/sat-solver/tests/solve.cc
-)
-
-target_link_libraries(test_resolvo
-        PRIVATE
-        Resolvo::Resolvo
-        stdc++
-)
+set(SATDEPSOLVER_SOURCE_DIR "" CACHE PATH "Optional satdepsolver source checkout")
+if(SATDEPSOLVER_SOURCE_DIR)
+    add_subdirectory("${SATDEPSOLVER_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/satdepsolver")
+else()
+    find_package(satdepsolver 0.6 CONFIG REQUIRED)
+endif()
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
@@ -132,8 +126,8 @@ add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
         ${HELP_TOPICS_H}
-        src/ttrek_resolvo.cc
-        src/ttrek_resolvo.h
+        src/ttrek_solver.cc
+        src/ttrek_solver.h
         src/ttrek_git.c
         src/ttrek_git.h
         src/semver/semver.c
@@ -177,10 +171,6 @@ add_executable(${TARGET}
         src/ttrek_scripts.h
 )
 
-# Resolvo::Resolvo brings in libgcc_s and thus we need to link statically as follows:
-set(RESOLVO_LIB "${CMAKE_CURRENT_BINARY_DIR}/src/resolvo/cpp/libresolvo_cpp.a")
-message(STATUS "RESOLVO_LIB: ${RESOLVO_LIB}")
-
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 find_library(OPENSSL_SSL_LIBRARY NAMES libssl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
 find_library(OPENSSL_CRYPTO_LIBRARY NAMES libcrypto.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
@@ -188,13 +178,13 @@ set(OPENSSL_LIBRARIES "${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}")
 find_library(CURL_LIBRARY NAMES libcurl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(TCL_LIBRARY NAMES libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
+find_library(TCL_LIBRARY NAMES libtcl9.1.a libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(GIT2_LIBRARY NAMES libgit2.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_library(ARCHIVE_LIBRARY NAMES libarchive.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/resolvo/cpp/include")
-target_link_libraries(${TARGET} PRIVATE ${RESOLVO_LIB} ${TCL_LIBRARY} ${ZLIB_LIBRARY} ${CJSON_LIBRARY} ${EXTRA_LIBS} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY})
+target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
+target_link_libraries(${TARGET} PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY} ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
 if (NOT APPLE)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
         target_link_options(${TARGET} PRIVATE -static)
@@ -207,5 +197,12 @@ install(TARGETS ${TARGET}
         RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
 )
 
-# temporary hack to include generated headers
-include_directories(build/src/resolvo/cpp/generated_include)
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(test_solver src/sat-solver/tests/solve.cc src/semver/semver.c)
+    target_include_directories(test_solver PRIVATE "${CMAKE_INSTALL_PREFIX}/include")
+    target_link_libraries(test_solver PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
+    target_compile_options(test_solver PRIVATE -UNDEBUG)
+    target_compile_definitions(test_solver PRIVATE SOLVER_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/src/sat-solver/tests/fixtures/registry.json")
+    add_test(NAME package_solver COMMAND test_solver)
+endif()

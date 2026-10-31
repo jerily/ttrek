@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT.
  */
 
-#ifndef TTREK_RESOLVO_H
-#define TTREK_RESOLVO_H
+#ifndef TTREK_SOLVER_H
+#define TTREK_SOLVER_H
 
 
 #ifdef __cplusplus
@@ -19,4 +19,4 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
 }
 #endif
 
-#endif //TTREK_RESOLVO_H
+#endif //TTREK_SOLVER_H

@@ -113,6 +113,7 @@ typedef struct {
     int with_locking;
     int option_yes;
     int option_force;
+    int option_pretend;
     ttrek_mode_t mode;
     int is_local_build;
     ttrek_strategy_t strategy;
@@ -141,6 +142,10 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr);
 
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj);
+
+Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode);
+cJSON *ttrek_GetSpecRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
+cJSON *ttrek_GetLockRoot(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
 
 Tcl_Obj *ttrek_GetProjectVenvDir(Tcl_Interp *interp, Tcl_Obj *project_home_dir_ptr);
 ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_force, int with_locking, ttrek_mode_t mode, ttrek_strategy_t strategy);

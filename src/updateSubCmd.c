@@ -5,7 +5,7 @@
  */
 
 #include "subCmdDecls.h"
-#include "ttrek_resolvo.h"
+#include "ttrek_solver.h"
 #include "ttrek_git.h"
 
 int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {

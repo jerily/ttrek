@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include "subCmdDecls.h"
 #include "common.h"
-#include "ttrek_resolvo.h"
+#include "ttrek_solver.h"
 #include "ttrek_git.h"
 #include "ttrek_buildInstructions.h"
 #include "ttrek_scripts.h"

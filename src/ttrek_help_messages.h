@@ -16,6 +16,9 @@ static const struct {
     {"install",
 #include "help_install.txt.h"
     },
+    {"pretend",
+#include "help_pretend.txt.h"
+    },
     {"uninstall",
 #include "help_uninstall.txt.h"
     },
