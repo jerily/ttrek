@@ -1,9 +1,10 @@
-Usage: pretend [-strategy latest|favored|locked] [-force] ?package@version_range ...?
+Usage: pretend [-registry DIRECTORY] [-strategy latest|favored|locked] [-force] ?package@version_range ...?
 
 Resolve the project with the same solver and planner used by install/update.
 Read ttrek.json and the optional ttrek-lock.json, and print the install plan.
 Do not write project files, create a venv, run hooks, or install packages.
 The default strategy is favored, as for install; use latest to preview update.
+-registry resolves against local package specs instead of the registry API.
 
 Examples:
     ttrek pretend tjson twebserver

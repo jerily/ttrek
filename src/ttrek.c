@@ -11,6 +11,7 @@
 #include "subCmdDecls.h"
 #include "common.h"
 #include "ttrek_telemetry.h"
+#include "registry.h"
 
 static const char *subcommands[] = {
         "init",
@@ -74,14 +75,26 @@ int main(int argc, char *argv[]) {
     Tcl_FindExecutable(argv[0]);
 #endif
 
-    if (strcmp(argv[1], "pretend") != 0 && strcmp(argv[1], "gen-script") != 0) {
-        ttrek_TelemetryLoadMachineId(interp);
+    int first_command = 1;
+    while (first_command < argc && strcmp(argv[first_command], "-registry") == 0) {
+        if (first_command + 1 >= argc) {
+            fprintf(stderr, "error: -registry requires a directory\n");
+            exitcode = 1;
+            goto done;
+        }
+        if (ttrek_RegistrySetDirectory(interp, argv[first_command + 1]) != TCL_OK) {
+            fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+            exitcode = 1;
+            goto done;
+        }
+        first_command += 2;
     }
+    if (first_command >= argc) { goto usage; }
 
-    objc = argc;
-    objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * argc);
-    for (Tcl_Size i = 0; i < argc; i++) {
-        objv[i] = Tcl_NewStringObj(argv[i], -1);
+    objc = argc - first_command + 1;
+    objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * objc);
+    for (Tcl_Size i = 0; i < objc; i++) {
+        objv[i] = Tcl_NewStringObj(argv[i == 0 ? 0 : first_command + i - 1], -1);
         Tcl_IncrRefCount(objv[i]);
     }
 
@@ -91,10 +104,18 @@ int main(int argc, char *argv[]) {
         goto usage;
     }
 
+    // Init/install/update load telemetry after selecting their registry.
+    if (!ttrek_RegistryIsLocal() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
+        sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE) {
+        ttrek_TelemetryLoadMachineId(interp);
+    }
+
     switch ((enum subcommand) sub_cmd_index) {
         case SUBCMD_INIT:
-            fprintf(stderr, "init\n");
-            ttrek_InitSubCmd(interp, objc-1, &objv[1]);
+            if (ttrek_InitSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: init subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
             break;
         case SUBCMD_PRETEND:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
@@ -177,7 +198,7 @@ int main(int argc, char *argv[]) {
     goto done;
 
 usage:
-    fprintf(stderr, "Usage: ttrek <subcommand> [options]\n");
+    fprintf(stderr, "Usage: ttrek [-registry directory] <subcommand> [options]\n");
     exitcode = 1;
 
 done:

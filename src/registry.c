@@ -6,6 +6,7 @@
 
 #include <curl/curl.h>
 #include "common.h"
+#include "registry.h"
 #include "ttrek_telemetry.h"
 
 static size_t write_memory_cb(const void *contents, size_t size, size_t nmemb, void *userp)
@@ -21,6 +22,10 @@ static size_t write_memory_cb(const void *contents, size_t size, size_t nmemb, v
 }
 
 int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
+    if (ttrek_RegistryIsLocal()) {
+        // Local registries have no telemetry endpoint.
+        return postData ? TCL_OK : ttrek_RegistryGetLocal(url, dsPtr);
+    }
     int rc = TCL_OK;
 
     Tcl_Obj *machineId = ttrek_TelemetryGetMachineId();

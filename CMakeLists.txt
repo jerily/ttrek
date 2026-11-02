@@ -137,6 +137,7 @@ add_executable(${TARGET}
         src/semver/semver.c
         src/base64.c
         src/registry.c
+        src/registryLocal.cc
         src/initSubCmd.c
         src/installSubCmd.c
         src/genScriptSubCmd.cc
@@ -218,4 +219,6 @@ if(BUILD_TESTING)
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND})
+    add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND})
 endif()

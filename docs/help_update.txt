@@ -1,1 +1,4 @@
-There is no specific help on the specified command.
+Usage: update [-registry DIRECTORY] [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
+
+Update project dependencies; the default strategy is latest.
+-registry reads package specs and patches from a local registry directory.

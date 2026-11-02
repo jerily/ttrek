@@ -1,6 +1,7 @@
 Usage: install [options] ?package_A@version_range_A? ?package_B@version_range_B? ?...?
 
 Available options:
+    -registry DIRECTORY - read package specs and patches from a local registry
     -u - install using user mode (~/.local)
     -g - install using global mode (/usr/local/ttrek)
     default - If no mode is specified, install using local mode (./ttrek-venv)

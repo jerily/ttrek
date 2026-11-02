@@ -8,8 +8,28 @@
 #include "subCmdDecls.h"
 #include "ttrek_git.h"
 #include "ttrek_telemetry.h"
+#include "registry.h"
 
 int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
+
+    int option_yes = 0;
+    int option_force = 0;
+    const char *registry = NULL;
+    Tcl_ArgvInfo options[] = {
+        {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes, "Automatically answer yes to all questions", NULL},
+        {TCL_ARGV_CONSTANT, "-f", INT2PTR(1), &option_force, "Removes protections against side effects", NULL},
+        {TCL_ARGV_STRING, "-registry", NULL, &registry, "save a local registry directory in the lock file", NULL},
+        {TCL_ARGV_END, NULL, NULL, NULL, NULL, NULL}
+    };
+    Tcl_Obj **remaining = NULL;
+    if (Tcl_ParseArgsObjv(interp, options, &objc, objv, &remaining) != TCL_OK) { return TCL_ERROR; }
+    ckfree(remaining);
+    if (objc != 1) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("Unexpected init argument", -1));
+        return TCL_ERROR;
+    }
+    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) { return TCL_ERROR; }
+    if (!ttrek_RegistryIsLocal()) { ttrek_TelemetryLoadMachineId(interp); }
 
     Tcl_Obj *spec_file_name_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
     Tcl_IncrRefCount(spec_file_name_ptr);
@@ -63,17 +83,6 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     }
 
 
-    int option_yes = 0;
-    int option_force = 0;
-    Tcl_ArgvInfo ArgTable[] = {
-            {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes,   "Automatically answer yes to all the questions",                 NULL},
-            {TCL_ARGV_CONSTANT, "-f", INT2PTR(1), &option_force, "Removes various protections against unfortunate side effects.", NULL},
-            {TCL_ARGV_END,      NULL, NULL,       NULL,          NULL,                                                            NULL}
-    };
-
-    Tcl_Obj **remObjv;
-    Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
-
 //    fprintf(stderr, "option_yes: %d\n", option_yes);
 //    fprintf(stderr, "option_force: %d\n", option_force);
 
@@ -101,17 +110,15 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         Tcl_DecrRefCount(path_to_lock_ptr);
         Tcl_DecrRefCount(spec_file_name_ptr);
         Tcl_DecrRefCount(lock_file_name_ptr);
-        ckfree(remObjv);
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_InitLockFile(interp, path_to_lock_ptr)) {
+    if (TCL_OK != ttrek_InitLockFile(interp, path_to_lock_ptr, ttrek_RegistryGetDirectory())) {
         fprintf(stderr, "error: initializing lock file failed\n");
         Tcl_DecrRefCount(path_to_spec_ptr);
         Tcl_DecrRefCount(path_to_lock_ptr);
         Tcl_DecrRefCount(spec_file_name_ptr);
         Tcl_DecrRefCount(lock_file_name_ptr);
-        ckfree(remObjv);
         return TCL_ERROR;
     }
 
@@ -119,9 +126,8 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(path_to_lock_ptr);
     Tcl_DecrRefCount(spec_file_name_ptr);
     Tcl_DecrRefCount(lock_file_name_ptr);
-    ckfree(remObjv);
 
-    ttrek_TelemetrySaveMachineId(interp);
+    if (!ttrek_RegistryIsLocal()) { ttrek_TelemetrySaveMachineId(interp); }
 
     // ensure skeleton directories exist
     int with_locking = 0;

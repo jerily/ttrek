@@ -296,14 +296,16 @@ int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
 
 int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_ptr, int permissions) {
     Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "w", permissions);
-    Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8");
     if (!chan) {
         fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
     }
-    Tcl_WriteObj(chan, contents_ptr);
-    Tcl_Close(interp, chan);
-    return TCL_OK;
+    if (Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8") != TCL_OK ||
+        Tcl_WriteObj(chan, contents_ptr) < 0) {
+        Tcl_Close(NULL, chan);
+        return TCL_ERROR;
+    }
+    return Tcl_Close(interp, chan);
 }
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
@@ -323,11 +325,11 @@ int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {
     Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(path_ptr), "r", 0666);
-    Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8");
     if (!chan) {
         fprintf(stderr, "error: could not open %s\n", Tcl_GetString(path_ptr));
         return TCL_ERROR;
     }
+    Tcl_SetChannelOption(interp, chan, "-encoding", "utf-8");
     Tcl_ReadChars(chan, *contents_ptr, -1, 0);
     Tcl_Close(interp, chan);
     return TCL_OK;
@@ -693,7 +695,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
         if (mode != MODE_LOCAL) {
             DBG2(fprintf(stderr, "initialize the lock file: %s", Tcl_GetString(path_lock_file_ptr)));
-            ttrek_InitLockFile(interp, path_lock_file_ptr);
+            ttrek_InitLockFile(interp, path_lock_file_ptr, NULL);
         } else {
             DBG2(fprintf(stderr, "no need to initialize the lock file"));
         }
@@ -1051,8 +1053,9 @@ int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char
     return TCL_OK;
 }
 
-int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr) {
+int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, const char *registry) {
     cJSON *lock_root = cJSON_CreateObject();
+    if (registry) { cJSON_AddStringToObject(lock_root, "registry", registry); }
     cJSON *lock_packages = cJSON_CreateObject();
     cJSON_AddItemToObject(lock_root, "packages", lock_packages);
     cJSON *lock_dependencies = cJSON_CreateObject();

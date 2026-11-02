@@ -1,4 +1,10 @@
-Usage: ttrek COMMAND [options]
+Usage: ttrek [-registry DIRECTORY] COMMAND [options]
+
+-registry reads DIRECTORY/package/version/ttrek.json and adjacent .diff patches.
+It replaces the registry API for this invocation. Source downloads still use
+the URLs in each recipe. It also works after init, install, update, pretend or gen-script.
+init saves the directory in ttrek-lock.json; other commands use it for that invocation.
+An explicit option overrides the saved registry. Relative saved paths use the project directory.
 
 Available commands:
     init

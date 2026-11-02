@@ -179,6 +179,15 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
 
     cJSON *patches = cJSON_GetObjectItem(install_spec_root, "patches");
     if (patches) {
+        Tcl_Obj *patch_dir = ttrek_GetFilePath(interp, state_ptr->project_build_dir_ptr, "source");
+        int status = ttrek_EnsureDirectoryExists(interp, patch_dir);
+        Tcl_DecrRefCount(patch_dir);
+        if (status != TCL_OK) {
+            Tcl_DecrRefCount(install_script_full);
+            cJSON_Delete(install_spec_root);
+            Tcl_DStringFree(&ds);
+            return TCL_ERROR;
+        }
         for (int i = 0; i < cJSON_GetArraySize(patches); i++) {
             cJSON *patch_item = cJSON_GetArrayItem(patches, i);
             const char *patch_name = patch_item->string;
@@ -198,7 +207,17 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             Tcl_Obj *patch_file_path_ptr;
             ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_NewStringObj(patch_filename, -1),
                               &patch_file_path_ptr);
-            ttrek_WriteChars(interp, patch_file_path_ptr, Tcl_NewStringObj(patch_diff, -1), 0644);
+            Tcl_Obj *patch_contents = Tcl_NewStringObj(patch_diff, patch_diff_len);
+            Tcl_IncrRefCount(patch_contents);
+            status = ttrek_WriteChars(interp, patch_file_path_ptr, patch_contents, 0644);
+            Tcl_DecrRefCount(patch_contents);
+            Tcl_DecrRefCount(patch_file_path_ptr);
+            if (status != TCL_OK) {
+                Tcl_DecrRefCount(install_script_full);
+                cJSON_Delete(install_spec_root);
+                Tcl_DStringFree(&ds);
+                return TCL_ERROR;
+            }
 
         }
     }
