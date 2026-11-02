@@ -1,1 +1,7 @@
-There is no specific help on the specified command.
+Usage: init [-y] [-registry DIRECTORY]
+
+Create ttrek.json, ttrek-lock.json and the project environment.
+-y accepts the default project name and version.
+-registry saves the local registry directory as "registry" in ttrek-lock.json.
+Later install, update, pretend and gen-script commands reuse it unless overridden.
+Relative saved paths resolve from the project directory.

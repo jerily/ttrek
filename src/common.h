@@ -155,7 +155,8 @@ ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strate
 int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
 
 int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char *project_name, const char *project_version);
-int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr);
+Tcl_Obj *ttrek_GetFilePath(Tcl_Interp *interp, Tcl_Obj *directory, const char *filename);
+int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, const char *registry);
 
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
 

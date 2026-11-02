@@ -96,6 +96,21 @@ It rebuilds packages on each run. Use `-strategy latest|favored|locked` to selec
 static build settings; without the flag, their normal defaults apply.
 Static Tcl extensions are archives for embedding; an application must register their init functions.
 
+Use a local registry directory instead of the registry API:
+
+```sh
+ttrek gen-script -registry ../ttrek.sh/registry > build.generated.sh
+ttrek -registry ../ttrek.sh/registry install -y
+ttrek init -registry ../ttrek.sh/registry
+```
+
+`-registry` also works with `pretend` and `update`. The directory contains
+`package/version/ttrek.json` and optional `.diff` patches. Local mode sends no
+registry or telemetry requests; source downloads still follow recipe URLs.
+`init -registry` saves `registry` in `ttrek-lock.json` for later commands.
+An explicit option overrides it without changing the saved value. Relative saved
+paths resolve from the project directory.
+
 ## Solver integration
 
 `PackageDatabase.h` implements `DependencyProvider<Range<Pack>>` and owns

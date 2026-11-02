@@ -1008,8 +1008,10 @@ int ttrek_ResolveBuildPlan(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const obj
 // using only the project JSON files. Do not create a venv or run install hooks.
 extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     const char *strategy = nullptr;
+    const char *registry = nullptr;
     int force = 0;
     Tcl_ArgvInfo options[] = {
+        {TCL_ARGV_STRING, "-registry", nullptr, &registry, "local registry directory", nullptr},
         {TCL_ARGV_STRING, "-strategy", nullptr, &strategy, "latest, favored, or locked", nullptr},
         {TCL_ARGV_CONSTANT, "-force", INT2PTR(1), &force, "include already installed packages", nullptr},
         {TCL_ARGV_END, nullptr, nullptr, nullptr, nullptr, nullptr}
@@ -1018,11 +1020,20 @@ extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *c
     if (Tcl_ParseArgsObjv(interp, options, &objc, objv, &remaining) != TCL_OK) {
         return TCL_ERROR;
     }
+    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) {
+        ckfree(remaining);
+        return TCL_ERROR;
+    }
     int status = TCL_ERROR;
     auto *project = ttrek_GetProjectHomeDir(interp, MODE_LOCAL);
     if (!project) { ckfree(remaining); return TCL_ERROR; }
     std::unique_ptr<cJSON, decltype(&cJSON_Delete)> spec(ttrek_GetSpecRoot(interp, project), cJSON_Delete);
     std::unique_ptr<cJSON, decltype(&cJSON_Delete)> lock(ttrek_GetLockRoot(interp, project), cJSON_Delete);
+    if (ttrek_RegistryLoadFromLock(interp, project, lock.get()) != TCL_OK) {
+        Tcl_DecrRefCount(project);
+        ckfree(remaining);
+        return TCL_ERROR;
+    }
     Tcl_DecrRefCount(project);
     try {
         if (!cJSON_IsObject(spec.get()) || !cJSON_IsObject(lock.get())) {
