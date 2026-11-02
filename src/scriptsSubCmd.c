@@ -222,7 +222,7 @@ int ttrek_ScriptsSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
 
     int with_locking = 0;
     ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
-    DBG2(printf("create state..."));
+    DBG2(fprintf(stderr, "create state..."));
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, 0, 0, with_locking, mode, STRATEGY_LATEST);
 
     if (!state_ptr) {
@@ -235,13 +235,13 @@ int ttrek_ScriptsSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     objc--;
     objv++;
 
-    DBG2(printf("run subcommand..."));
+    DBG2(fprintf(stderr, "run subcommand..."));
     int rc = scripts_commands[cmd_idx].proc(interp, state_ptr, objc, objv);
 
-    DBG2(printf("destroy state..."));
+    DBG2(fprintf(stderr, "destroy state..."));
     ttrek_DestroyState(state_ptr);
     ckfree(remObjv);
-    DBG2(printf("return: %s", (rc == TCL_OK ? "OK" : "ERROR")));
+    DBG2(fprintf(stderr, "return: %s", (rc == TCL_OK ? "OK" : "ERROR")));
     return rc;
 
 }

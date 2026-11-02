@@ -75,7 +75,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         objc--;
         objv = remObjv + 1;
 
-        DBG2(printf("objc: %" TCL_SIZE_MODIFIER "d", objc));
+        DBG2(fprintf(stderr, "objc: %" TCL_SIZE_MODIFIER "d", objc));
         if (objc < 1) {
             SetResult("no command to execute");
             goto error;
@@ -83,7 +83,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
         argv = ckalloc(sizeof(char *) * (objc + 1));
         for (Tcl_Size i = 0; i < objc; i++) {
-            DBG2(printf("add arg #%" TCL_SIZE_MODIFIER "d: [%s]", i, Tcl_GetString(objv[i])));
+            DBG2(fprintf(stderr, "add arg #%" TCL_SIZE_MODIFIER "d: [%s]", i, Tcl_GetString(objv[i])));
             argv[i] = Tcl_GetString(objv[i]);
         }
 

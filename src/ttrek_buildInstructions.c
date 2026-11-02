@@ -16,14 +16,14 @@ static int ttrek_GetBuildInstructions(Tcl_Interp *interp, cJSON *spec_root, cJSO
     *instructions_node_ptr = NULL;
 
     if (!cJSON_HasObjectItem(spec_root, "build")) {
-        DBG2(printf("return NULL - no build property"));
+        DBG2(fprintf(stderr, "return NULL - no build property"));
         return TCL_OK;
     }
 
     cJSON *platforms_node = cJSON_GetObjectItem(spec_root, "build");
 
     if (!cJSON_HasObjectItem(platforms_node, "default")) {
-        DBG2(printf("return NULL - no build->default property"));
+        DBG2(fprintf(stderr, "return NULL - no build->default property"));
         return TCL_OK;
     }
 
@@ -41,11 +41,11 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
     }
 
     if (install_script_node == NULL) {
-        DBG2(printf("return OK - no instructions"));
+        DBG2(fprintf(stderr, "return OK - no instructions"));
         return TCL_OK;
     }
 
-    DBG2(printf("build instructions exist"));
+    DBG2(fprintf(stderr, "build instructions exist"));
 
     Tcl_Obj *use_flags_list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(use_flags_list_ptr);
@@ -90,19 +90,6 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(install_script_full);
-
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
-        DBG2(printf("send build script to output in bootstrap mode"));
-
-        Tcl_Obj *package_counter = ttrek_generatePackageCounter(interp, 1, 1);
-        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(package_counter));
-        Tcl_BounceRefCount(package_counter);
-
-        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(install_script_full));
-
-        Tcl_DecrRefCount(install_script_full);
-        return TCL_OK;
-    }
 
     Tcl_Obj *path_to_install_file_ptr;
     ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, Tcl_ObjPrintf("install-%s-%s.sh", package_name, package_version),

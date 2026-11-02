@@ -28,7 +28,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
         ttrek_TelemetryRegisterEnvironment();
     }
 
-    DBG2(printf("enter url: %s", url));
+    DBG2(fprintf(stderr, "enter url: %s", url));
     struct curl_slist *chunk = NULL;
     CURL *curl_handle = curl_easy_init();
     if (!curl_handle) { return TCL_ERROR; }
@@ -49,16 +49,16 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
 
     char *postDataStr = NULL;
     if (postData != NULL) {
-        DBG2(printf("prepare POST request"));
+        DBG2(fprintf(stderr, "prepare POST request"));
         postDataStr = cJSON_PrintUnformatted(postData);
         if (postDataStr == NULL) {
             goto error;
         }
-        DBG2(printf("POST data [%s]", postDataStr));
+        DBG2(fprintf(stderr, "POST data [%s]", postDataStr));
         curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, postDataStr);
         chunk = curl_slist_append(chunk, "Content-Type: application/json");
     } else {
-        DBG2(printf("prepare GET request"));
+        DBG2(fprintf(stderr, "prepare GET request"));
     }
 
     // set our custom set of headers
@@ -73,7 +73,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
         goto error;
     }
 
-    DBG2(printf("ok"));
+    DBG2(fprintf(stderr, "ok"));
     goto done;
 
 error:

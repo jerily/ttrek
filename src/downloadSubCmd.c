@@ -15,7 +15,7 @@ static size_t write_callback(const char *ptr, size_t size, size_t nmemb, void *u
 
 static int ttrek_DownloadFile(Tcl_Interp *interp, Tcl_Obj *url_ptr, Tcl_Obj *file_ptr) {
 
-    DBG2(printf("URL[%s] -> [%s]", Tcl_GetString(url_ptr), Tcl_GetString(file_ptr)));
+    DBG2(fprintf(stderr, "URL[%s] -> [%s]", Tcl_GetString(url_ptr), Tcl_GetString(file_ptr)));
 
     Tcl_Channel chan = Tcl_FSOpenFileChannel(interp, file_ptr, "wb", 0644);
     if (chan == NULL) {

@@ -86,23 +86,23 @@ static int ttrek_TelemetryIsDockerEnvironment() {
 
 static Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp) {
     Tcl_Obj *machineIdRaw = NULL;
-    DBG2(printf("enter ..."));
+    DBG2(fprintf(stderr, "enter ..."));
 
 #if defined(_WIN32)
-    DBG2(printf("trying to detect machine id for windows ..."));
+    DBG2(fprintf(stderr, "trying to detect machine id for windows ..."));
     // Here should be the code that retrieves the host ID from the registry
     // key: HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptograpy\MachineGuid
     goto done;
 
 #elif defined(__APPLE__)
-    DBG2(printf("trying to detect machine id for macos ..."));
+    DBG2(fprintf(stderr, "trying to detect machine id for macos ..."));
     {
         Tcl_Size argc = 5;
         const char *argv[6] = {
             "/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice", "2>@1", NULL
         };
         machineIdRaw = Tcl_NewObj();
-        DBG2(printf("exec /usr/sbin/ioreg ..."));
+        DBG2(fprintf(stderr, "exec /usr/sbin/ioreg ..."));
         if (ttrek_ExecuteCommand(interp, argc, argv, machineIdRaw) != TCL_OK
             || !Tcl_GetCharLength(machineIdRaw))
         {
@@ -113,21 +113,21 @@ static Tcl_Obj *ttrek_TelemetryGenerateMachineId(Tcl_Interp *interp) {
     }
 
 #elif defined(__linux__)
-    DBG2(printf("trying to detect machine id for linux ..."));
+    DBG2(fprintf(stderr, "trying to detect machine id for linux ..."));
 
     if (ttrek_TelemetryIsDockerEnvironment()) {
-        DBG2(printf("docker environment detected, skip checking */machine-id"
+        DBG2(fprintf(stderr, "docker environment detected, skip checking */machine-id"
             " files"));
         goto docker_detected;
     }
 
-    DBG2(printf("read file: /var/lib/dbus/machine-id"));
+    DBG2(fprintf(stderr, "read file: /var/lib/dbus/machine-id"));
     machineIdRaw = ttrek_TelemetryReadFile(interp, "/var/lib/dbus/machine-id");
     if (machineIdRaw != NULL) {
         goto done;
     }
 
-    DBG2(printf("read file: /etc/machine-id"));
+    DBG2(fprintf(stderr, "read file: /etc/machine-id"));
     machineIdRaw = ttrek_TelemetryReadFile(interp, "/etc/machine-id");
     if (machineIdRaw != NULL) {
         goto done;
@@ -137,7 +137,7 @@ docker_detected:
 
     // For the docker environment and if no */machine-id files are available,
     // define the machine-id based on boot time and linux kernel version.
-    DBG2(printf("generate machine id based on boot time and kernel"
+    DBG2(fprintf(stderr, "generate machine id based on boot time and kernel"
         " version..."));
 
     struct timespec ts;
@@ -147,16 +147,16 @@ docker_detected:
 
     struct utsname unamebuf;
     if (uname(&unamebuf) != 0) {
-        DBG2(printf("WARNING: uname() failed"));
+        DBG2(fprintf(stderr, "WARNING: uname() failed"));
         goto done;
     }
     Tcl_AppendStringsToObj(machineIdRaw, unamebuf.release, unamebuf.version,
         unamebuf.machine, (char *)NULL);
 
 #elif defined(__unix__)
-    DBG2(printf("trying to detect machine id for BSD ..."));
+    DBG2(fprintf(stderr, "trying to detect machine id for BSD ..."));
 
-    DBG2(printf("read file: /etc/hostid"));
+    DBG2(fprintf(stderr, "read file: /etc/hostid"));
     machineIdRaw = ttrek_TelemetryReadFile(interp, "/etc/hostid");
     if (machineIdRaw != NULL) {
         goto done;
@@ -168,7 +168,7 @@ docker_detected:
             "/bin/kenv", "-q", "smbios.system.uuid", "2>@1", NULL
         };
         machineIdRaw = Tcl_NewObj();
-        DBG2(printf("exec /bin/kenv ..."));
+        DBG2(fprintf(stderr, "exec /bin/kenv ..."));
         if (ttrek_ExecuteCommand(interp, argc, argv, machineIdRaw) != TCL_OK
             || !Tcl_GetCharLength(machineIdRaw))
         {
@@ -179,13 +179,13 @@ docker_detected:
     }
 
 #else
-    DBG2(printf("unknown OS"));
+    DBG2(fprintf(stderr, "unknown OS"));
     goto done;
 #endif
 
 done:
     if (machineIdRaw == NULL) {
-        DBG2(printf("failed; return NULL"));
+        DBG2(fprintf(stderr, "failed; return NULL"));
         return NULL;
     }
     Tcl_IncrRefCount(machineIdRaw);
@@ -194,7 +194,7 @@ done:
     // this information, we will use its hash.
     Tcl_Obj *rc = ttrek_GetHashSHA256(machineIdRaw);
     Tcl_DecrRefCount(machineIdRaw);
-    DBG2(printf("return: ok"));
+    DBG2(fprintf(stderr, "return: ok"));
     return rc;
 }
 
@@ -219,7 +219,7 @@ void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp) {
     if (ttrek_ResolvePath(interp, homeDirectoryObj,
         Tcl_NewStringObj(machineIdBaseFile, -1), &machineIdFile) != TCL_OK)
     {
-        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
+        DBG2(fprintf(stderr, "ERROR: failed to get the path to the machine-id file"));
         Tcl_DecrRefCount(homeDirectoryObj);
         return;
     }
@@ -227,13 +227,13 @@ void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp) {
     Tcl_DecrRefCount(homeDirectoryObj);
 
     if (ttrek_CheckFileExists(machineIdFile) == TCL_OK) {
-        DBG2(printf("the file already exists"));
+        DBG2(fprintf(stderr, "the file already exists"));
         goto done;
     }
     if (ttrek_WriteChars(interp, machineIdFile, machineIdObj, 0644) == TCL_OK) {
-        DBG2(printf("ok"));
+        DBG2(fprintf(stderr, "ok"));
     } else {
-        DBG2(printf("ERROR: failed to write the machineId to the file"));
+        DBG2(fprintf(stderr, "ERROR: failed to write the machineId to the file"));
     }
 done:
     Tcl_DecrRefCount(machineIdFile);
@@ -252,13 +252,13 @@ void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp) {
     if (ttrek_ResolvePath(interp, homeDirectoryObj,
         Tcl_NewStringObj(machineIdBaseFile, -1), &machineIdFile) != TCL_OK)
     {
-        DBG2(printf("ERROR: failed to get the path to the machine-id file"));
+        DBG2(fprintf(stderr, "ERROR: failed to get the path to the machine-id file"));
         Tcl_BounceRefCount(homeDirectoryObj);
         goto generate;
     }
 
     if (ttrek_CheckFileExists(machineIdFile) != TCL_OK) {
-        DBG2(printf("the machine-id file doesn't exist"));
+        DBG2(fprintf(stderr, "the machine-id file doesn't exist"));
         Tcl_DecrRefCount(machineIdFile);
         goto generate;
     }
@@ -267,11 +267,11 @@ void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp) {
     Tcl_DecrRefCount(machineIdFile);
 
     if (machineIdObj != NULL) {
-        DBG2(printf("successfully read the machine id from the home directory"));
+        DBG2(fprintf(stderr, "successfully read the machine id from the home directory"));
         goto done;
     }
 
-    DBG2(printf("failed to read the machine id from the home directory"));
+    DBG2(fprintf(stderr, "failed to read the machine id from the home directory"));
 
 generate:
     machineIdObj = ttrek_TelemetryGenerateMachineId(interp);
@@ -286,7 +286,7 @@ done:
 
 void ttrek_TelemetryFree(void) {
     if (machineIdObj != NULL) {
-        DBG2(printf("free ..."));
+        DBG2(fprintf(stderr, "free ..."));
         Tcl_DecrRefCount(machineIdObj);
         machineIdObj = NULL;
     }
@@ -405,10 +405,10 @@ void ttrek_TelemetryRegisterEnvironment() {
     }
     isEnvironmentRegistered = 1;
     if (machineIdObj == NULL) {
-        DBG2(printf("machine id is not defined"));
+        DBG2(fprintf(stderr, "machine id is not defined"));
         return;
     }
-    DBG2(printf("register the environment"));
+    DBG2(fprintf(stderr, "register the environment"));
     cJSON *env_info = ttrek_TelemetryCollectEnvironmentInfo();
     char register_env_url[256];
     snprintf(register_env_url, sizeof(register_env_url), "%s/%s",

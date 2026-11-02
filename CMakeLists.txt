@@ -91,9 +91,9 @@ add_custom_command(
 )
 
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
-  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap_common_dynamic.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap_common_dynamic.sh
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/script_package.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/script_package.sh
 )
 
 add_custom_command(
@@ -103,9 +103,9 @@ add_custom_command(
 )
 
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
-  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/bootstrap.sh
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/script_header.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/script_header.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/script_header.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/script_header.sh
 )
 
 file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
@@ -122,9 +122,9 @@ endforeach()
 
 add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
-        ${CMAKE_CURRENT_BINARY_DIR}/bootstrap_common_dynamic.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
-        ${CMAKE_CURRENT_BINARY_DIR}/bootstrap.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/script_header.sh.h
         ${HELP_TOPICS_H}
         src/ttrek_solver.cc
         src/ttrek_solver.h
@@ -139,6 +139,7 @@ add_executable(${TARGET}
         src/registry.c
         src/initSubCmd.c
         src/installSubCmd.c
+        src/genScriptSubCmd.cc
         src/runSubCmd.c
         src/updateSubCmd.c
         src/ttrek.c
@@ -205,4 +206,16 @@ if(BUILD_TESTING)
     target_compile_options(test_solver PRIVATE -UNDEBUG)
     target_compile_definitions(test_solver PRIVATE SOLVER_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/src/sat-solver/tests/fixtures/registry.json")
     add_test(NAME package_solver COMMAND test_solver)
+
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    get_target_property(TTREK_TEST_SOURCES ttrek SOURCES)
+    list(REMOVE_ITEM TTREK_TEST_SOURCES src/registry.c)
+    add_executable(ttrek_fixture ${TTREK_TEST_SOURCES} tests/registry_fixture.c)
+    # Debug diagnostics must also leave generated stdout scripts intact.
+    target_compile_definitions(ttrek_fixture PRIVATE DEBUG)
+    target_include_directories(ttrek_fixture PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
+    target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
+        ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
+    add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py
+        $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND})
 endif()

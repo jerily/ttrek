@@ -24,28 +24,14 @@ static int ttrek_InstallRunHook(Tcl_Interp *interp, ttrek_state_t *state_ptr, co
     Tcl_Size argc;
     Tcl_Obj *temp_file = NULL;
 
-    DBG2(printf("want to run hook [%s]", hook_str));
-
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
-
-        const char *script_str = ttrek_ScriptsGet(state_ptr->spec_root, hook_str);
-        if (script_str == NULL) {
-            goto noScriptDefined;
-        }
-
-        DBG2(printf("send build script to output in bootstrap mode"));
-        ttrek_OutputBootstrap(state_ptr, script_str);
-        goto done;
-
-    }
+    DBG2(fprintf(stderr, "want to run hook [%s]", hook_str));
 
     if (ttrek_ScriptsMakeTempFile(interp, state_ptr, hook_str, &temp_file) != TCL_OK) {
         goto error;
     }
 
     if (temp_file == NULL) {
-noScriptDefined:
-        DBG2(printf("no hook [%s] defined", hook_str));
+        DBG2(fprintf(stderr, "no hook [%s] defined", hook_str));
         goto done;
     }
 
@@ -94,39 +80,29 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
             {TCL_ARGV_CONSTANT, "-u",            INT2PTR(MODE_USER),      &option_mode,         "install as a user package",                                          NULL},
             {TCL_ARGV_CONSTANT, "-g",            INT2PTR(MODE_GLOBAL),    &option_mode,         "install as a global package",                                        NULL},
             {TCL_ARGV_CONSTANT, "-force",        INT2PTR(1),              &option_force,        "force installation of already installed packages",                   NULL},
-            {TCL_ARGV_CONSTANT, "-bootstrap",    INT2PTR(MODE_BOOTSTRAP), &option_mode,         "generate bootstrap script",                                          NULL},
             {TCL_ARGV_STRING,   "-strategy",     NULL,                    &option_strategy,     "strategy used for resolving dependencies (latest, favored, locked)", NULL},
             {TCL_ARGV_END,      NULL,            NULL,                     NULL,            NULL,                                                                 NULL}
 //            TCL_ARGV_AUTO_REST, TCL_ARGV_AUTO_HELP, TCL_ARGV_TABLE_END
     };
 
-    Tcl_Obj **remObjv;
-    Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv);
-
-    DBG(fprintf(stderr, "strategy: %s\n", (option_strategy == NULL ? "<NULL>" : option_strategy)));
-
-    int with_locking;
-
-    if ((ttrek_mode_t)option_mode == MODE_BOOTSTRAP) {
-        option_yes = 1;
-        option_force = 1;
-        option_force = 1;
-        with_locking = 0;
-    } else {
-        with_locking = 1;
+    Tcl_Obj **remObjv = NULL;
+    if (Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    for (Tcl_Size i = 1; i < objc; ++i) {
+        if (Tcl_GetString(remObjv[i])[0] == '-') {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("unknown install option: %s", Tcl_GetString(remObjv[i])));
+            ckfree(remObjv);
+            return TCL_ERROR;
+        }
     }
 
-    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, with_locking, (ttrek_mode_t)option_mode,
+    ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, 1, (ttrek_mode_t)option_mode,
                                                  ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         ckfree(remObjv);
         return TCL_ERROR;
-    }
-
-    if ((ttrek_mode_t)option_mode == MODE_BOOTSTRAP) {
-        DBG2(printf("skip git initialization in bootstrap mode"));
-        goto skipGitReady;
     }
 
     if (TCL_OK != ttrek_EnsureGitReady(interp, state_ptr)) {
@@ -142,8 +118,6 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         ckfree(remObjv);
         return TCL_ERROR;
     }
-
-skipGitReady: ; // empty statement
 
     Tcl_Size installObjc = objc - 1;
     Tcl_Obj **installObjv = NULL;
@@ -179,16 +153,10 @@ skipGitReady: ; // empty statement
     // the installation shell scripts to determine how to show installation
     // progress.
     setenv("IS_TTY", (isatty(1) ? "1" : "0"), 1);
-    DBG2(printf("set IS_TTY: %d", isatty(1)));
+    DBG2(fprintf(stderr, "set IS_TTY: %d", isatty(1)));
     if (option_fail_verbose) {
         setenv("TTREK_FAIL_VERBOSE", "1", 1);
-        DBG2(printf("set TTREK_FAIL_VERBOSE: 1"));
-    }
-
-    if ((ttrek_mode_t)option_mode == MODE_BOOTSTRAP) {
-        Tcl_Obj *bootstrap_script = ttrek_generateBootstrapScript(interp, state_ptr);
-        ttrek_OutputBootstrap(state_ptr, Tcl_GetString(bootstrap_script));
-        Tcl_BounceRefCount(bootstrap_script);
+        DBG2(fprintf(stderr, "set TTREK_FAIL_VERBOSE: 1"));
     }
 
     if (ttrek_InstallRunHook(interp, state_ptr, "preInstall") != TCL_OK) {
@@ -208,11 +176,6 @@ skipGitReady: ; // empty statement
     Tcl_DecrRefCount(list_ptr);
     ckfree(remObjv);
 
-    if ((ttrek_mode_t)option_mode == MODE_BOOTSTRAP) {
-        DBG2(printf("skip git amend in bootstrap mode"));
-        goto skipGitAmend;
-    }
-
     if (!abort) {
         if (TCL_OK != ttrek_GitAmend(state_ptr)) {
             fprintf(stderr, "error: committing changes failed\n");
@@ -226,8 +189,6 @@ skipGitReady: ; // empty statement
         ttrek_DestroyState(state_ptr);
         return TCL_ERROR;
     }
-
-skipGitAmend:
 
     if (do_local_build) {
 

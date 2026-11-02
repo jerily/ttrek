@@ -19,6 +19,9 @@ static const struct {
     {"pretend",
 #include "help_pretend.txt.h"
     },
+    {"gen-script",
+#include "help_gen-script.txt.h"
+    },
     {"uninstall",
 #include "help_uninstall.txt.h"
     },

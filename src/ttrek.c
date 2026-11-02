@@ -26,6 +26,7 @@ static const char *subcommands[] = {
         "use-flags",
         "scripts",
         "pretend",
+        "gen-script",
         NULL
 };
 
@@ -42,6 +43,7 @@ enum subcommand {
     SUBCMD_USE_FLAGS,
     SUBCMD_SCRIPTS,
     SUBCMD_PRETEND,
+    SUBCMD_GEN_SCRIPT,
 };
 
 int main(int argc, char *argv[]) {
@@ -72,7 +74,7 @@ int main(int argc, char *argv[]) {
     Tcl_FindExecutable(argv[0]);
 #endif
 
-    if (strcmp(argv[1], "pretend") != 0) {
+    if (strcmp(argv[1], "pretend") != 0 && strcmp(argv[1], "gen-script") != 0) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
@@ -97,6 +99,13 @@ int main(int argc, char *argv[]) {
         case SUBCMD_PRETEND:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (ttrek_PretendSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_GEN_SCRIPT:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
+            if (ttrek_GenScriptSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
                 fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
@@ -172,27 +181,27 @@ usage:
     exitcode = 1;
 
 done:
-    // DBG2(printf("free telemetry..."));
+    // DBG2(fprintf(stderr, "free telemetry..."));
     ttrek_TelemetryFree();
-    // DBG2(printf("free environment state..."));
+    // DBG2(fprintf(stderr, "free environment state..."));
     ttrek_EnvironmentStateFree();
 
     if (isCurlInitialized == CURLE_OK) {
-        // DBG2(printf("free curl..."));
+        // DBG2(fprintf(stderr, "free curl..."));
         curl_global_cleanup();
     }
     if (objc) {
         for (Tcl_Size i = 0; i < objc; i++) {
-            // DBG2(printf("free objv#%" TCL_SIZE_MODIFIER "d ...", i));
+            // DBG2(fprintf(stderr, "free objv#%" TCL_SIZE_MODIFIER "d ...", i));
             Tcl_DecrRefCount(objv[i]);
         }
-        // DBG2(printf("free objv"));
+        // DBG2(fprintf(stderr, "free objv"));
         ckfree(objv);
     }
     if (interp != NULL) {
-        // DBG2(printf("delete interp"));
+        // DBG2(fprintf(stderr, "delete interp"));
         Tcl_DeleteInterp(interp);
     }
-    DBG2(printf("exit: %d", exitcode));
+    DBG2(fprintf(stderr, "exit: %d", exitcode));
     return exitcode;
 }

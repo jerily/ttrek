@@ -37,7 +37,7 @@ typedef int Tcl_Size;
         #define __FUNCTION_NAME__   __func__
     #endif
 #endif
-# define DBG2(x) {printf("%s: ", __FUNCTION_NAME__); x; printf("\n"); fflush(stdout);}
+# define DBG2(x) {fprintf(stderr, "%s: ", __FUNCTION_NAME__); x; fprintf(stderr, "\n"); fflush(stderr);}
 #else
 # define DBG(x)
 # define DBG2(x)
@@ -86,7 +86,7 @@ typedef enum {
     MODE_LOCAL,
     MODE_USER,
     MODE_GLOBAL,
-    MODE_BOOTSTRAP
+    MODE_SCRIPT
 } ttrek_mode_t;
 
 typedef enum {
@@ -163,7 +163,6 @@ void ttrek_EnvironmentStateFree(void);
 void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr);
 void ttrek_EnvironmentStateRestore(void);
 
-void ttrek_OutputBootstrap(ttrek_state_t *state_ptr, const char *script);
 
 #ifdef __cplusplus
 }

@@ -16,8 +16,8 @@ static const char install_script_common_dynamic[] = {
         0x00
 };
 
-static const char bootstrap_script_common_dynamic[] = {
-#include "bootstrap_common_dynamic.sh.h"
+static const char script_package[] = {
+#include "script_package.sh.h"
 
         0x00
 };
@@ -28,8 +28,8 @@ static const char install_script_common_static[] = {
         0x00
 };
 
-static const char bootstrap_script[] = {
-#include "bootstrap.sh.h"
+static const char script_header[] = {
+#include "script_header.sh.h"
 
         0x00
 };
@@ -65,7 +65,7 @@ static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_h
             return TCL_ERROR;
         }
 
-        DBG2(printf("check flag \"%s\": %s", flag_str, (*result ? "yes" : "no")));
+        DBG2(fprintf(stderr, "check flag \"%s\": %s", flag_str, (*result ? "yes" : "no")));
         return TCL_OK;
 
     }
@@ -155,7 +155,7 @@ static int ttrek_ValidateShellVariableName(Tcl_Interp *interp, Tcl_Obj *obj) {
 
     // empty string is invalid shell variable name
     if (len < 1) {
-        DBG2(printf("return false (string is empty)"));
+        DBG2(fprintf(stderr, "return false (string is empty)"));
         if (interp != NULL) {
             SetResult("shell variable name cannot be an empty string");
         }
@@ -164,7 +164,7 @@ static int ttrek_ValidateShellVariableName(Tcl_Interp *interp, Tcl_Obj *obj) {
 
     // Check if the first character is a letter or an underscore
     if (!isalpha(str[0]) && str[0] != '_') {
-        DBG2(printf("return false (first character is invalid)"));
+        DBG2(fprintf(stderr, "return false (first character is invalid)"));
         if (interp != NULL) {
             Tcl_SetObjResult(interp, Tcl_ObjPrintf("the first character in"
                                                    " the variable name \"%s\" is invalid", str));
@@ -175,7 +175,7 @@ static int ttrek_ValidateShellVariableName(Tcl_Interp *interp, Tcl_Obj *obj) {
     // Check the rest of the string
     for (Tcl_Size i = 1; i < len; i++) {
         if (!isalnum(str[i]) && str[i] != '_') {
-            DBG2(printf("return false (character at index %" TCL_SIZE_MODIFIER
+            DBG2(fprintf(stderr, "return false (character at index %" TCL_SIZE_MODIFIER
                          "d is invalid)", i));
             if (interp != NULL) {
                 Tcl_SetObjResult(interp, Tcl_ObjPrintf("character at index %"
@@ -231,12 +231,12 @@ static Tcl_Obj *ttrek_AppendFormatToObj(Tcl_Interp *interp, Tcl_Obj *result, con
 
 static void ttrek_SpecToObj_AppendCommand(Tcl_Interp *interp, Tcl_Obj *resultList, Tcl_Obj *cmd, Tcl_Obj *log_file) {
     if (log_file != NULL) {
-        DBG2(printf("new cmd: [%s]; log file: [%s]", Tcl_GetString(cmd), Tcl_GetString(log_file)));
+        DBG2(fprintf(stderr, "new cmd: [%s]; log file: [%s]", Tcl_GetString(cmd), Tcl_GetString(log_file)));
         Tcl_AppendToObj(cmd, " >", 2);
         Tcl_AppendObjToObj(cmd, log_file);
         Tcl_AppendToObj(cmd, " 2>&1", 5);
     } else {
-        DBG2(printf("new cmd: [%s]", Tcl_GetString(cmd)));
+        DBG2(fprintf(stderr, "new cmd: [%s]", Tcl_GetString(cmd)));
     }
     Tcl_AppendToObj(cmd, " || fail", -1);
     if (log_file != NULL) {
@@ -410,8 +410,8 @@ DEFINE_COMMAND(Download) {
         return TCL_ERROR;
     }
 
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd curl -sL -o %s %s",
+    if (state_ptr->mode == MODE_SCRIPT) {
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd curl -fLsS --retry 3 -o %s %s",
                                       2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), osq(url));
     } else {
         cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s",
@@ -516,7 +516,7 @@ DEFINE_COMMAND(Unpack) {
 
     Tcl_Obj *cmd;
 
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
+    if (state_ptr->mode == MODE_SCRIPT) {
         cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd unpack %s %s", 2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"),
                                       dq("$SOURCE_DIR"));
     } else {
@@ -980,6 +980,11 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
 
     Tcl_Obj *resultList = Tcl_NewListObj(0, NULL);
 
+    if (!cJSON_IsArray(spec)) {
+        SetResult("build instructions must be an array");
+        Tcl_BounceRefCount(resultList);
+        return NULL;
+    }
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
 
@@ -993,7 +998,7 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
         }
 
         const cJSON *cmdTypeJson = cJSON_GetObjectItem(cmd, "cmd");
-        if (cmdTypeJson == NULL) {
+        if (!cJSON_IsString(cmdTypeJson)) {
             SetResult("unable to find \"cmd\" object in json spec");
             goto error;
         }
@@ -1011,7 +1016,7 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
         }
 
         if (is_local_build && !commands[cmdType].enable_in_local_build) {
-            DBG2(printf("skip in local build: [%s]", commands[cmdType].cmd));
+            DBG2(fprintf(stderr, "skip in local build: [%s]", commands[cmdType].cmd));
             continue;
         }
 
@@ -1055,23 +1060,14 @@ Tcl_Obj *ttrek_generatePackageCounter(Tcl_Interp *interp, int package_num_curren
 
 }
 
-Tcl_Obj *ttrek_generateBootstrapScript(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
-
-    UNUSED(interp);
-    UNUSED(state_ptr);
-
-    Tcl_Obj *bootstrap = Tcl_NewObj();
-
-    // ttrek_AppendFormatToObj(interp, bootstrap, bootstrap_script, 3,
-    //     osq(state_ptr->project_build_dir_ptr), osq(state_ptr->project_install_dir_ptr),
-    //     osq(state_ptr->project_home_dir_ptr));
-
-    Tcl_AppendToObj(bootstrap, bootstrap_script, -1);
-
-    Tcl_AppendToObj(bootstrap, install_script_common_static, -1);
-
-    return bootstrap;
-
+Tcl_Obj *ttrek_generateScriptHeader(const char *shell) {
+    Tcl_Obj *header = Tcl_NewStringObj(strcmp(shell, "bash") == 0
+        ? "#!/usr/bin/env bash\nset -eo pipefail\n\n"
+        : "#!/bin/sh\nset -e\n\n", -1);
+    Tcl_AppendToObj(header, script_header, -1);
+    Tcl_AppendToObj(header, "\n", 1);
+    Tcl_AppendToObj(header, install_script_common_static, -1);
+    return header;
 }
 
 Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_name,
@@ -1091,10 +1087,10 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
         source_dir = "";
     }
 
-    if (state_ptr->mode == MODE_BOOTSTRAP) {
+    if (state_ptr->mode == MODE_SCRIPT) {
 
-        ttrek_AppendFormatToObj(interp, install_common, bootstrap_script_common_dynamic, 3,
-                                sq(package_name), sq(package_version), sq(source_dir));
+        ttrek_AppendFormatToObj(interp, install_common, script_package, 3,
+                                sq(package_name), sq(package_version), state_ptr->is_local_build ? dq("$PROJECT_HOME") : sq(source_dir));
 
     } else {
 

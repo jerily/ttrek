@@ -10,5 +10,4 @@ local-static
 certs
 dist
 /ttrek-venv
-/ttrek.json
 /ttrek-lock.json
