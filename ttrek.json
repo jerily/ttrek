@@ -1,0 +1,64 @@
+{
+  "name": "ttrek",
+  "version": "1.0.0",
+  "scripts": {},
+  "useFlags": [
+    "+static"
+  ],
+  "dependencies": {
+    "zlib": "=1.3.2",
+    "openssl": "=3.5.9",
+    "cjson": "=1.7.19",
+    "curl": "=8.23.0",
+    "tcl": "=9.1.0",
+    "libgit2": "=1.9.7",
+    "libarchive": "=3.8.11",
+    "satdepsolver": "=0.6.0"
+  },
+  "devDependencies": {},
+  "build": {
+    "default": [
+      {
+        "cmd": "cd"
+      },
+      {
+        "cmd": "cmake_config",
+        "options": [
+          {
+            "name": "CMAKE_BUILD_TYPE",
+            "value": "Release"
+          },
+          {
+            "name": "BUILD_TESTING",
+            "value": "ON"
+          },
+          {
+            "name": "satdepsolver_DIR",
+            "value": "$INSTALL_DIR/lib/cmake/satdepsolver"
+          }
+        ]
+      },
+      {
+        "cmd": "cmake_make",
+        "parallel": true
+      },
+      {
+        "cmd": "env_variable",
+        "name": "CTEST_OUTPUT_ON_FAILURE",
+        "op": "set",
+        "value": "1"
+      },
+      {
+        "cmd": "make",
+        "options": [
+          {
+            "name": "test"
+          }
+        ]
+      },
+      {
+        "cmd": "cmake_install"
+      }
+    ]
+  }
+}

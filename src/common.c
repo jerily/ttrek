@@ -90,11 +90,11 @@ void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr) {
     Tcl_Obj *env_var;
 
     env_var = Tcl_ObjPrintf("%s/lib", Tcl_GetString(state_ptr->project_install_dir_ptr));
-    DBG2(printf("setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_var)));
+    DBG2(fprintf(stderr, "setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_var)));
     setenv("LD_LIBRARY_PATH", Tcl_GetString(env_var), 1);
     Tcl_BounceRefCount(env_var);
 
-    DBG2(printf("setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr)));
+    DBG2(fprintf(stderr, "setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr)));
     setenv("PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr), 1);
 
     if (env_state.path == NULL) {
@@ -103,11 +103,11 @@ void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr) {
         env_var = Tcl_ObjPrintf("%s/bin:%s", Tcl_GetString(state_ptr->project_install_dir_ptr),
             Tcl_GetString(env_state.path));
     }
-    DBG2(printf("setenv: %s = [%s]", "PATH", Tcl_GetString(env_var)));
+    DBG2(fprintf(stderr, "setenv: %s = [%s]", "PATH", Tcl_GetString(env_var)));
     setenv("PATH", Tcl_GetString(env_var), 1);
     Tcl_BounceRefCount(env_var);
 
-    DBG2(printf("cd: [%s]", Tcl_GetString(state_ptr->project_install_dir_ptr)));
+    DBG2(fprintf(stderr, "cd: [%s]", Tcl_GetString(state_ptr->project_install_dir_ptr)));
     Tcl_Chdir(Tcl_GetString(state_ptr->project_install_dir_ptr));
 
 }
@@ -116,33 +116,33 @@ void ttrek_EnvironmentStateRestore(void) {
 
     if (env_state.ld_library_path == NULL) {
         unsetenv("LD_LIBRARY_PATH");
-        DBG2(printf("unsetenv: %s", "LD_LIBRARY_PATH"));
+        DBG2(fprintf(stderr, "unsetenv: %s", "LD_LIBRARY_PATH"));
     } else {
-        DBG2(printf("setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_state.ld_library_path)));
+        DBG2(fprintf(stderr, "setenv: %s = [%s]", "LD_LIBRARY_PATH", Tcl_GetString(env_state.ld_library_path)));
         setenv("LD_LIBRARY_PATH", Tcl_GetString(env_state.ld_library_path), 1);
     }
 
     if (env_state.path == NULL) {
         unsetenv("PATH");
-        DBG2(printf("unsetenv: %s", "PATH"));
+        DBG2(fprintf(stderr, "unsetenv: %s", "PATH"));
     } else {
-        DBG2(printf("setenv: %s = [%s]", "PATH", Tcl_GetString(env_state.path)));
+        DBG2(fprintf(stderr, "setenv: %s = [%s]", "PATH", Tcl_GetString(env_state.path)));
         setenv("PATH", Tcl_GetString(env_state.path), 1);
     }
 
     if (env_state.project_home == NULL) {
         unsetenv("PROJECT_HOME");
-        DBG2(printf("unsetenv: %s", "PROJECT_HOME"));
+        DBG2(fprintf(stderr, "unsetenv: %s", "PROJECT_HOME"));
     } else {
-        DBG2(printf("setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(env_state.project_home)));
+        DBG2(fprintf(stderr, "setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(env_state.project_home)));
         setenv("PROJECT_HOME", Tcl_GetString(env_state.project_home), 1);
     }
 
     if (env_state.cwd_initialized) {
-        DBG2(printf("cd: [%s]", Tcl_DStringValue(&env_state.cwd)));
+        DBG2(fprintf(stderr, "cd: [%s]", Tcl_DStringValue(&env_state.cwd)));
         Tcl_Chdir(Tcl_DStringValue(&env_state.cwd));
     } else {
-        DBG2(printf("cd: <there is no known directory>"));
+        DBG2(fprintf(stderr, "cd: <there is no known directory>"));
     }
 
 }
@@ -150,7 +150,7 @@ void ttrek_EnvironmentStateRestore(void) {
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr) {
     Tcl_Size size;
     unsigned char *str = Tcl_GetByteArrayFromObj(data_ptr, &size);
-    DBG2(printf("get SHA256 hash from data size: %" TCL_SIZE_MODIFIER "d", size));
+    DBG2(fprintf(stderr, "get SHA256 hash from data size: %" TCL_SIZE_MODIFIER "d", size));
 
     unsigned char hash_bin[SHA256_DIGEST_LENGTH];
     SHA256(str, size, hash_bin);
@@ -163,14 +163,14 @@ Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr) {
     }
 
     Tcl_Obj *rc = Tcl_NewStringObj(hash_hex, SHA256_DIGEST_LENGTH * 2);
-    DBG2(printf("return: %s", Tcl_GetString(rc)));
+    DBG2(fprintf(stderr, "return: %s", Tcl_GetString(rc)));
     return rc;
 }
 
 Tcl_Obj *ttrek_GetHomeDirectory() {
     const char *homeDir = getenv("HOME");
     if (homeDir == NULL) {
-        DBG2(printf("failed to get HOME env var"));
+        DBG2(fprintf(stderr, "failed to get HOME env var"));
         return NULL;
     }
     Tcl_Obj *homeDirObj = Tcl_NewStringObj(homeDir, -1);
@@ -178,7 +178,7 @@ Tcl_Obj *ttrek_GetHomeDirectory() {
         Tcl_NewStringObj(".ttrek", -1)
     };
     homeDirObj = Tcl_FSJoinToPath(homeDirObj, 1, objv);
-    DBG2(printf("return [%s]", Tcl_GetString(homeDirObj)));
+    DBG2(fprintf(stderr, "return [%s]", Tcl_GetString(homeDirObj)));
     return homeDirObj;
 }
 
@@ -226,17 +226,17 @@ int ttrek_DirectoryExists(Tcl_Interp *interp, Tcl_Obj *dir_path_ptr, int *result
         // Make sure the specified path is a directory.
         Tcl_StatBuf *sb = Tcl_AllocStatBuf();
         if (sb == NULL) {
-            DBG2(printf("unable to alloc Tcl_StatBuf"));
+            DBG2(fprintf(stderr, "unable to alloc Tcl_StatBuf"));
             return TCL_ERROR;
         }
         if (Tcl_FSStat(dir_path_ptr, sb) != 0) {
             ckfree(sb);
-            DBG2(printf("unable get stats for the path"));
+            DBG2(fprintf(stderr, "unable get stats for the path"));
             return TCL_ERROR;
         }
         if (!S_ISDIR(Tcl_GetModeFromStat(sb))) {
             ckfree(sb);
-            DBG2(printf("ERROR: the path is not a directory"));
+            DBG2(fprintf(stderr, "ERROR: the path is not a directory"));
             return TCL_ERROR;
         }
         ckfree(sb);
@@ -530,7 +530,7 @@ Tcl_Obj *ttrek_GetProjectDirForGlobalMode(Tcl_Interp *interp) {
 }
 
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode) {
-    if (mode == MODE_LOCAL || mode == MODE_BOOTSTRAP) {
+    if (mode == MODE_LOCAL) {
         return ttrek_GetProjectDirForLocalMode(interp);
     } else if (mode == MODE_USER) {
         return ttrek_GetProjectDirForUserMode(interp);
@@ -663,7 +663,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     if (!state_ptr) {
         return NULL;
     }
-    DBG2(printf("allocated state: %p", (void *)state_ptr));
+    DBG2(fprintf(stderr, "allocated state: %p", (void *)state_ptr));
 
     state_ptr->interp = interp;
 
@@ -691,14 +691,14 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     Tcl_Obj *path_lock_file_ptr = ttrek_GetFilePath(interp, project_home_dir_ptr, LOCK_JSON_FILE);
 
     if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
-        if (mode != MODE_LOCAL && mode != MODE_BOOTSTRAP) {
-            DBG2(printf("initialize the lock file: %s", Tcl_GetString(path_lock_file_ptr)));
+        if (mode != MODE_LOCAL) {
+            DBG2(fprintf(stderr, "initialize the lock file: %s", Tcl_GetString(path_lock_file_ptr)));
             ttrek_InitLockFile(interp, path_lock_file_ptr);
         } else {
-            DBG2(printf("no need to initialize the lock file"));
+            DBG2(fprintf(stderr, "no need to initialize the lock file"));
         }
     } else {
-        DBG2(printf("the lock file doesn't exist"));
+        DBG2(fprintf(stderr, "the lock file doesn't exist"));
     }
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
@@ -723,13 +723,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->spec_json_path_ptr = path_to_spec_file_ptr;
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
-    if (mode == MODE_BOOTSTRAP) {
-        state_ptr->lock_root = cJSON_CreateObject();
-        state_ptr->manifest_root = cJSON_CreateObject();
-    } else {
-        state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
-        state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
-    }
+    state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
+    state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
 
     // print all refCount for all dir_ptr in state_ptr
     DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
@@ -767,14 +762,14 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 }
 
 void ttrek_DestroyState(ttrek_state_t *state_ptr) {
-    DBG2(printf("enter"));
+    DBG2(fprintf(stderr, "enter"));
     if (state_ptr->with_locking) {
-        // DBG2(printf("unlock the state"));
+        // DBG2(fprintf(stderr, "unlock the state"));
         ttrek_UnlockFile(state_ptr);
     } else {
-        // DBG2(printf("the state is not locked"));
+        // DBG2(fprintf(stderr, "the state is not locked"));
     }
-    // DBG2(printf("release Tcl objects"));
+    // DBG2(fprintf(stderr, "release Tcl objects"));
     Tcl_DecrRefCount(state_ptr->project_home_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_venv_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
@@ -783,15 +778,15 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->manifest_json_path_ptr);
-    // DBG2(printf("release spec_root: %p", (void *)state_ptr->spec_root));
+    // DBG2(fprintf(stderr, "release spec_root: %p", (void *)state_ptr->spec_root));
     cJSON_Delete(state_ptr->spec_root);
-    // DBG2(printf("release lock_root: %p", (void *)state_ptr->lock_root));
+    // DBG2(fprintf(stderr, "release lock_root: %p", (void *)state_ptr->lock_root));
     cJSON_Delete(state_ptr->lock_root);
-    // DBG2(printf("release manifest_root: %p", (void *)state_ptr->manifest_root));
+    // DBG2(fprintf(stderr, "release manifest_root: %p", (void *)state_ptr->manifest_root));
     cJSON_Delete(state_ptr->manifest_root);
-    DBG2(printf("release state: %p", (void *)state_ptr));
+    DBG2(fprintf(stderr, "release state: %p", (void *)state_ptr));
     Tcl_Free((char *) state_ptr);
-    DBG2(printf("return: ok"));
+    DBG2(fprintf(stderr, "return: ok"));
 }
 
 #define MAX_STRATEGY_LEN 7
@@ -1069,9 +1064,3 @@ int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr) {
     cJSON_Delete(lock_root);
     return TCL_OK;
 }
-
-void ttrek_OutputBootstrap(ttrek_state_t *state_ptr, const char *script) {
-    UNUSED(state_ptr);
-    printf("%s", script);
-}
-

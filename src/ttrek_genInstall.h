@@ -18,7 +18,7 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
                                      cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr,
                                      ttrek_state_t *state_ptr);
 
-Tcl_Obj *ttrek_generateBootstrapScript(Tcl_Interp *interp, ttrek_state_t *state_ptr);
+Tcl_Obj *ttrek_generateScriptHeader(const char *shell);
 
 Tcl_Obj *ttrek_generatePackageCounter(Tcl_Interp *interp, int package_num_current, int package_num_total);
 

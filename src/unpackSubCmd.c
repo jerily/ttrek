@@ -58,14 +58,14 @@ static int ttrek_UnpackCopyData(Tcl_Interp *interp, struct archive *ar,
 //     3. returns the joined path as Tcl_Obj with refcount=0
 Tcl_Obj *ttrek_UnpackGetOutputName(Tcl_Obj *basePath, const char *entryPath) {
 
-    // DBG2(printf("join [%s] with [%s]", Tcl_GetString(basePath), entryPath));
+    // DBG2(fprintf(stderr, "join [%s] with [%s]", Tcl_GetString(basePath), entryPath));
 
     Tcl_Obj *entryPathObj = Tcl_NewStringObj(entryPath, -1);
     Tcl_IncrRefCount(entryPathObj);
 
     Tcl_Size countElements;
     Tcl_Obj *entrySplitObj = Tcl_FSSplitPath(entryPathObj, &countElements);
-    // DBG2(printf("got list [%s] with %" TCL_SIZE_MODIFIER "d elements",
+    // DBG2(fprintf(stderr, "got list [%s] with %" TCL_SIZE_MODIFIER "d elements",
     //     Tcl_GetString(entrySplitObj), countElements));
     Tcl_IncrRefCount(entrySplitObj);
 
@@ -79,7 +79,7 @@ Tcl_Obj *ttrek_UnpackGetOutputName(Tcl_Obj *basePath, const char *entryPath) {
     // Insert the base path as the 1st element
     Tcl_ListObjReplace(NULL, entrySplitObj, 0, 0, 1, &basePath);
 
-    // DBG2(printf("join elements from the list [%s]", Tcl_GetString(entrySplitObj)));
+    // DBG2(fprintf(stderr, "join elements from the list [%s]", Tcl_GetString(entrySplitObj)));
     Tcl_Obj *rc = Tcl_FSJoinPath(entrySplitObj, -1);
 
     Tcl_DecrRefCount(entrySplitObj);

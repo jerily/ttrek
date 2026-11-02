@@ -12,7 +12,7 @@ The package manager for Tcl. This project is under active development.
 ## Build
 
 Requires C/C++ compilers with C++17, CMake 3.22.1+, Make, Bash, Perl, pkg-config,
-curl, tar, and the normal platform development tools. Rust and Cargo are no longer required.
+curl, tar, Python 3 for tests, and the normal platform development tools. Rust and Cargo are no longer required.
 
 ```sh
 ./build-ttrek.sh
@@ -76,6 +76,26 @@ or initialize/send telemetry. It supports `-force` and
 With no package arguments it resolves existing project requirements.
 Resolution conflicts and malformed/failed metadata requests return a nonzero exit.
 
+`ttrek.json` also describes ttrek’s pinned static build. `build-ttrek.sh` remains available.
+
+Generate a standalone build script:
+
+```sh
+ttrek gen-script > build.sh
+ttrek gen-script -shell sh -static jinja2-tcl > build-static.sh
+bash build.sh
+```
+
+`gen-script` defaults to Bash, supports `sh`, and replaces `install -bootstrap`.
+It resolves dependencies, embeds patches, and writes only the completed script to
+stdout. Generation is read-only; hooks and builds run when you execute the script.
+The script installs into `build/install` beside itself and needs no ttrek binary.
+It rebuilds packages on each run. Use `-strategy latest|favored|locked` to select versions.
+
+`-static` enables the `+static` USE flag. Recipes use `"if": "+static"` for optional
+static build settings; without the flag, their normal defaults apply.
+Static Tcl extensions are archives for embedding; an application must register their init functions.
+
 ## Solver integration
 
 `PackageDatabase.h` implements `DependencyProvider<Range<Pack>>` and owns
@@ -100,6 +120,9 @@ backtracking, dependency order, constraints, locks, favored/latest selection,
 USE flags, conflict messages, transport/metadata errors, and version ownership.
 Assertions stay enabled in Release. Debug builds enable address and undefined
 behavior sanitizers.
+
+`gen_script` exercises the CLI with a fixture registry, builds shared and static
+libraries, and checks patches, dependency order, shell isolation and generation errors.
 
 With the local registry running, the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,

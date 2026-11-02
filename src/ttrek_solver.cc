@@ -9,6 +9,7 @@
 #include <iostream>
 #include <cstring>
 #include <sys/utsname.h>
+#include <unistd.h>
 #include "PackageDatabase.h"
 #include "ttrek_solver.h"
 #include "installer.h"
@@ -27,7 +28,7 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
             package_name = arg.substr(0, arg.find('@'));
             version_requirement = arg.substr(arg.find('@') + 1);
         }
-        DBG(std::cout << "package_name: " << package_name << " version_requirement: " << version_requirement
+        DBG(std::cerr << "package_name: " << package_name << " version_requirement: " << version_requirement
                       << std::endl);
         requirements[package_name] = version_requirement;
     }
@@ -42,7 +43,7 @@ ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::map<std::stri
             cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
             std::string package_name = dep_item->string;
             std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            DBG(std::cout << "(direct from spec) package_name: " << package_name << " package_version_requirement: "
+            DBG(std::cerr << "(direct from spec) package_name: " << package_name << " package_version_requirement: "
                           << package_version_requirement << std::endl);
             requirements[package_name] = package_version_requirement;
         }
@@ -57,7 +58,7 @@ ttrek_ParseRequirementsFromLockFile(ttrek_state_t *state_ptr, std::map<std::stri
             cJSON *dep_item = cJSON_GetArrayItem(packages, i);
             std::string package_name = dep_item->string;
             requirements[package_name] = "";
-            DBG(std::cout << "(direct from lock without version) package_name: " << package_name << std::endl);
+            DBG(std::cerr << "(direct from lock without version) package_name: " << package_name << std::endl);
         }
     }
 }
@@ -530,7 +531,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
                         }
 
                     } else {
-                        DBG(std::cout << "unknown install sofar: " << install_spec.package_name << std::endl);
+                        DBG(std::cerr << "unknown install sofar: " << install_spec.package_name << std::endl);
                         if (enhanced_requirements.find(install_spec.package_name) != enhanced_requirements.end()) {
                             install_spec.install_type = ALREADY_INSTALLED;
                         } else {
@@ -560,13 +561,13 @@ static void
 ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
     for (const auto &install_spec: execution_plan) {
         if (install_spec.install_type == UNKNOWN_INSTALL) {
-            DBG(std::cout << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)"
+            DBG(std::cerr << install_spec.package_name << "@" << install_spec.package_version << " (unknown install)"
                           << std::endl);
             continue;
         }
 
         if (install_spec.install_type == ALREADY_INSTALLED) {
-            DBG(std::cout << install_spec.package_name << "@" << install_spec.package_version << " (already installed)"
+            DBG(std::cerr << install_spec.package_name << "@" << install_spec.package_version << " (already installed)"
                           << std::endl);
             continue;
         }
@@ -700,16 +701,10 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         if (execution_plan.empty()) {
             *abort = 1;
-            if (state_ptr->mode != MODE_BOOTSTRAP) {
-                std::cout << "Nothing to install!" << std::endl;
-            }
+            std::cout << "Nothing to install!" << std::endl;
             Tcl_DecrRefCount(use_flags_list_ptr);
             Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_OK;
-        }
-
-        if (state_ptr->mode == MODE_BOOTSTRAP) {
-            goto skipConfirmation;
         }
 
         std::cout << "The following packages will be installed:" << std::endl;
@@ -736,8 +731,6 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
 
         std::cout << std::endl;
-
-skipConfirmation:
 
         // ensure the directory skeleton exists
         if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
@@ -813,25 +806,21 @@ skipConfirmation:
         Tcl_DecrRefCount(use_flags_list_ptr);
         Tcl_DeleteHashTable(&global_use_flags_ht);
 
-        if (state_ptr->mode != MODE_BOOTSTRAP) {
+        if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
+            return TCL_ERROR;
+        }
 
-            if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
-                return TCL_ERROR;
-            }
+        if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
+            return TCL_ERROR;
+        }
 
-            if (TCL_OK != ttrek_UpdateLockFileAfterInstall(interp, state_ptr)) {
-                return TCL_ERROR;
-            }
+        if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
+            fprintf(stderr, "error: could not update manifest file\n");
+            return TCL_ERROR;
+        }
 
-            if (TCL_OK != ttrek_UpdateManifestFileAfterInstall(interp, state_ptr)) {
-                fprintf(stderr, "error: could not update manifest file\n");
-                return TCL_ERROR;
-            }
-
-            for (const auto &install_spec: installs_from_lock_file_sofar) {
-                ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
-            }
-
+        for (const auto &install_spec: installs_from_lock_file_sofar) {
+            ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
         }
 
     }
@@ -885,7 +874,7 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
             if (it != dependencies_from_lock_map.end()) {
                 for (const auto &dep: it->second) {
                     if (requirements.find(dep) != requirements.end()) {
-                        DBG(std::cout << "cannot uninstall " << dep << " because it is a direct requirement"
+                        DBG(std::cerr << "cannot uninstall " << dep << " because it is a direct requirement"
                                       << std::endl);
                         continue;
                     }
@@ -893,7 +882,7 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
                         reverse_dependencies_map.at(dep).find(uninstall) != reverse_dependencies_map.at(dep).end()) {
                         reverse_dependencies_map.at(dep).erase(uninstall);
                         changed = true;
-                        DBG(std::cout << "erased " << uninstall << " from " << dep << " rdeps" << std::endl);
+                        DBG(std::cerr << "erased " << uninstall << " from " << dep << " rdeps" << std::endl);
                     }
                 }
             }
@@ -958,6 +947,61 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
     }
 
     return TCL_OK;
+}
+
+#ifdef DEBUG
+// The solver's debug tracing writes to stdout. Keep it out of shell output.
+class SolverDiagnostics {
+    int saved_stdout;
+public:
+    SolverDiagnostics() : saved_stdout(dup(STDOUT_FILENO)) {
+        if (saved_stdout < 0) { throw std::runtime_error("Cannot preserve script output stream"); }
+        std::cout.flush();
+        fflush(stdout);
+        if (dup2(STDERR_FILENO, STDOUT_FILENO) < 0) {
+            close(saved_stdout);
+            throw std::runtime_error("Cannot redirect solver diagnostics");
+        }
+    }
+    ~SolverDiagnostics() {
+        std::cout.flush();
+        fflush(stdout);
+        dup2(saved_stdout, STDOUT_FILENO);
+        close(saved_stdout);
+    }
+};
+#endif
+
+// Include every resolved dependency, even when it is already installed locally.
+int ttrek_ResolveBuildPlan(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[],
+                         ttrek_state_t *state_ptr, Tcl_Obj *plan) try {
+#ifdef DEBUG
+    SolverDiagnostics diagnostics;
+#endif
+    PackageDatabase db;
+    db.set_strategy(state_ptr->strategy);
+    std::map<std::string, std::string> requirements;
+    std::vector<std::string> installs;
+    std::string message;
+    if (ttrek_Solve(interp, objc, objv, db, state_ptr, message, requirements, installs) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    if (!message.empty()) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(ttrek_RewriteUnsatMessage(message).c_str(), -1));
+        return TCL_ERROR;
+    }
+    for (const auto &install : installs) {
+        if (install.rfind("use:", 0) == 0) { continue; }
+        auto separator = install.find('=');
+        Tcl_Obj *entry = Tcl_NewListObj(0, nullptr);
+        Tcl_ListObjAppendElement(interp, entry, Tcl_NewStringObj(install.substr(0, separator).c_str(), -1));
+        Tcl_ListObjAppendElement(interp, entry, Tcl_NewStringObj(install.substr(separator + 1).c_str(), -1));
+        Tcl_ListObjAppendElement(interp, plan, entry);
+    }
+    return TCL_OK;
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    return TCL_ERROR;
 }
 
 // Build a plan with the same resolver and execution planner as install/update,

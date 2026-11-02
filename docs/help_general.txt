@@ -4,6 +4,7 @@ Available commands:
     init
     install
     pretend
+    gen-script
     update
     uninstall
     ls
