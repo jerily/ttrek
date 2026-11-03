@@ -28,7 +28,7 @@ static int ttrek_InstallRunHook(Tcl_Interp *interp, ttrek_state_t *state_ptr, co
 
     DBG2(fprintf(stderr, "want to run hook [%s]", hook_str));
 
-    if (ttrek_ScriptsMakeTempFile(interp, state_ptr, hook_str, &temp_file) != TCL_OK) {
+    if (ttrek_ScriptsMakeTempFile(interp, state_ptr, state_ptr->spec_root, hook_str, &temp_file) != TCL_OK) {
         goto error;
     }
 
@@ -36,8 +36,6 @@ static int ttrek_InstallRunHook(Tcl_Interp *interp, ttrek_state_t *state_ptr, co
         DBG2(fprintf(stderr, "no hook [%s] defined", hook_str));
         goto done;
     }
-
-    Tcl_IncrRefCount(temp_file);
 
     if (ttrek_ScriptsDefineRunArgs(interp, temp_file, &argc, &argv) != TCL_OK) {
         goto error;

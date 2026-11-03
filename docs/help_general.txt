@@ -19,5 +19,6 @@ Available commands:
     uninstall
     ls
     run
+    scripts
 
 Run 'ttrek help COMMAND' for more information on a command.

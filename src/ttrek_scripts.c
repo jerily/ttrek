@@ -9,6 +9,42 @@
 #include <unistd.h> /* for getpid() */
 #include <stdlib.h> /* for getenv() */
 
+int ttrek_ScriptsValidate(Tcl_Interp *interp, const cJSON *scripts) {
+    if (!cJSON_IsObject(scripts)) {
+        SetResult("recipe scripts must be an object of named shell script strings");
+        return TCL_ERROR;
+    }
+    const cJSON *script;
+    cJSON_ArrayForEach(script, scripts) {
+        if (!script->string || !script->string[0] || !cJSON_IsString(script)) {
+            SetResult("recipe scripts must have nonempty names and string bodies");
+            return TCL_ERROR;
+        }
+    }
+    return TCL_OK;
+}
+
+int ttrek_ScriptsPackageSource(Tcl_Interp *interp, ttrek_state_t *state_ptr,
+        const char *package_name, cJSON **source_ptr) {
+    cJSON *package = cJSON_GetObjectItemCaseSensitive(state_ptr->manifest_root, package_name);
+    if (!cJSON_IsObject(package)) {
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("package \"%s\" is not installed in this environment", package_name));
+        return TCL_ERROR;
+    }
+    cJSON *scripts = cJSON_GetObjectItemCaseSensitive(package, "scripts");
+    cJSON *version = cJSON_GetObjectItemCaseSensitive(package, "version");
+    if (!scripts || !cJSON_IsString(version) || !version->valuestring[0]) {
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("package \"%s\" has no cached recipe scripts; "
+            "reinstall it with 'ttrek install -force %s' in this environment", package_name, package_name));
+        return TCL_ERROR;
+    }
+    if (ttrek_ScriptsValidate(interp, scripts) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    *source_ptr = package;
+    return TCL_OK;
+}
+
 int ttrek_ScriptsAdd(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr, Tcl_Obj *body_ptr) {
 
     UNUSED(interp);
@@ -102,12 +138,16 @@ int ttrek_ScriptsDescribe(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_pt
 
 }
 
-int ttrek_ScriptsMakeTempFile(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *name_str, Tcl_Obj **file_ptr_ptr) {
+int ttrek_ScriptsMakeTempFile(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *source, const char *name_str, Tcl_Obj **file_ptr_ptr) {
 
-    const char *body_str = ttrek_ScriptsGet(state_ptr->spec_root, name_str);
+    const char *body_str = ttrek_ScriptsGet(source, name_str);
     if (body_str == NULL) {
         *file_ptr_ptr = NULL;
         return TCL_OK;
+    }
+    // Recovery from a failed install may have removed the untracked temp directory.
+    if (ttrek_EnsureDirectoryExists(interp, state_ptr->project_temp_dir_ptr) != TCL_OK) {
+        return TCL_ERROR;
     }
 
     // Generate temporary file name using pid and current timestamp
@@ -129,11 +169,17 @@ int ttrek_ScriptsMakeTempFile(Tcl_Interp *interp, ttrek_state_t *state_ptr, cons
     int body_len = strlen(body_str);
     if (Tcl_WriteChars(chan, body_str, body_len) != body_len) {
         SetResult("could not write script to the file");
+        Tcl_Close(NULL, chan);
+        Tcl_FSDeleteFile(temp_file);
         Tcl_DecrRefCount(temp_file);
         return TCL_ERROR;
     }
 
-    Tcl_Close(interp, chan);
+    if (Tcl_Close(interp, chan) != TCL_OK) {
+        Tcl_FSDeleteFile(temp_file);
+        Tcl_DecrRefCount(temp_file);
+        return TCL_ERROR;
+    }
 
     *file_ptr_ptr = temp_file;
 
@@ -149,16 +195,18 @@ int ttrek_ScriptsDefineRunArgs(Tcl_Interp *interp, Tcl_Obj *file_ptr, Tcl_Size *
         return TCL_ERROR;
     }
 
-    // Construct command line:
-    //     $SHELL -c /path/to/file
+    // Pass the path as an argument so spaces and shell metacharacters are literal.
+    // Executing the file preserves its shebang, or the shell's script fallback.
 
-    Tcl_Size argc = 3;
+    Tcl_Size argc = 5;
     const char **argv = ckalloc(sizeof(char *) * (argc + 1));
 
     argv[0] = shell;
     argv[1] = "-c";
-    argv[2] = Tcl_GetString(file_ptr);
-    argv[3] = NULL;
+    argv[2] = "exec \"$1\"";
+    argv[3] = "ttrek-script";
+    argv[4] = Tcl_GetString(file_ptr);
+    argv[5] = NULL;
 
     *argc_ptr = argc;
     *argv_ptr = argv;

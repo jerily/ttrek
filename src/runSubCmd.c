@@ -19,20 +19,30 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int option_user = 0;
     int option_global = 0;
     const char *option_script = NULL;
+    const char *option_package = NULL;
     Tcl_ArgvInfo ArgTable[] = {
         { TCL_ARGV_CONSTANT, "-u",      INT2PTR(1), &option_user,   "run in user mode",            NULL },
         { TCL_ARGV_CONSTANT, "-g",      INT2PTR(1), &option_global, "run in global mode",          NULL },
         { TCL_ARGV_STRING,   "-script", NULL,       &option_script, "the named script to execute", NULL },
+        { TCL_ARGV_STRING,   "-package", NULL,      &option_package, "use scripts from an installed package", NULL },
         { TCL_ARGV_END,      NULL,      NULL,       NULL,           NULL,                          NULL }
     };
 
-    Tcl_Obj **remObjv;
+    Tcl_Obj **remObjv = NULL;
     if (Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv) != TCL_OK) {
         goto error;
     }
 
     if (option_user && option_global) {
         SetResult("conflicting options -u and -g");
+        goto error;
+    }
+    if (option_package && (!option_package[0] || !option_script)) {
+        SetResult("-package requires a package name and -script NAME");
+        goto error;
+    }
+    if (option_script && (!option_script[0] || objc != 1)) {
+        SetResult("named script usage: ttrek run ?-u|-g? ?-package PACKAGE? -script NAME");
         goto error;
     }
 
@@ -53,17 +63,23 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     if (option_script != NULL) {
 
-        if (ttrek_ScriptsMakeTempFile(interp, state_ptr, option_script, &temp_file) != TCL_OK) {
+        cJSON *source = state_ptr->spec_root;
+        if (option_package && ttrek_ScriptsPackageSource(interp, state_ptr, option_package, &source) != TCL_OK) {
+            goto error;
+        }
+        if (ttrek_ScriptsMakeTempFile(interp, state_ptr, source, option_script, &temp_file) != TCL_OK) {
             goto error;
         }
 
         if (temp_file == NULL) {
-            Tcl_SetObjResult(interp, Tcl_ObjPrintf("there is no named script \"%s\""
-                " in the project", option_script));
-            return TCL_ERROR;
+            if (option_package) {
+                Tcl_SetObjResult(interp, Tcl_ObjPrintf("there is no named script \"%s\" in installed package \"%s\"",
+                    option_script, option_package));
+            } else {
+                Tcl_SetObjResult(interp, Tcl_ObjPrintf("there is no named script \"%s\" in the project", option_script));
+            }
+            goto error;
         }
-
-        Tcl_IncrRefCount(temp_file);
 
         if (ttrek_ScriptsDefineRunArgs(interp, temp_file, &objc, &argv) != TCL_OK) {
             goto error;

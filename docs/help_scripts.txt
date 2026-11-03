@@ -1,0 +1,13 @@
+Usage: ttrek scripts [-u|-g] [-package PACKAGE] ls
+       ttrek scripts [-u|-g] [-package PACKAGE] describe NAME
+       ttrek scripts [-u|-g] add NAME BODY
+       ttrek scripts [-u|-g] del NAME
+
+List, inspect, add or remove named project scripts in ttrek.json.
+-package selects the scripts cached with an installed package's exact recipe
+version. Package scripts support only ls and describe and are read-only.
+These commands do not fetch recipes or execute scripts.
+
+Run a package script with 'ttrek run -package PACKAGE -script NAME'.
+Reinstall older packages with 'ttrek install -force PACKAGE' to cache their
+recipe scripts. Use the same -u or -g mode for installation and execution.
