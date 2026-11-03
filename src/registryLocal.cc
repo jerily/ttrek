@@ -95,6 +95,8 @@ Json recipe(const std::vector<std::string> &parts) {
     cJSON_AddItemToObject(result.get(), "dependencies",
         cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
     cJSON_AddItemToObject(result.get(), "install_script", cJSON_Duplicate(steps, 1));
+    auto *scripts = cJSON_GetObjectItemCaseSensitive(spec.get(), "scripts");
+    if (scripts) { cJSON_AddItemToObject(result.get(), "scripts", cJSON_Duplicate(scripts, 1)); }
     auto *iuse = cJSON_AddArrayToObject(result.get(), "iuse");
     std::set<std::string> flags;
     collect_use_flags(spec.get(), flags);

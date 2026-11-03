@@ -1,1 +1,15 @@
-There is no specific help on the specified command.
+Usage: ttrek run [-u|-g] [-package PACKAGE] -script NAME
+       ttrek run [-u|-g] COMMAND [ARGS...]
+
+Run a named shell script from the project's ttrek.json, or a command in its
+installed environment. -package selects the scripts saved with that installed
+package's recipe. It requires -script and does not contact a registry.
+
+Use 'ttrek scripts -package PACKAGE ls' to list available package scripts.
+Older installations without cached scripts need 'ttrek install -force PACKAGE'
+with a recipe containing scripts. Use the same -u or -g mode when reinstalling.
+
+Scripts run in the installation directory with its bin directory on PATH and
+its libraries on LD_LIBRARY_PATH. PROJECT_HOME is the project root and
+PROJECT_INSTALL_DIR is the absolute installation prefix. SHELL must be set.
+Store runtime data outside ttrek-venv so package operations do not manage it.

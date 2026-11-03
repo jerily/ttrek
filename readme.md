@@ -181,7 +181,38 @@ Resolution conflicts and malformed/failed metadata requests return a nonzero exi
 
 `ttrek.json` also describes ttrek’s pinned static build. `build-ttrek.sh` remains available.
 
-Generate a standalone build script:
+### Run installed package scripts
+
+Recipes can define a `scripts` object mapping names to shell script strings.
+Installation saves the exact version and scripts in
+`ttrek-venv/ttrek-manifest.json`, alongside the package's installed file list:
+
+```sh
+ttrek install openacs@5.10.1
+ttrek scripts -package openacs ls
+ttrek scripts -package openacs describe init-local
+ttrek run -package openacs -script init-local
+ttrek run -package openacs -script start-local
+```
+
+Execution and inspection use installed metadata without registry access. Updates
+replace cached scripts and uninstall removes them. Packages installed before
+this support require `ttrek install -force PACKAGE` using a registry recipe
+that supplies the scripts. A plain install of an already installed version does
+not refresh its metadata. Use the same `-u` or `-g` mode for all commands when
+working with those environments.
+
+Without `-package`, script commands use the project's `ttrek.json` as before.
+Package scripts support `ls` and `describe`; `add` and `del` edit project scripts
+only. Installing a recipe does not automatically execute its named scripts or
+copy them into the project spec.
+
+Scripts run in the installation directory using `$SHELL`, honoring an executable
+script's shebang. `PROJECT_HOME` names the project root and `PROJECT_INSTALL_DIR`
+names the installation prefix. `PATH` and `LD_LIBRARY_PATH` select that environment.
+Keep databases, uploads and other runtime data outside `ttrek-venv`.
+
+### Generate a standalone build script
 
 ```sh
 ttrek gen-script > build.sh

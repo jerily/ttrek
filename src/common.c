@@ -22,6 +22,7 @@ static struct {
     Tcl_Obj *ld_library_path;
     Tcl_Obj *path;
     Tcl_Obj *project_home;
+    Tcl_Obj *project_install_dir;
     Tcl_DString cwd;
     int cwd_initialized;
     int initialized;
@@ -59,6 +60,9 @@ static void ttrek_EnvironmentStateInit(void) {
         }
 
         env_state.cwd_initialized = (Tcl_GetCwd(NULL, &env_state.cwd) != NULL);
+        env_var = getenv("PROJECT_INSTALL_DIR");
+        env_state.project_install_dir = env_var ? Tcl_NewStringObj(env_var, -1) : NULL;
+        if (env_state.project_install_dir) { Tcl_IncrRefCount(env_state.project_install_dir); }
 
         env_state.initialized = 1;
 
@@ -75,6 +79,9 @@ void ttrek_EnvironmentStateFree(void) {
         }
         if (env_state.project_home != NULL) {
             Tcl_DecrRefCount(env_state.project_home);
+        }
+        if (env_state.project_install_dir != NULL) {
+            Tcl_DecrRefCount(env_state.project_install_dir);
         }
         if (env_state.cwd_initialized) {
             Tcl_DStringFree(&env_state.cwd);
@@ -96,6 +103,7 @@ void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr) {
 
     DBG2(fprintf(stderr, "setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr)));
     setenv("PROJECT_HOME", Tcl_GetString(state_ptr->project_home_dir_ptr), 1);
+    setenv("PROJECT_INSTALL_DIR", Tcl_GetString(state_ptr->project_install_dir_ptr), 1);
 
     if (env_state.path == NULL) {
         env_var = Tcl_ObjPrintf("%s/bin", Tcl_GetString(state_ptr->project_install_dir_ptr));
@@ -136,6 +144,12 @@ void ttrek_EnvironmentStateRestore(void) {
     } else {
         DBG2(fprintf(stderr, "setenv: %s = [%s]", "PROJECT_HOME", Tcl_GetString(env_state.project_home)));
         setenv("PROJECT_HOME", Tcl_GetString(env_state.project_home), 1);
+    }
+
+    if (env_state.project_install_dir == NULL) {
+        unsetenv("PROJECT_INSTALL_DIR");
+    } else {
+        setenv("PROJECT_INSTALL_DIR", Tcl_GetString(env_state.project_install_dir), 1);
     }
 
     if (env_state.cwd_initialized) {
@@ -382,21 +396,19 @@ int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], 
     Tcl_SetChannelOption(interp, chan, "-buffering", "none");
     Tcl_SetChannelOption(interp, chan, "-translation", "binary");
 
-    resultObj = Tcl_NewObj();
-    Tcl_IncrRefCount(resultObj);
+    char buffer[8192];
     while (!Tcl_Eof(chan)) {
-        if (Tcl_ReadChars(chan, resultObj, -1, 0) < 0) {
-            Tcl_DecrRefCount(resultObj);
+        Tcl_Size bytes_read = Tcl_Read(chan, buffer, sizeof(buffer));
+        if (bytes_read < 0) {
             goto read_error;
         }
-        if (Tcl_GetCharLength(resultObj) > 0) {
-            fprintf(stdout, "%s", Tcl_GetString(resultObj));
+        if (bytes_read > 0) {
+            fwrite(buffer, 1, bytes_read, stdout);
             fflush(stdout);
+            continue;
         }
         nanosleep(&ts, NULL);
     }
-    Tcl_DecrRefCount(resultObj);
-    resultObj = NULL;
 
     // make "chan" blocking to properly detect a possible runtime error
     // during Tcl_Close();

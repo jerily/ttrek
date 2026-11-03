@@ -11,6 +11,7 @@
 #include "fsmonitor/fsmonitor.h"
 #include "ttrek_genInstall.h"
 #include "ttrek_useflags.h"
+#include "ttrek_scripts.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 #define MAX_PATCH_FILE_SIZE 1048576
@@ -39,7 +40,8 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     fprintf(stderr, "Added dependency %s to spec: %s\n", package_name, version_requirement);
 }
 
-static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package_name, Tcl_Obj *files_diff) {
+static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package_name,
+        const char *package_version, const cJSON *scripts, Tcl_Obj *files_diff) {
 
     // add the files that were added to the package
     cJSON *item_node = cJSON_CreateObject();
@@ -52,6 +54,8 @@ static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package
         cJSON_AddItemToArray(files_node, cJSON_CreateString(Tcl_GetString(file_diff_ptr)));
     }
     cJSON_AddItemToObject(item_node, STRING_FILES, files_node);
+    cJSON_AddStringToObject(item_node, STRING_VERSION, package_version);
+    cJSON_AddItemToObject(item_node, "scripts", scripts ? cJSON_Duplicate(scripts, 1) : cJSON_CreateObject());
 
     if (cJSON_HasObjectItem(manifest_root, package_name)) {
         // modify the value
@@ -158,6 +162,12 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     // DBG2(fprintf(stderr, "got JSON: [%s]", Tcl_DStringValue(&ds)));
 
     cJSON *install_spec_root = cJSON_Parse(Tcl_DStringValue(&ds));
+    cJSON *scripts = cJSON_GetObjectItemCaseSensitive(install_spec_root, "scripts");
+    if (scripts && ttrek_ScriptsValidate(interp, scripts) != TCL_OK) {
+        cJSON_Delete(install_spec_root);
+        Tcl_DStringFree(&ds);
+        return TCL_ERROR;
+    }
     cJSON *install_script_node = cJSON_GetObjectItem(install_spec_root, "install_script");
     if (!install_script_node) {
         fprintf(stderr, "error: install_script not found in spec file\n");
@@ -316,7 +326,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     } else {
         ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node, iuse_list_ptr, use_list_ptr);
     }
-    ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, fsmonitor_state_ptr->files_diff);
+    ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, package_version,
+        scripts, fsmonitor_state_ptr->files_diff);
 
     Tcl_DecrRefCount(iuse_list_ptr);
     Tcl_DecrRefCount(use_list_ptr);

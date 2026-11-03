@@ -14,7 +14,7 @@ BINARY = Path(sys.argv[1]).resolve()
 CMAKE = Path(sys.argv[2]).resolve()
 CURL = Path(sys.argv[3]).absolute()
 
-with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
+with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     root = Path(temporary)
     home = root / "home"
     home.mkdir()
@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
     # Isolate user registry/curl settings and include build logs on failure.
     env = dict(os.environ, HOME=str(home), CURL_HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
                PATH=str(tools) + os.pathsep + os.environ["PATH"],
-               TTREK_NO_UPDATE_CHECK="1", TTREK_FAIL_VERBOSE="1",
+               TTREK_NO_UPDATE_CHECK="1", TTREK_FAIL_VERBOSE="1", SHELL="/bin/sh",
                http_proxy="http://127.0.0.1:9", https_proxy="http://127.0.0.1:9",
                ALL_PROXY="http://127.0.0.1:9", NO_PROXY="", no_proxy="", TTREK_MAKE_THREADS="2")
 
@@ -72,6 +72,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
             build = {"default": [{"cmd": "invalid-fallback"}],
                      (platform.system() + "." + platform.machine()).lower(): steps}
         recipes[name] = {"name": name, "version": "1.0.0", "dependencies": dependencies, "build": build}
+        recipes[name]["scripts"] = {
+            "hello": "#!/bin/sh\nset -eu\nprintf '%s\\n' '" + name + "@1.0.0 café' \"$PROJECT_HOME\" \"$PROJECT_INSTALL_DIR\" \"$PWD\"\n"
+                     "test -f \"$PROJECT_INSTALL_DIR/include/" + name + ".h\"\n",
+            "preInstall": 'touch "$PROJECT_HOME/unexpected-package-hook"',
+            "fail": "exit 7\n",
+        }
         (directory / "ttrek.json").write_text(json.dumps(recipes[name]))
 
     # Bad options fail before init creates anything; both placements are accepted.
@@ -85,6 +91,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
     lock_file = project / "ttrek-lock.json"
     spec = json.loads(spec_file.read_text())
     spec["dependencies"] = {"app": "^1.0.0"}
+    spec["scripts"] = {"hello": "printf project-script", "preInstall": "printf pre > pre-hook"}
     spec_file.write_text(json.dumps(spec))
     assert json.loads(lock_file.read_text())["registry"] == relative_registry
     assert not (project / "ttrek-venv/machine-id").exists()
@@ -111,19 +118,91 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
 
     # Install and update use saved registry metadata and retain the setting.
     run("install", "-y")
+    assert not (project / "unexpected-package-hook").exists()
+    assert (project / "ttrek-venv/local/pre-hook").read_text() == "pre"
     lock = json.loads(lock_file.read_text())
     assert lock["registry"] == relative_registry
     assert lock["packages"]["base"]["version"] == "1.0.0"
     assert "+static" in lock["packages"]["base"]["iuse"]
     assert "return 42" in (project / "ttrek-venv/local/include/base.h").read_text()
+    manifest_file = project / "ttrek-venv/ttrek-manifest.json"
+    installed = json.loads(manifest_file.read_text())
+    assert installed["base"]["scripts"] == recipes["base"]["scripts"]
+    assert installed["base"]["version"] == "1.0.0"
+
+    # Installed scripts are independent of project scripts and registry availability.
+    hidden_registry = root / "offline registry"
+    registry.rename(hidden_registry)
+    try:
+        for package in ("base", "app"):
+            assert set(run("scripts", "-package", package, "ls").stdout.splitlines()) == {"hello", "preInstall", "fail"}
+            assert run("scripts", "-package", package, "describe", "hello").stdout == recipes[package]["scripts"]["hello"] + "\n"
+            output = run("run", "-package", package, "-script", "hello", cwd=nested).stdout.splitlines()
+            prefix = str(project / "ttrek-venv/local")
+            assert output == [package + "@1.0.0 café", str(project), prefix, prefix], output
+        assert run("run", "-script", "hello").stdout == "project-script"
+        assert run("run", "-script", "HELLO").stdout == "project-script"
+        assert run("run", "sh", "-c", "printf direct-command").stdout == "direct-command"
+        # Stream bytes without re-encoding UTF-8 or truncating at NUL/chunk boundaries.
+        streamed = subprocess.run([BINARY, "run", sys.executable, "-c",
+                                   "import os; os.write(1, bytes(range(256)) * 100)"],
+                                  cwd=project, env=env, capture_output=True, timeout=10, check=True)
+        assert streamed.stdout == bytes(range(256)) * 100
+        assert "7" in run("run", "-package", "base", "-script", "fail", ok=False).stderr
+        assert not list((project / "ttrek-venv/tmp").glob("script-*.sh"))
+        for args in (("run", "-package", "absent", "-script", "hello"),
+                     ("scripts", "-package", "absent", "ls")):
+            assert "not installed" in run(*args, ok=False).stderr
+        for args in (("run", "-package", "base", "-script", "missing"),
+                     ("scripts", "-package", "base", "describe", "missing")):
+            assert "no named script" in run(*args, ok=False).stderr
+        for args in (("run", "-package", "base"), ("run", "-package"),
+                     ("run", "-package", "", "-script", "hello"),
+                     ("run", "-package", "base", "-script", "hello", "unexpected"),
+                     ("scripts", "-package"), ("scripts", "-package", "", "ls"),
+                     ("scripts", "-package", "base", "add", "hello", "echo changed"),
+                     ("scripts", "-package", "base", "del", "hello"),
+                     ("run", "-u", "-g", "-package", "base", "-script", "hello")):
+            run(*args, ok=False)
+        assert json.loads(manifest_file.read_text()) == installed
+        assert json.loads(spec_file.read_text())["scripts"] == spec["scripts"]
+
+        # A lock entry alone is not proof of installation; legacy metadata gives guidance.
+        for entry, message in ((None, "not installed"), ({"files": []}, "reinstall"),
+                               ({"version": "1.0.0", "scripts": []}, "must be an object"),
+                               ({"version": "1.0.0", "scripts": {"bad": 42}}, "string bodies")):
+            changed = copy.deepcopy(installed)
+            if entry is None:
+                del changed["base"]
+            else:
+                changed["base"] = entry
+            manifest_file.write_text(json.dumps(changed))
+            assert message in run("scripts", "-package", "base", "ls", ok=False).stderr
+        manifest_file.write_text(json.dumps(installed))
+    finally:
+        hidden_registry.rename(registry)
+
     shutil.copytree(registry / "base/1.0.0", registry / "base/1.1.0")
     newer = copy.deepcopy(recipes["base"])
     newer["version"] = "1.1.0"
+    newer["scripts"] = {"hello": "printf base@1.1.0"}
     (registry / "base/1.1.0/ttrek.json").write_text(json.dumps(newer))
+    assert run("run", "-package", "base", "-script", "hello").stdout.startswith("base@1.0.0")
     run("update", "-y", "-registry", relative_registry)
     lock = json.loads(lock_file.read_text())
     assert lock["packages"]["base"]["version"] == "1.1.0"
     assert lock["registry"] == relative_registry
+    assert run("run", "-package", "base", "-script", "hello").stdout == "base@1.1.0"
+    assert run("scripts", "-package", "base", "ls").stdout == "hello\n"
+    newer["scripts"] = {"hello": "printf refreshed"}
+    (registry / "base/1.1.0/ttrek.json").write_text(json.dumps(newer))
+    run("install", "-y", "-force", "base@1.1.0")
+    assert run("run", "-package", "base", "-script", "hello").stdout == "refreshed"
+    del newer["scripts"]
+    (registry / "base/1.1.0/ttrek.json").write_text(json.dumps(newer))
+    run("install", "-y", "-force", "base@1.1.0")
+    assert run("scripts", "-package", "base", "ls").stdout == ""
+    assert "no named script" in run("run", "-package", "base", "-script", "hello", ok=False).stderr
 
     # An explicit directory overrides a stale lock setting without rewriting it.
     lock["registry"] = "../missing"
@@ -147,6 +226,26 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
     failed = run("gen-script", ok=False)
     assert not failed.stdout and "No build instruction array" in failed.stderr
     manifest.write_text(original)
+    bad = json.loads(original)
+    bad["scripts"] = {"hello": 42}
+    manifest.write_text(json.dumps(bad))
+    before_manifest = manifest_file.read_bytes()
+    assert "string bodies" in run("install", "-y", "-force", "app@1.0.0", ok=False).stderr
+    assert manifest_file.read_bytes() == before_manifest
+    manifest.write_text(original)
+    run("install", "-y", "-force", "app@1.0.0")
+    run("uninstall", "-y", "app")
+    assert "app" not in json.loads(manifest_file.read_text())
+    assert "not installed" in run("run", "-package", "app", "-script", "hello", ok=False).stderr
+
+    # User mode selects its own installed package, even from a different project.
+    run("install", "-u", "-y", "-registry", str(registry), "app@1.0.0")
+    user_project = home / ".ttrek"
+    user_prefix = str(user_project / "ttrek-venv/local")
+    assert run("run", "-u", "-package", "app", "-script", "hello").stdout.splitlines() == [
+        "app@1.0.0 café", str(user_project), user_prefix, user_prefix]
+    assert "hello" in run("scripts", "-u", "-package", "app", "ls").stdout.splitlines()
+    assert "not installed" in run("scripts", "-package", "app", "ls", ok=False).stderr
     spec["dependencies"] = {"..": "1.0.0"}
     spec_file.write_text(json.dumps(spec))
     lock_file.write_text(json.dumps({"registry": relative_registry}))
