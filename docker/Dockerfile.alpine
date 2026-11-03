@@ -1,7 +1,8 @@
-FROM alpine:latest
+FROM alpine:3.23
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apk add \
+    ca-certificates \
     linux-headers \
     bsd-compat-headers \
     bash \
@@ -10,9 +11,13 @@ RUN apk add \
     g++ \
     binutils-gold \
     cmake \
+    coreutils \
     make \
     patch \
     pkgconfig \
+    python3 \
+    tar \
+    gzip \
     cvs \
     git \
     curl \
@@ -23,6 +28,8 @@ RUN apk add \
 
 COPY docs /var/ttrek/docs
 COPY src /var/ttrek/src
+COPY cmake /var/ttrek/cmake
+COPY tests /var/ttrek/tests
 COPY CMakeLists.txt /var/ttrek/CMakeLists.txt
 COPY build-ttrek.sh /var/ttrek/build-ttrek.sh
 
