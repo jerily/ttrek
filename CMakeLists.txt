@@ -211,6 +211,8 @@ if(BUILD_TESTING)
     add_test(NAME package_solver COMMAND test_solver)
 
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
+        $<TARGET_FILE:ttrek>)
     # The dependency build installs curl here. Prefer it over a host curl that
     # may be sandboxed and unable to read the tests' temporary file:// archives.
     find_program(TTREK_TEST_CURL NAMES curl HINTS "${CMAKE_INSTALL_PREFIX}/bin" REQUIRED)

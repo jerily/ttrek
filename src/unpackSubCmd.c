@@ -103,6 +103,8 @@ int ttrek_UnpackSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     Tcl_Obj *outputFileName = NULL;
 
     flags |= ARCHIVE_EXTRACT_PERM;
+    // Preserve dependency ordering between shipped generated files and inputs.
+    flags |= ARCHIVE_EXTRACT_TIME;
     flags |= ARCHIVE_EXTRACT_SECURE_NODOTDOT;
     flags |= ARCHIVE_EXTRACT_SECURE_SYMLINKS;
 
