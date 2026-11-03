@@ -211,6 +211,9 @@ if(BUILD_TESTING)
     add_test(NAME package_solver COMMAND test_solver)
 
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    # The dependency build installs curl here. Prefer it over a host curl that
+    # may be sandboxed and unable to read the tests' temporary file:// archives.
+    find_program(TTREK_TEST_CURL NAMES curl HINTS "${CMAKE_INSTALL_PREFIX}/bin" REQUIRED)
     get_target_property(TTREK_TEST_SOURCES ttrek SOURCES)
     list(REMOVE_ITEM TTREK_TEST_SOURCES src/registry.c)
     add_executable(ttrek_fixture ${TTREK_TEST_SOURCES} tests/registry_fixture.c)
@@ -221,9 +224,9 @@ if(BUILD_TESTING)
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py
-        $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND})
+        $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
-        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND})
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME sync_self_update COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/sync_self_update.py
         $<TARGET_FILE:ttrek_fixture> $<TARGET_FILE:ttrek>)
 endif()
