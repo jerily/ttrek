@@ -1,4 +1,4 @@
-"""Optional live test: run with ttrek.sh listening on localhost:8080."""
+"""Optional live test using ttrek.sh or a successfully synced default registry."""
 import json
 from pathlib import Path
 import subprocess

@@ -64,7 +64,9 @@ typedef int Tcl_Size;
 #   endif
 #endif
 
-#define TTREK_REGISTRY_BASE_URL "http://localhost:8080"
+#ifndef TTREK_REGISTRY_BASE_URL
+#define TTREK_REGISTRY_BASE_URL "https://ttrek.sh"
+#endif
 
 #define REGISTRY_URL           (TTREK_REGISTRY_BASE_URL "/registry")
 #define TELEMETRY_REGISTER_URL (TTREK_REGISTRY_BASE_URL "/telemetry/register")

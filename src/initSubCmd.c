@@ -29,6 +29,7 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
     if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) { return TCL_ERROR; }
+    if (ttrek_RegistryUseDefault(interp) != TCL_OK) { return TCL_ERROR; }
     if (!ttrek_RegistryIsLocal()) { ttrek_TelemetryLoadMachineId(interp); }
 
     Tcl_Obj *spec_file_name_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);

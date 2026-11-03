@@ -4,6 +4,7 @@
 #include "registry.h"
 
 int ttrek_RegistryGet(const char *url, Tcl_DString *result, cJSON *post_data) {
+    if (ttrek_RegistryIsLocal()) { return ttrek_RegistryGetLocal(url, result); }
     const char *filename = getenv("TTREK_TEST_REGISTRY");
     if (!filename || post_data) { return TCL_ERROR; }
     FILE *file = fopen(filename, "rb");

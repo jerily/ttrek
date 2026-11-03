@@ -138,6 +138,8 @@ add_executable(${TARGET}
         src/base64.c
         src/registry.c
         src/registryLocal.cc
+        src/syncSubCmd.cc
+        src/selfUpdateSubCmd.cc
         src/initSubCmd.c
         src/installSubCmd.c
         src/genScriptSubCmd.cc
@@ -214,6 +216,7 @@ if(BUILD_TESTING)
     add_executable(ttrek_fixture ${TTREK_TEST_SOURCES} tests/registry_fixture.c)
     # Debug diagnostics must also leave generated stdout scripts intact.
     target_compile_definitions(ttrek_fixture PRIVATE DEBUG)
+    target_compile_definitions(ttrek_fixture PRIVATE TTREK_TEST_RELEASES)
     target_include_directories(ttrek_fixture PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
@@ -221,4 +224,6 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND})
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND})
+    add_test(NAME sync_self_update COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/sync_self_update.py
+        $<TARGET_FILE:ttrek_fixture>)
 endif()
