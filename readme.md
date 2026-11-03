@@ -37,8 +37,9 @@ For joint development against a solver checkout:
 SATDEPSOLVER_SOURCE_DIR=../satdepsolver-cpp ./build-ttrek.sh
 ```
 
-Other build controls: `JOBS`, `BUILD_TYPE`, `TTREK_BUILD_DIR`, `TTREK_INSTALL_DIR`,
-`CMAKE`, `CTEST`, and `CURL`. `TTREK_SKIP_DEPS=1` skips building the seven C dependencies
+Other build controls: `JOBS` (default: 2, suitable for an 8 GB Mac), `BUILD_TYPE`,
+`TTREK_BUILD_DIR`, `TTREK_INSTALL_DIR`, `CMAKE`, `CTEST`, `CURL`, and `PYTHON`
+(the Python 3 test interpreter). `TTREK_SKIP_DEPS=1` skips building the seven C dependencies
 when a complete compatible static prefix already exists; it still builds, tests,
 and installs satdepsolver and rebuilds/tests ttrek.
 
@@ -47,7 +48,7 @@ To configure manually after installing dependencies:
 ```sh
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$PWD/local-static" \
   -DCMAKE_PREFIX_PATH="$PWD/local-static"
-cmake --build build --parallel
+cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
@@ -55,6 +56,105 @@ CMake normally uses `find_package(satdepsolver 0.6 CONFIG REQUIRED)` and
 `satdepsolver::satdepsolver`. Set `-DSATDEPSOLVER_SOURCE_DIR=/path/to/checkout`
 for an explicit `add_subdirectory` integration. No network download happens at
 CMake configure time. The build script downloads the tagged satdepsolver 0.6.0 release.
+
+### Linux release binaries
+
+From the repository root, use Docker Buildx with a builder supporting
+`linux/amd64` and `linux/arm64` (Docker Desktop includes emulation). Each build
+runs the existing solver and ttrek tests before exporting a static executable.
+Ubuntu 22.04 selects glibc; Alpine 3.23 selects musl. Build the four targets
+sequentially on an 8 GB machine:
+
+```sh
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.release \
+  --build-arg BASE_IMAGE=ubuntu:22.04 --build-arg JOBS=2 \
+  --output type=local,dest=dist/linux-amd64-glibc .
+docker buildx build --platform linux/arm64 -f docker/Dockerfile.release \
+  --build-arg BASE_IMAGE=ubuntu:22.04 --build-arg JOBS=2 \
+  --output type=local,dest=dist/linux-arm64-glibc .
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.release \
+  --build-arg BASE_IMAGE=alpine:3.23 --build-arg JOBS=2 \
+  --output type=local,dest=dist/linux-amd64-musl .
+docker buildx build --platform linux/arm64 -f docker/Dockerfile.release \
+  --build-arg BASE_IMAGE=alpine:3.23 --build-arg JOBS=2 \
+  --output type=local,dest=dist/linux-arm64-musl .
+```
+
+Each output directory contains `ttrek`. Docker's [local exporter](https://docs.docker.com/build/exporters/local-tar/)
+copies only the executable from the final stage; no container needs to be created.
+The build/install directories are isolated by image and target architecture.
+Emulated builds can be slow. These are static Linux builds, not macOS binaries;
+glibc's static resolver/dlopen limitations still apply.
+
+### macOS release binaries
+
+Install Xcode Command Line Tools (`xcode-select --install`) and Homebrew's
+`cmake`, `pkg-config`, and `python` for each architecture you build.
+[Homebrew uses separate prefixes](https://docs.brew.sh/FAQ) for ARM64
+(`/opt/homebrew`) and Intel (`/usr/local`). Install Rosetta before the Intel
+build, and install Intel Homebrew separately if needed.
+
+Run these from the repository root. Keep the entire build and its tests in the
+matching architecture shell, with CMake, CTest and Python from the same Homebrew
+prefix. Python's `platform.machine()` must match the executable under test,
+because the registry fixtures use that value. Separate build/install directories
+also keep dependency sources and CMake caches from crossing architectures.
+
+Native Apple Silicon:
+
+```sh
+arch -arm64 /bin/bash --noprofile --norc <<'SH'
+set -eu
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+brew install cmake pkg-config python
+export CC=/usr/bin/clang CXX=/usr/bin/clang++
+export CMAKE=/opt/homebrew/bin/cmake CTEST=/opt/homebrew/bin/ctest
+export PYTHON=/opt/homebrew/bin/python3
+"$PYTHON" -c 'import platform; assert platform.machine() == "arm64"'
+JOBS=2 TTREK_MAKE_THREADS=2 \
+  TTREK_BUILD_DIR="$PWD/build/macos-arm64" \
+  TTREK_INSTALL_DIR="$PWD/local-static/macos-arm64" ./build-ttrek.sh
+mkdir -p dist/macos-arm64
+cp build/macos-arm64/ttrek dist/macos-arm64/ttrek
+file dist/macos-arm64/ttrek
+SH
+```
+
+Intel macOS through Rosetta on Apple Silicon:
+
+```sh
+arch -x86_64 /bin/bash --noprofile --norc <<'SH'
+set -eu
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+brew install cmake pkg-config python
+export CC=/usr/bin/clang CXX=/usr/bin/clang++
+export CMAKE=/usr/local/bin/cmake CTEST=/usr/local/bin/ctest
+export PYTHON=/usr/local/bin/python3
+"$PYTHON" -c 'import platform; assert platform.machine() == "x86_64"'
+JOBS=2 TTREK_MAKE_THREADS=2 \
+  TTREK_BUILD_DIR="$PWD/build/macos-x86_64" \
+  TTREK_INSTALL_DIR="$PWD/local-static/macos-x86_64" ./build-ttrek.sh
+mkdir -p dist/macos-x86_64
+cp build/macos-x86_64/ttrek dist/macos-x86_64/ttrek
+file dist/macos-x86_64/ttrek
+SH
+```
+
+After both builds and their tests pass, optionally combine them into universal2:
+
+```sh
+mkdir -p dist/macos-universal2
+lipo -create dist/macos-arm64/ttrek dist/macos-x86_64/ttrek \
+  -output dist/macos-universal2/ttrek
+lipo -verify_arch arm64 x86_64 dist/macos-universal2/ttrek
+arch -arm64 dist/macos-universal2/ttrek help
+arch -x86_64 dist/macos-universal2/ttrek help
+```
+
+macOS uses static third-party dependencies and dynamic system frameworks.
+Use the same SDK and, if setting `MACOSX_DEPLOYMENT_TARGET`, the same supported
+minimum macOS version for both builds. Packaging with `lipo` does not replace
+testing each architecture on the macOS versions you intend to support.
 
 ## Run and preview
 

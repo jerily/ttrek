@@ -7,7 +7,8 @@ INSTALL_DIR=${TTREK_INSTALL_DIR:-"$SCRIPT_DIR/local-static"}
 CMAKE=${CMAKE:-cmake}
 CTEST=${CTEST:-ctest}
 CURL=${CURL:-curl}
-JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
+PYTHON=${PYTHON:-python3}
+JOBS=${JOBS:-2}
 BUILD_TYPE=${BUILD_TYPE:-Release}
 
 # Keep dependencies pinned. No Rust toolchain is needed by satdepsolver.
@@ -122,6 +123,7 @@ SOLVER_BUILD_DIR="$BUILD_DIR/dependencies/satdepsolver-$SOLVER_SOURCE_KEY"
 "$CMAKE" -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DBUILD_TESTING=ON -DSATDEPSOLVER_SOURCE_DIR= \
+    -DPython3_EXECUTABLE="$(command -v "$PYTHON")" \
     -Dsatdepsolver_DIR="$INSTALL_DIR/lib/cmake/satdepsolver"
 "$CMAKE" --build "$BUILD_DIR" --parallel "$JOBS"
 "$CTEST" --test-dir "$BUILD_DIR" --output-on-failure
