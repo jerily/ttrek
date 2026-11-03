@@ -1,0 +1,15 @@
+Usage: ttrek self-update [-check|-version]
+
+Fetch the latest binary for this executable's platform from https://ttrek.sh.
+ENV=LOCAL uses http://localhost:8080 for the local release metadata endpoint.
+Verify its SHA-256 and reported version, then atomically replace the running
+executable. Symlinks retain their target. The installation directory must be
+writable; no privilege escalation is attempted. update still updates packages.
+
+-check checks for a newer version without installing it.
+-version prints the current executable's version without network access.
+
+Successful interactive commands check for new versions at most daily, with a
+one-second timeout. Errors are ignored and notices go to stderr. Set
+TTREK_NO_UPDATE_CHECK=1 to disable automatic checks. Explicit self-update
+reports download failures and preserves the existing executable.

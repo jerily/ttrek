@@ -1,0 +1,11 @@
+Usage: ttrek sync [DIRECTORY]
+
+Clone https://github.com/jerily/ttrek-registry.git into ~/.local/ttrek-registry
+by default, or into DIRECTORY (use . for the current directory). Requires git.
+An existing clean main checkout is updated with git pull --ff-only; other
+repositories, local changes and divergent history are preserved and rejected.
+
+Registry commands prefer an explicit -registry option, then a saved project
+registry, then a successfully synced ~/.local/ttrek-registry, then https://ttrek.sh. A local registry
+that has not been synced for 24 hours prints a reminder to run ttrek sync.
+Packages absent from a selected local registry do not fall back to the website.

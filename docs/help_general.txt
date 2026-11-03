@@ -5,6 +5,8 @@ It replaces the registry API for this invocation. Source downloads still use
 the URLs in each recipe. It also works after init, install, update, pretend or gen-script.
 init saves the directory in ttrek-lock.json; other commands use it for that invocation.
 An explicit option overrides the saved registry. Relative saved paths use the project directory.
+Otherwise ~/.local/ttrek-registry is used after a successful ttrek sync, before
+the ttrek.sh website. Normal commands never create or clone this directory.
 
 Available commands:
     init
@@ -12,6 +14,8 @@ Available commands:
     pretend
     gen-script
     update
+    sync
+    self-update
     uninstall
     ls
     run

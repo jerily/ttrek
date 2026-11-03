@@ -28,6 +28,8 @@ static const char *subcommands[] = {
         "scripts",
         "pretend",
         "gen-script",
+        "sync",
+        "self-update",
         NULL
 };
 
@@ -45,6 +47,8 @@ enum subcommand {
     SUBCMD_SCRIPTS,
     SUBCMD_PRETEND,
     SUBCMD_GEN_SCRIPT,
+    SUBCMD_SYNC,
+    SUBCMD_SELF_UPDATE,
 };
 
 int main(int argc, char *argv[]) {
@@ -106,11 +110,25 @@ int main(int argc, char *argv[]) {
 
     // Init/install/update load telemetry after selecting their registry.
     if (!ttrek_RegistryIsLocal() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
-        sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE) {
+        sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
+        sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
     switch ((enum subcommand) sub_cmd_index) {
+        case SUBCMD_SYNC:
+            if (ttrek_SyncSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_SELF_UPDATE:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
+            if (ttrek_SelfUpdateSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
         case SUBCMD_INIT:
             if (ttrek_InitSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
                 fprintf(stderr, "error: init subcommand failed: %s\n", Tcl_GetStringResult(interp));
@@ -195,6 +213,11 @@ int main(int argc, char *argv[]) {
             break;
     }
 
+    if (exitcode == 0 && (sub_cmd_index == SUBCMD_INIT || sub_cmd_index == SUBCMD_INSTALL ||
+        sub_cmd_index == SUBCMD_UPDATE || sub_cmd_index == SUBCMD_UNINSTALL ||
+        sub_cmd_index == SUBCMD_LIST || sub_cmd_index == SUBCMD_RUN || sub_cmd_index == SUBCMD_SYNC)) {
+        ttrek_CheckForUpdate();
+    }
     goto done;
 
 usage:

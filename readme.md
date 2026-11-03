@@ -158,7 +158,10 @@ testing each architecture on the macOS versions you intend to support.
 
 ## Run and preview
 
-Run [ttrek.sh](https://github.com/jerily/ttrek.sh) at `http://localhost:8080`.
+Registry requests default to `https://ttrek.sh` when no local registry is selected.
+With `ENV=LOCAL`, registry, telemetry, fallback-download and release metadata
+requests use `http://localhost:8080` for the local ttrek.sh server. Production
+release downloads require HTTPS; LOCAL mode permits loopback HTTP for metadata.
 Create a project directory and run:
 
 ```sh
@@ -211,6 +214,58 @@ registry or telemetry requests; source downloads still follow recipe URLs.
 An explicit option overrides it without changing the saved value. Relative saved
 paths resolve from the project directory.
 
+### Sync the local registry
+
+```sh
+ttrek sync                         # ~/.local/ttrek-registry
+ttrek sync ./registry              # explicit destination
+ttrek sync .                       # current directory must be empty or the registry checkout
+```
+
+`sync` requires Git and clones `https://github.com/jerily/ttrek-registry.git`.
+Later runs fast-forward a clean `main` checkout of that repository. Local edits,
+another repository, another branch, and divergent history are rejected without
+overwriting the checkout. Network errors from an explicit sync are reported.
+
+Registry commands select the explicit `-registry` option first, then the saved
+project registry, then `~/.local/ttrek-registry` after a successful `ttrek sync`,
+then the website. Normal commands never create or clone the default directory;
+an absent or unmarked directory leaves website access enabled. An explicitly
+selected local registry remains authoritative: missing packages do not fall back
+to the website.
+Automatic default selection is not saved in project lockfiles, so projects stay
+portable and fall back to the website if that checkout is later removed.
+
+Sync records `.git/ttrek-last-sync`. After 24 hours, commands using the default
+checkout print a refresh reminder to stderr with `ttrek sync`. This reports the
+age of the last successful sync, without requiring a network check or claiming
+to know GitHub's current commit. Stale data remains usable offline. `gen-script`
+continues to emit only the script on stdout.
+
+### Update the ttrek executable
+
+```sh
+ttrek self-update -version         # current version; no network access
+ttrek self-update -check           # check without installing
+ttrek self-update                  # download, verify and replace this executable
+```
+
+`update` continues to update project packages. `self-update` reads
+`https://ttrek.sh/releases/latest/<target>`, selects the running executable's
+architecture and libc, and uses the signed download URL from the metadata.
+It verifies SHA-256 and the downloaded program's reported version before an
+atomic replacement in the installation directory. Errors leave the existing
+binary intact, and temporary files are removed. Symlinks remain intact; their
+resolved target is replaced. The directory must be writable, and no sudo is run.
+macOS universal2 installations update to the currently executing architecture.
+
+Successful interactive `init`, `install`, `update`, `uninstall`, `ls`, `run`, and
+`sync` commands also check at most once per day, with a one-second request
+timeout. Connection and metadata failures are ignored; notices go to stderr.
+Noninteractive commands, `pretend`, and `gen-script` do not check. Set
+`TTREK_NO_UPDATE_CHECK=1` to disable automatic checks. Check timestamps live under
+`~/.local/state/ttrek/`; this does not create the local registry directory.
+
 ## Solver integration
 
 `PackageDatabase.h` implements `DependencyProvider<Range<Pack>>` and owns
@@ -239,7 +294,7 @@ behavior sanitizers.
 `gen_script` exercises the CLI with a fixture registry, builds shared and static
 libraries, and checks patches, dependency order, shell isolation and generation errors.
 
-With the local registry running, the optional read-only smoke test verifies
+With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,
 and that preview leaves the project untouched:
 
@@ -255,6 +310,10 @@ Registry metadata and package build instructions are external inputs. Installati
 runs scripts from the configured registry with the invoking user's privileges.
 
 ### Protections
+
+Self-update accepts HTTPS metadata and downloads, verifies the published checksum
+and version, and replaces the executable only after validation. Registry sync
+uses Git's fast-forward checks and rejects dirty or unrelated checkouts.
 
 Resolution validates registry JSON, owns metadata strings, and handles HTTP errors.
 C++ resolution exceptions are converted to Tcl errors. Preview skips installation

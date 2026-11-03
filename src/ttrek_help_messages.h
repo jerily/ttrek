@@ -37,6 +37,12 @@ static const struct {
     {"ls",
 #include "help_ls.txt.h"
     },
+    {"sync",
+#include "help_sync.txt.h"
+    },
+    {"self-update",
+#include "help_self-update.txt.h"
+    },
     {NULL, NULL}
 };
 
