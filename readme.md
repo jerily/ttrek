@@ -293,6 +293,10 @@ behavior sanitizers.
 
 `gen_script` exercises the CLI with a fixture registry, builds shared and static
 libraries, and checks patches, dependency order, shell isolation and generation errors.
+`local_registry` checks directory registries, saved settings, installs and updates.
+Both tests use temporary home directories and local source archives. CMake prefers
+the dependency prefix's `bin/curl` for these tests; set `-DTTREK_TEST_CURL=/path/to/curl`
+to select another executable. Build failures include their logs in CTest output.
 
 With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,

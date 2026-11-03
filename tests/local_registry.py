@@ -12,15 +12,25 @@ import tempfile
 
 BINARY = Path(sys.argv[1]).resolve()
 CMAKE = Path(sys.argv[2]).resolve()
+CURL = Path(sys.argv[3]).absolute()
 
 with tempfile.TemporaryDirectory(prefix="ttrek local registry ") as temporary:
     root = Path(temporary)
+    home = root / "home"
+    home.mkdir()
+    tools = root / "bin"
+    tools.mkdir()
+    (tools / "cmake").symlink_to(CMAKE)
+    (tools / "curl").symlink_to(CURL)
     registry = root / "registry's files"
     registry.mkdir()
     project = root / "project"
     project.mkdir()
     relative_registry = "../registry's files"
-    env = dict(os.environ, PATH=str(CMAKE.parent) + os.pathsep + os.environ["PATH"],
+    # Isolate user registry/curl settings and include build logs on failure.
+    env = dict(os.environ, HOME=str(home), CURL_HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
+               PATH=str(tools) + os.pathsep + os.environ["PATH"],
+               TTREK_NO_UPDATE_CHECK="1", TTREK_FAIL_VERBOSE="1",
                http_proxy="http://127.0.0.1:9", https_proxy="http://127.0.0.1:9",
                ALL_PROXY="http://127.0.0.1:9", NO_PROXY="", no_proxy="", TTREK_MAKE_THREADS="2")
 

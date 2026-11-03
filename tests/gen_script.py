@@ -12,6 +12,7 @@ import tempfile
 
 BINARY = Path(sys.argv[1]).resolve()
 CMAKE = Path(sys.argv[2]).resolve()
+CURL = Path(sys.argv[3]).absolute()
 
 
 def run(args, **kwargs):
@@ -20,11 +21,21 @@ def run(args, **kwargs):
 
 with tempfile.TemporaryDirectory(prefix="ttrek gen-script ' ") as temporary:
     root = Path(temporary)
+    home = root / "home"
+    home.mkdir()
+    tools = root / "bin"
+    tools.mkdir()
+    (tools / "cmake").symlink_to(CMAKE)
+    (tools / "curl").symlink_to(CURL)
     project = root / "project"
     project.mkdir()
     registry_file = root / "registry.json"
-    env = dict(os.environ, TTREK_TEST_REGISTRY=str(registry_file),
-               PATH=str(CMAKE.parent) + os.pathsep + os.environ["PATH"])
+    # Keep host registry/curl settings out of the fixture, and retain logs in
+    # captured output before TemporaryDirectory removes the failed build.
+    env = dict(os.environ, HOME=str(home), CURL_HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
+               TTREK_TEST_REGISTRY=str(registry_file), TTREK_NO_UPDATE_CHECK="1",
+               TTREK_FAIL_VERBOSE="1", TTREK_MAKE_THREADS="2",
+               PATH=str(tools) + os.pathsep + os.environ["PATH"])
     spec = {"name": "demo", "version": "1.0.0", "dependencies": {"app": "1.0.0"},
             "scripts": {"preInstall": "printf pre > pre-hook", "postInstall": "printf post > post-hook"}}
     spec_file = project / "ttrek.json"
