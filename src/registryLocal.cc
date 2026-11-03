@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 fs::path registry_directory;
 std::string registry_argument;
+bool registry_is_default = false;
 
 void require(bool condition, const std::string &message) {
     if (!condition) { throw std::runtime_error(message); }
@@ -121,6 +122,7 @@ extern "C" int ttrek_RegistrySetDirectory(Tcl_Interp *interp, const char *direct
     require(fs::is_directory(path), "Registry is not a directory: " + path.string());
     registry_directory = std::move(path);
     registry_argument = directory;
+    registry_is_default = false;
     const char *default_directory = ttrek_RegistryDefaultDirectory();
     std::error_code error;
     if (default_directory && fs::equivalent(registry_directory, default_directory, error)) {
@@ -143,7 +145,8 @@ extern "C" int ttrek_RegistryIsLocal(void) {
 }
 
 extern "C" const char *ttrek_RegistryGetDirectory(void) {
-    return registry_directory.empty() ? nullptr : registry_argument.c_str();
+    // Only explicit choices belong in project lockfiles; the default is machine-local.
+    return registry_directory.empty() || registry_is_default ? nullptr : registry_argument.c_str();
 }
 
 extern "C" const char *ttrek_RegistryDefaultDirectory(void) {
@@ -160,7 +163,9 @@ extern "C" int ttrek_RegistryUseDefault(Tcl_Interp *interp) try {
     const auto stamp = fs::path(directory) / ".git/ttrek-last-sync";
     std::error_code error;
     if (!fs::is_regular_file(stamp, error)) { return TCL_OK; }
-    return ttrek_RegistrySetDirectory(interp, directory);
+    int status = ttrek_RegistrySetDirectory(interp, directory);
+    if (status == TCL_OK) { registry_is_default = true; }
+    return status;
 } catch (const std::exception &error) {
     Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
     return TCL_ERROR;

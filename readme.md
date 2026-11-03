@@ -59,6 +59,9 @@ CMake configure time. The build script downloads the tagged satdepsolver 0.6.0 r
 ## Run and preview
 
 Registry requests default to `https://ttrek.sh` when no local registry is selected.
+With `ENV=LOCAL`, registry, telemetry, fallback-download and release metadata
+requests use `http://localhost:8080` for the local ttrek.sh server. Production
+release downloads require HTTPS; LOCAL mode permits loopback HTTP for metadata.
 Create a project directory and run:
 
 ```sh
@@ -130,6 +133,8 @@ then the website. Normal commands never create or clone the default directory;
 an absent or unmarked directory leaves website access enabled. An explicitly
 selected local registry remains authoritative: missing packages do not fall back
 to the website.
+Automatic default selection is not saved in project lockfiles, so projects stay
+portable and fall back to the website if that checkout is later removed.
 
 Sync records `.git/ttrek-last-sync`. After 24 hours, commands using the default
 checkout print a refresh reminder to stderr with `ttrek sync`. This reports the

@@ -13,6 +13,8 @@ extern "C" {
 
 #include <tcl.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "cjson/cJSON.h"
 
 #ifndef TCL_SIZE_MAX
@@ -68,10 +70,14 @@ typedef int Tcl_Size;
 #define TTREK_REGISTRY_BASE_URL "https://ttrek.sh"
 #endif
 
-#define REGISTRY_URL           (TTREK_REGISTRY_BASE_URL "/registry")
-#define TELEMETRY_REGISTER_URL (TTREK_REGISTRY_BASE_URL "/telemetry/register")
-#define TELEMETRY_COLLECT_URL  (TTREK_REGISTRY_BASE_URL "/telemetry/collect")
-#define DOWNLOAD_URL           (TTREK_REGISTRY_BASE_URL "/download")
+static inline int ttrek_IsLocalEnvironment(void) {
+    const char *environment = getenv("ENV");
+    return environment != NULL && strcmp(environment, "LOCAL") == 0;
+}
+#define REGISTRY_URL           (ttrek_IsLocalEnvironment() ? "http://localhost:8080/registry" : TTREK_REGISTRY_BASE_URL "/registry")
+#define TELEMETRY_REGISTER_URL (ttrek_IsLocalEnvironment() ? "http://localhost:8080/telemetry/register" : TTREK_REGISTRY_BASE_URL "/telemetry/register")
+#define TELEMETRY_COLLECT_URL  (ttrek_IsLocalEnvironment() ? "http://localhost:8080/telemetry/collect" : TTREK_REGISTRY_BASE_URL "/telemetry/collect")
+#define DOWNLOAD_URL           (ttrek_IsLocalEnvironment() ? "http://localhost:8080/download" : TTREK_REGISTRY_BASE_URL "/download")
 #define SPEC_JSON_FILE     "ttrek.json"
 #define LOCK_JSON_FILE     "ttrek-lock.json"
 #define MANIFEST_JSON_FILE "ttrek-manifest.json"

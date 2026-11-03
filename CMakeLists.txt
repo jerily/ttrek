@@ -225,5 +225,5 @@ if(BUILD_TESTING)
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND})
     add_test(NAME sync_self_update COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/sync_self_update.py
-        $<TARGET_FILE:ttrek_fixture>)
+        $<TARGET_FILE:ttrek_fixture> $<TARGET_FILE:ttrek>)
 endif()

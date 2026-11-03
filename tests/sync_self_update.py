@@ -12,8 +12,10 @@ import sys
 import tempfile
 import threading
 import time
+from urllib.parse import urlsplit
 
 BINARY = Path(sys.argv[1]).resolve()
+PRODUCTION = Path(sys.argv[2]).resolve()
 
 with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     root = Path(temporary)
@@ -54,6 +56,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     run("sync")
     assert (checkout / "test-package/1.0.0/ttrek.json").exists()
     assert (checkout / ".git/ttrek-last-sync").exists()
+    initialized = root / "initialized"
+    initialized.mkdir()
+    run("init", "-y", cwd=initialized)
+    assert "registry" not in json.loads((initialized / "ttrek-lock.json").read_text())
     # Auto-selection uses the real local-registry reader, with the fixture API empty.
     stamp = checkout / ".git/ttrek-last-sync"
     stamp.unlink()
@@ -133,9 +139,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
 
         def do_GET(self):
             requests.append(self.path)
-            if self.path == f"/releases/latest/{target}":
+            path = urlsplit(self.path).path
+            if path == f"/releases/latest/{target}":
                 body = json.dumps(metadata).encode()
-            elif self.path == "/binary":
+            elif path == "/binary":
                 body = payload
             else:
                 self.send_error(404)
@@ -152,6 +159,18 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             address = f"http://127.0.0.1:{server.server_port}"
             env["TTREK_TEST_RELEASE_ROOT"] = address
             metadata["url"] = address + "/binary"
+            # Use a local HTTP proxy to verify the production LOCAL endpoint without
+            # binding port 8080 or contacting an existing development server.
+            local_env = dict(env, ENV="LOCAL", http_proxy=address, NO_PROXY="", no_proxy="", ALL_PROXY="")
+            local_env.pop("TTREK_TEST_RELEASE_ROOT")
+            assert "2.0.0 is available" in run("self-update", "-check", binary=PRODUCTION, process_env=local_env).stdout
+            assert requests[-1] == f"http://localhost:8080/releases/latest/{target}"
+            stamp = checkout / ".git/ttrek-last-sync"
+            stamp_content = stamp.read_bytes()
+            stamp.unlink()
+            run("pretend", binary=PRODUCTION, process_env=local_env, ok=False)
+            assert requests[-1].startswith("http://localhost:8080/registry/")
+            stamp.write_bytes(stamp_content)
             assert run("self-update", "-version").stdout.strip() == "1.0.0"
             assert "2.0.0 is available" in run("self-update", "-check").stdout
             assert "/binary" not in requests

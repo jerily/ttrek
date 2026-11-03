@@ -44,19 +44,24 @@ std::string release_root() {
     const char *root = std::getenv("TTREK_TEST_RELEASE_ROOT");
     if (root) { return root; }
 #endif
-    return "https://ttrek.sh";
+    return ttrek_IsLocalEnvironment() ? "http://localhost:8080" : "https://ttrek.sh";
 }
 
 std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> request(const std::string &url, long timeout_ms) {
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) { throw std::runtime_error("Cannot initialize download"); }
     const char *protocols = "https";
+    if (ttrek_IsLocalEnvironment() && url.rfind("http://localhost:8080/", 0) == 0) {
+        protocols = "http,https";
+    }
+    const char *redirect_protocols = "https";
 #ifdef TTREK_TEST_RELEASES
     protocols = "http,https";
+    redirect_protocols = "http,https";
 #endif
     curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, protocols);
-    curl_easy_setopt(curl.get(), CURLOPT_REDIR_PROTOCOLS_STR, protocols);
+    curl_easy_setopt(curl.get(), CURLOPT_REDIR_PROTOCOLS_STR, redirect_protocols);
     curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl.get(), CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 1L);

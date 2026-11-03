@@ -1,6 +1,7 @@
 Usage: ttrek self-update [-check|-version]
 
 Fetch the latest binary for this executable's platform from https://ttrek.sh.
+ENV=LOCAL uses http://localhost:8080 for the local release metadata endpoint.
 Verify its SHA-256 and reported version, then atomically replace the running
 executable. Symlinks retain their target. The installation directory must be
 writable; no privilege escalation is attempted. update still updates packages.
