@@ -2,6 +2,12 @@
 
 The package manager for Tcl. This project is under active development.
 
+## OpenACS
+
+`ttrek` can now install OpenACS and all its dependencies, then initialize and
+start a local OpenACS instance. See the [OpenACS quickstart](docs/openacs/readme.md)
+for commands and screenshots.
+
 ## Rules and principles
 
 - `ttrek` owns registry access, semantic version policy, USE flags, lockfiles, build scripts, and installation ordering.
