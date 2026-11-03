@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek gen-script ' ") as temporary:
         assert run([shell, "-n", script]).returncode == 0
         executed = run([shell, script], cwd=root, env=env)
         assert executed.returncode == 0, (executed.stdout, executed.stderr)
-        suffix = ".a" if static else ".so"
+        suffix = ".a" if static else (".dylib" if platform.system() == "Darwin" else ".so")
         assert (output / "build/install/lib" / ("libapp" + suffix)).exists()
         assert "return 42" in (output / "build/install/include/base.h").read_text()
         assert (output / "pre-hook").read_text() == "pre"

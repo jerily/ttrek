@@ -13,10 +13,13 @@
 #if defined(__linux__)
 // For clock_gettime()
 #include <time.h>
-// For gnu_get_libc_version()
-#include <gnu/libc-version.h>
 // For uname()
 #include <sys/utsname.h>
+#endif
+
+#if defined(__GLIBC__)
+// For gnu_get_libc_version()
+#include <gnu/libc-version.h>
 #endif
 
 static Tcl_Obj *machineIdObj = NULL;
@@ -388,7 +391,7 @@ static cJSON *ttrek_TelemetryCollectEnvironmentInfo() {
         ttrek_TelemetryGetCompilerVersion(collect_info_interp,
         (env_var == NULL ? "g++" : env_var)));
 
-#if defined(__linux__)
+#if defined(__GLIBC__)
     cJSON_AddItemToObject(versions, "glibc",
         cJSON_CreateString(gnu_get_libc_version()));
 #endif
