@@ -78,7 +78,11 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
             "preInstall": 'touch "$PROJECT_HOME/unexpected-package-hook"',
             "fail": "exit 7\n",
         }
-        (directory / "ttrek.json").write_text(json.dumps(recipes[name]))
+        spec_recipe = copy.deepcopy(recipes[name])
+        if name == "base":
+            (directory / "hello.sh").write_text(spec_recipe["scripts"]["hello"])
+            spec_recipe["scripts"]["hello"] = {"file": "hello.sh"}
+        (directory / "ttrek.json").write_text(json.dumps(spec_recipe))
 
     # Bad options fail before init creates anything; both placements are accepted.
     run("init", "-y", "-registry", str(root / "missing"), ok=False)
@@ -232,6 +236,21 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     before_manifest = manifest_file.read_bytes()
     assert "string bodies" in run("install", "-y", "-force", "app@1.0.0", ok=False).stderr
     assert manifest_file.read_bytes() == before_manifest
+    # File references must stay inside the recipe directory and fail before execution.
+    script_dir = manifest.parent
+    (root / "outside.sh").write_text("echo outside\n")
+    (script_dir / "linked.sh").symlink_to(root / "outside.sh")
+    (script_dir / "nul.sh").write_bytes(b"echo before\x00echo after\n")
+    (script_dir / "folder.sh").mkdir()
+    for reference in ({"file": "missing.sh"}, {"file": "../outside.sh"},
+                      {"file": str(root / "outside.sh")}, {"file": "linked.sh"},
+                      {"file": "folder.sh"}, {"file": "nul.sh"},
+                      {"file": 42}, {"file": "hello.sh", "extra": True}, {}):
+        bad["scripts"] = {"hello": reference}
+        manifest.write_text(json.dumps(bad))
+        failed = run("gen-script", ok=False)
+        assert not failed.stdout, (reference, failed.stdout)
+        assert manifest_file.read_bytes() == before_manifest
     manifest.write_text(original)
     run("install", "-y", "-force", "app@1.0.0")
     run("uninstall", "-y", "app")

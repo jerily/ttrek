@@ -220,7 +220,12 @@ Resolution conflicts and malformed/failed metadata requests return a nonzero exi
 
 ### Run installed package scripts
 
-Recipes can define a `scripts` object mapping names to shell script strings.
+Recipes can define a `scripts` object mapping names to shell script strings or
+file references, for example `"scripts": {"demo": {"file": "demo.sh"}}`.
+Referenced UTF-8 files must be regular files directly in the version's recipe
+directory; paths and symbolic links are rejected. Local and hosted registries
+resolve references to script bodies before installation, so installed scripts
+remain available offline. Keep example scripts in files beside `ttrek.json`.
 Installation saves the exact version and scripts in
 `ttrek-venv/ttrek-manifest.json`, alongside the package's installed file list:
 
