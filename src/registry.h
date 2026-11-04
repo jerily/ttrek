@@ -21,6 +21,7 @@ int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, const cJSON
 const char *ttrek_RegistryDefaultDirectory(void);
 int ttrek_RegistryUseDefault(Tcl_Interp *interp);
 int ttrek_RegistryGetLocal(const char *url, Tcl_DString *result);
+int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, Tcl_Obj *matches);
 
 #ifdef __cplusplus
 }

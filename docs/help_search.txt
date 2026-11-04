@@ -1,0 +1,14 @@
+Usage: ttrek search [-registry DIRECTORY] NAME
+
+Print recipe names within Levenshtein edit distance 2 (insert, delete or
+substitute). Exact matches come first, then distance and ASCII name order.
+Names are case-sensitive; punctuation is preserved. No matches prints nothing
+and succeeds. NAME must contain 1-255 ASCII letters, digits, '.', '_', '+' or '-'.
+
+Search uses an explicit registry, the nearest project's saved registry, or an
+existing ~/.local/ttrek-registry, in that order. It works outside a project.
+Only directories containing version/ttrek.json are indexed, once per name.
+The trie is built only for this command. Search never clones, downloads,
+creates project state, sends telemetry or checks for updates.
+
+If no local registry exists, run 'ttrek sync' or pass -registry DIRECTORY.

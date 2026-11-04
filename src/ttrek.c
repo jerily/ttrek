@@ -30,6 +30,7 @@ static const char *subcommands[] = {
         "gen-script",
         "sync",
         "self-update",
+        "search",
         NULL
 };
 
@@ -49,6 +50,7 @@ enum subcommand {
     SUBCMD_GEN_SCRIPT,
     SUBCMD_SYNC,
     SUBCMD_SELF_UPDATE,
+    SUBCMD_SEARCH,
 };
 
 int main(int argc, char *argv[]) {
@@ -111,11 +113,17 @@ int main(int argc, char *argv[]) {
     // Init/install/update load telemetry after selecting their registry.
     if (!ttrek_RegistryIsLocal() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
         sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
-        sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE) {
+        sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
     switch ((enum subcommand) sub_cmd_index) {
+        case SUBCMD_SEARCH:
+            if (ttrek_SearchSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
         case SUBCMD_SYNC:
             if (ttrek_SyncSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
                 fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));

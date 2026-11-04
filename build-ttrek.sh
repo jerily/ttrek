@@ -20,6 +20,7 @@ TCL_VERSION=9.1.0
 LIBGIT2_VERSION=1.9.7
 LIBARCHIVE_VERSION=3.8.11
 SATDEPSOLVER_VERSION=0.6.0
+TTRIE_VERSION=0.1.1
 
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
@@ -118,6 +119,20 @@ SOLVER_BUILD_DIR="$BUILD_DIR/dependencies/satdepsolver-$SOLVER_SOURCE_KEY"
 "$CMAKE" --build "$SOLVER_BUILD_DIR" --parallel "$JOBS"
 "$CTEST" --test-dir "$SOLVER_BUILD_DIR" --output-on-failure
 "$CMAKE" --install "$SOLVER_BUILD_DIR"
+
+if [[ -z ${TTRIE_SOURCE_DIR:-} ]]; then
+    fetch_source "ttrie-$TTRIE_VERSION" "https://github.com/jerily/ttrie/releases/download/v$TTRIE_VERSION/ttrie-$TTRIE_VERSION.tar.gz"
+    TTRIE_SOURCE_DIR="$SOURCE_DIR/ttrie-$TTRIE_VERSION"
+fi
+TTRIE_SOURCE_DIR=$(cd "$TTRIE_SOURCE_DIR" && pwd)
+TRIE_SOURCE_KEY=$(printf '%s' "$TTRIE_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
+TRIE_BUILD_DIR="$BUILD_DIR/dependencies/ttrie-$TRIE_SOURCE_KEY"
+"$CMAKE" -S "$TTRIE_SOURCE_DIR" -B "$TRIE_BUILD_DIR" \
+    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIE_BUILD_TCL=OFF -DBUILD_TESTING=ON
+"$CMAKE" --build "$TRIE_BUILD_DIR" --parallel "$JOBS"
+"$CTEST" --test-dir "$TRIE_BUILD_DIR" --output-on-failure
+"$CMAKE" --install "$TRIE_BUILD_DIR"
 
 # Clear old dependency paths (including Tcl 8.6 and lib64 OpenSSL) on reruns.
 "$CMAKE" -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,7 @@
 #include <vector>
 #include "registry.h"
 #include "base64.h"
+#include <ttrie.h>
 
 namespace {
 namespace fs = std::filesystem;
@@ -54,6 +56,40 @@ std::vector<fs::path> entries(const fs::path &directory) {
     }
     std::sort(paths.begin(), paths.end());
     return paths;
+}
+
+int select_search_registry(Tcl_Interp *interp) {
+    if (ttrek_RegistryIsLocal()) { return TCL_OK; }
+    // Search works outside projects and never creates project state or directories.
+    auto project = fs::current_path();
+    while (true) {
+        if (fs::is_regular_file(project / SPEC_JSON_FILE)) {
+            auto lock_path = project / LOCK_JSON_FILE;
+            if (fs::exists(lock_path)) {
+                auto data = read_file(lock_path);
+                Json lock(cJSON_ParseWithLengthOpts(data.c_str(), data.size() + 1, nullptr, 1), cJSON_Delete);
+                require(cJSON_IsObject(lock.get()), "Invalid JSON object in " + lock_path.string());
+                auto *registry = cJSON_GetObjectItemCaseSensitive(lock.get(), "registry");
+                if (registry) {
+                    require(cJSON_IsString(registry) && registry->valuestring[0],
+                            "Lock file registry must be a nonempty directory string");
+                    return ttrek_RegistrySetDirectory(interp, (project / registry->valuestring).c_str());
+                }
+            }
+            break;
+        }
+        if (project == project.root_path()) { break; }
+        project = project.parent_path();
+    }
+    const char *directory = ttrek_RegistryDefaultDirectory();
+    require(directory && fs::is_directory(directory),
+            "No local registry; run 'ttrek sync' or use 'ttrek search -registry DIRECTORY NAME'");
+    return ttrek_RegistrySetDirectory(interp, directory);
+}
+
+int append_search_match(const char *key, int distance, void *context) {
+    (void)distance;
+    return Tcl_ListObjAppendElement(nullptr, static_cast<Tcl_Obj *>(context), Tcl_NewStringObj(key, -1));
 }
 
 Json versions(const std::string &package) {
@@ -144,6 +180,30 @@ extern "C" int ttrek_RegistrySetDirectory(Tcl_Interp *interp, const char *direct
 
 extern "C" int ttrek_RegistryIsLocal(void) {
     return !registry_directory.empty();
+}
+
+extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, Tcl_Obj *matches) try {
+    require(valid_component(query) && std::strlen(query) <= TTRIE_MAX_LENGTH,
+            "Search name must contain 1 to 255 ASCII letters, digits, '.', '_', '+' or '-'");
+    if (select_search_registry(interp) != TCL_OK) { return TCL_ERROR; }
+    std::unique_ptr<ttrie, decltype(&ttrie_destroy)> trie(ttrie_create(), ttrie_destroy);
+    require(trie != nullptr, "Cannot allocate recipe search trie");
+    for (const auto &path : entries(registry_directory)) {
+        auto name = path.filename().string();
+        if (!fs::is_directory(path) || !valid_component(name)) { continue; }
+        for (const auto &version : entries(path)) {
+            if (fs::is_directory(version) && valid_component(version.filename().string()) &&
+                fs::is_regular_file(version / SPEC_JSON_FILE)) {
+                require(ttrie_insert(trie.get(), name.c_str()) == 0, "Cannot index recipe: " + name);
+                break;
+            }
+        }
+    }
+    require(ttrie_search(trie.get(), query, 2, append_search_match, matches) == 0, "Recipe search failed");
+    return TCL_OK;
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    return TCL_ERROR;
 }
 
 extern "C" const char *ttrek_RegistryGetDirectory(void) {

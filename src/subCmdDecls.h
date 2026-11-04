@@ -20,6 +20,7 @@ SubCmdProc(ttrek_GenScriptSubCmd);
 SubCmdProc(ttrek_RunSubCmd);
 SubCmdProc(ttrek_UpdateSubCmd);
 SubCmdProc(ttrek_ListSubCmd);
+SubCmdProc(ttrek_SearchSubCmd);
 SubCmdProc(ttrek_UninstallSubCmd);
 SubCmdProc(ttrek_DownloadSubCmd);
 SubCmdProc(ttrek_UnpackSubCmd);
