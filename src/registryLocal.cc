@@ -181,6 +181,31 @@ void collect_use_flags(const cJSON *node, std::set<std::string> &flags) {
     cJSON_ArrayForEach(child, node) { collect_use_flags(child, flags); }
 }
 
+Json resolve_scripts(const cJSON *scripts, const fs::path &directory) {
+    Json result(cJSON_CreateObject(), cJSON_Delete);
+    if (!scripts) { return result; }
+    require(cJSON_IsObject(scripts), "recipe scripts must be an object");
+    const cJSON *script;
+    cJSON_ArrayForEach(script, scripts) {
+        require(script->string && script->string[0], "recipe script names must not be empty");
+        if (cJSON_IsString(script)) {
+            cJSON_AddItemToObject(result.get(), script->string, cJSON_Duplicate(script, 1));
+            continue;
+        }
+        auto *file = cJSON_GetObjectItemCaseSensitive(script, "file");
+        require(cJSON_IsObject(script) && cJSON_GetArraySize(script) == 1 && cJSON_IsString(file),
+                "recipe scripts must have string bodies or a single file reference");
+        require(valid_component(file->valuestring), "Invalid recipe script filename");
+        auto path = directory / file->valuestring;
+        require(!fs::is_symlink(path) && fs::is_regular_file(path),
+                "Recipe script must be a regular file in its recipe directory: " + path.string());
+        auto body = read_file(path);
+        require(body.find('\0') == std::string::npos, "Recipe script must not contain NUL bytes");
+        cJSON_AddStringToObject(result.get(), script->string, body.c_str());
+    }
+    return result;
+}
+
 Json recipe(const std::vector<std::string> &parts) {
     const auto directory = registry_directory / parts[0] / parts[1];
     auto spec = read_spec(directory);
@@ -196,8 +221,8 @@ Json recipe(const std::vector<std::string> &parts) {
     cJSON_AddItemToObject(result.get(), "dependencies",
         cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
     cJSON_AddItemToObject(result.get(), "install_script", cJSON_Duplicate(steps, 1));
-    auto *scripts = cJSON_GetObjectItemCaseSensitive(spec.get(), "scripts");
-    if (scripts) { cJSON_AddItemToObject(result.get(), "scripts", cJSON_Duplicate(scripts, 1)); }
+    auto scripts = resolve_scripts(cJSON_GetObjectItemCaseSensitive(spec.get(), "scripts"), directory);
+    cJSON_AddItemToObject(result.get(), "scripts", scripts.release());
     auto *iuse = cJSON_AddArrayToObject(result.get(), "iuse");
     std::set<std::string> flags;
     collect_use_flags(spec.get(), flags);
