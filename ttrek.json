@@ -14,7 +14,8 @@
     "libgit2": "=1.9.7",
     "libarchive": "=3.8.11",
     "satdepsolver": "=0.6.0",
-    "ttrie": "=0.1.1"
+    "ttrie": "=0.1.1",
+    "ttrigrams": "=0.1.0"
   },
   "devDependencies": {},
   "build": {

@@ -191,7 +191,8 @@ message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
 target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
 target_link_libraries(${TARGET} PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY} ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
 find_package(ttrie 0.1 CONFIG REQUIRED)
-target_link_libraries(${TARGET} PRIVATE ttrie::core)
+find_package(ttrigrams 0.1 CONFIG REQUIRED)
+target_link_libraries(${TARGET} PRIVATE ttrie::core ttrigrams::core)
 if (NOT APPLE)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
         target_link_options(${TARGET} PRIVATE -static)
@@ -228,7 +229,7 @@ if(BUILD_TESTING)
     target_include_directories(ttrek_fixture PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
-    target_link_libraries(ttrek_fixture PRIVATE ttrie::core)
+    target_link_libraries(ttrek_fixture PRIVATE ttrie::core ttrigrams::core)
     add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py

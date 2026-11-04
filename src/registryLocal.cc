@@ -14,6 +14,7 @@
 #include "registry.h"
 #include "base64.h"
 #include <ttrie.h>
+#include <ttrigrams.h>
 
 namespace {
 namespace fs = std::filesystem;
@@ -87,9 +88,73 @@ int select_search_registry(Tcl_Interp *interp) {
     return ttrek_RegistrySetDirectory(interp, directory);
 }
 
-int append_search_match(const char *key, int distance, void *context) {
-    (void)distance;
-    return Tcl_ListObjAppendElement(nullptr, static_cast<Tcl_Obj *>(context), Tcl_NewStringObj(key, -1));
+std::string search_text(std::string text) {
+    for (char &ch : text) { if (ch >= 'A' && ch <= 'Z') { ch += 'a' - 'A'; } }
+    return text;
+}
+
+struct SearchEntry {
+    std::string name;
+    std::string normalized;
+    std::string description;
+    int tier = 6;
+    int distance = 0;
+    size_t shared = 0;
+    size_t unmatched = 0;
+};
+
+struct SearchDescriptions {
+    std::vector<SearchEntry> &entries;
+    std::vector<size_t> owners;
+    std::vector<std::string> original;
+    std::vector<std::string> normalized;
+};
+
+bool search_order(const SearchEntry &a, const SearchEntry &b) {
+    if (a.tier != b.tier) { return a.tier < b.tier; }
+    if (a.distance != b.distance) { return a.distance < b.distance; }
+    if (a.shared != b.shared) { return a.shared > b.shared; }
+    if (a.unmatched != b.unmatched) { return a.unmatched < b.unmatched; }
+    return a.name < b.name;
+}
+
+int collect_name_match(const char *key, int distance, void *context) {
+    for (auto &entry : *static_cast<std::vector<SearchEntry> *>(context)) {
+        if (entry.tier > 4 && entry.normalized == key) {
+            entry.tier = 4;
+            entry.distance = distance;
+        }
+    }
+    return 0;
+}
+
+int collect_description_match(const ttrigrams_match *match, void *context) noexcept {
+    auto &descriptions = *static_cast<SearchDescriptions *>(context);
+    auto &entry = descriptions.entries[descriptions.owners[match->document]];
+    int tier = match->distance == 0 ? 3 : 5;
+    if (tier < entry.tier || (tier == entry.tier &&
+        (match->distance < entry.distance || (match->distance == entry.distance && match->shared_trigrams > entry.shared)))) {
+        try { entry.description = descriptions.original[match->document]; }
+        catch (...) { return -1; }
+        entry.tier = tier;
+        entry.distance = match->distance;
+        entry.shared = match->shared_trigrams;
+    }
+    return 0;
+}
+
+std::string read_search_description(const fs::path &path) {
+    auto data = read_file(path);
+    Json spec(cJSON_ParseWithLengthOpts(data.c_str(), data.size() + 1, nullptr, 1), cJSON_Delete);
+    require(cJSON_IsObject(spec.get()), "Invalid JSON object in " + path.string());
+    auto *description = cJSON_GetObjectItemCaseSensitive(spec.get(), "description");
+    if (!description) { return {}; }
+    require(cJSON_IsString(description), "description must be a string in " + path.string());
+    std::string text = description->valuestring;
+    require(text.size() <= TTRIGRAMS_MAX_TEXT_LENGTH &&
+            std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
+            "description must be a single line of at most 4096 bytes in " + path.string());
+    return text;
 }
 
 Json versions(const std::string &package) {
@@ -183,23 +248,62 @@ extern "C" int ttrek_RegistryIsLocal(void) {
 }
 
 extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, Tcl_Obj *matches) try {
-    require(valid_component(query) && std::strlen(query) <= TTRIE_MAX_LENGTH,
-            "Search name must contain 1 to 255 ASCII letters, digits, '.', '_', '+' or '-'");
+    std::string normalized = search_text(query);
+    require(normalized.size() <= TTRIE_MAX_LENGTH && normalized.find_first_not_of(
+        "abcdefghijklmnopqrstuvwxyz0123456789._+- ") == std::string::npos,
+        "Search query must contain 1 to 255 ASCII letters, digits, spaces, '.', '_', '+' or '-'");
+    auto first = normalized.find_first_not_of(' ');
+    require(first != std::string::npos, "Search query must not be empty");
+    normalized = normalized.substr(first, normalized.find_last_not_of(' ') - first + 1);
+    require(normalized != "." && normalized != "..", "Invalid search query");
     if (select_search_registry(interp) != TCL_OK) { return TCL_ERROR; }
     std::unique_ptr<ttrie, decltype(&ttrie_destroy)> trie(ttrie_create(), ttrie_destroy);
     require(trie != nullptr, "Cannot allocate recipe search trie");
+    std::vector<SearchEntry> found;
+    SearchDescriptions descriptions{found, {}, {}, {}};
     for (const auto &path : entries(registry_directory)) {
         auto name = path.filename().string();
         if (!fs::is_directory(path) || !valid_component(name)) { continue; }
+        bool has_recipe = false;
+        std::set<std::string> texts;
         for (const auto &version : entries(path)) {
             if (fs::is_directory(version) && valid_component(version.filename().string()) &&
                 fs::is_regular_file(version / SPEC_JSON_FILE)) {
-                require(ttrie_insert(trie.get(), name.c_str()) == 0, "Cannot index recipe: " + name);
-                break;
+                has_recipe = true;
+                auto text = read_search_description(version / SPEC_JSON_FILE);
+                if (!text.empty()) { texts.insert(std::move(text)); }
             }
         }
+        if (!has_recipe) { continue; }
+        SearchEntry entry{name, search_text(name), texts.empty() ? "" : *texts.begin()};
+        require(ttrie_insert(trie.get(), entry.normalized.c_str()) == 0, "Cannot index recipe: " + name);
+        if (entry.normalized == normalized) { entry.tier = 0; }
+        else if (entry.normalized.find(normalized) == 0) { entry.tier = 1; }
+        else if (entry.normalized.find(normalized) != std::string::npos) { entry.tier = 2; }
+        if (entry.tier == 1 || entry.tier == 2) { entry.unmatched = name.size() - normalized.size(); }
+        for (const auto &text : texts) {
+            descriptions.owners.push_back(found.size());
+            descriptions.original.push_back(text);
+            descriptions.normalized.push_back(search_text(text));
+        }
+        found.push_back(std::move(entry));
     }
-    require(ttrie_search(trie.get(), query, 2, append_search_match, matches) == 0, "Recipe search failed");
+    std::vector<const char *> texts;
+    for (const auto &text : descriptions.normalized) { texts.push_back(text.c_str()); }
+    std::unique_ptr<ttrigrams, decltype(&ttrigrams_destroy)> index(
+        ttrigrams_create(texts.data(), texts.size()), ttrigrams_destroy);
+    require(index != nullptr, "Cannot allocate description search index");
+    int limit = normalized.size() <= 3 ? 1 : 2;
+    require(ttrie_search(trie.get(), normalized.c_str(), limit, collect_name_match, &found) == 0,
+            "Recipe name search failed");
+    require(ttrigrams_search(index.get(), normalized.c_str(), limit, collect_description_match, &descriptions) == 0,
+            "Recipe description search failed");
+    std::sort(found.begin(), found.end(), search_order);
+    for (const auto &entry : found) {
+        if (entry.tier == 6) { continue; }
+        Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1)};
+        if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(2, fields)) != TCL_OK) { return TCL_ERROR; }
+    }
     return TCL_OK;
 } catch (const std::exception &error) {
     Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
