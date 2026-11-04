@@ -13,7 +13,8 @@
     "tcl": "=9.1.0",
     "libgit2": "=1.9.7",
     "libarchive": "=3.8.11",
-    "satdepsolver": "=0.6.0"
+    "satdepsolver": "=0.6.0",
+    "ttrie": "=0.1.0"
   },
   "devDependencies": {},
   "build": {
