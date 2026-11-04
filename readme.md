@@ -45,7 +45,7 @@ curl, tar, Python 3 for tests, and the normal platform development tools. Rust a
 
 The script builds pinned zlib, OpenSSL, cJSON, curl, Tcl 9.1, libgit2, and libarchive
 sources, installs the [satdepsolver 0.6.0](https://github.com/jerily/satdepsolver-cpp/releases/tag/v0.6.0)
-CMake package and ttrie 0.1.0 static C library, then builds and tests
+CMake package and ttrie 0.1.1 static C library, then builds and tests
 `build/ttrek`. Downloads and extracted sources are cached for reruns. OpenSSL is
 installed under `lib`, and dependency configuration uses the local static prefix.
 Tcl 9.0 static installations remain usable for manual CMake builds.
@@ -83,7 +83,7 @@ CMake normally uses `find_package(satdepsolver 0.6 CONFIG REQUIRED)` and
 for an explicit `add_subdirectory` integration. No network download happens at
 CMake configure time. The build script downloads the tagged satdepsolver 0.6.0 release.
 The trie uses `find_package(ttrie 0.1 CONFIG REQUIRED)` and `ttrie::core`; the
-build script downloads its 0.1.0 release and builds it without Tcl bindings.
+build script downloads its 0.1.1 release and builds it without Tcl bindings.
 
 ### Linux release binaries
 
