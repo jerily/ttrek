@@ -23,18 +23,18 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
         assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
         return result
 
-    def recipe(registry, name, version="1.0.0"):
+    def recipe(registry, name, version="1.0.0", description=None):
         path = registry / name / version
         path.mkdir(parents=True, exist_ok=True)
-        # Search indexes names without parsing or executing recipes.
-        (path / "ttrek.json").write_text('{}')
+        data = {} if description is None else {"description": description}
+        (path / "ttrek.json").write_text(json.dumps(data))
 
     assert "search" in run("help").stdout
     assert "Levenshtein" in run("help", "search").stdout
     assert "ttrek sync" in run("search", "tcl", ok=False).stderr
     assert not list(home.iterdir()) and not list(cwd.iterdir())
     for args in (("search",), ("search", "a", "b"), ("search", ""),
-                 ("search", "../x"), ("search", "a" * 256), ("search", "a b"),
+                 ("search", "../x"), ("search", "a" * 256), ("search", "   "),
                  ("search", "é"), ("search", "-registry")):
         run(*args, ok=False)
 
@@ -46,11 +46,40 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     recipe(registry, "bad name")
     (registry / "tclz/1.0.0").mkdir(parents=True)  # No recipe.
     (registry / "tclq").write_text("not a package directory")
-    assert run("search", "tcl").stdout.splitlines() == ["tcl", "tclx", "tk"]
+    assert run("search", "tcl").stdout.splitlines() == ["tcl", "tclx", "tcl-tk"]
     assert run("search", "abc").stdout.splitlines() == ["abc", "a+c", "a-c", "a.c", "a_c"]
-    assert run("search", "TCL").stdout == ""
+    assert run("search", "TCL").stdout == run("search", "tcl").stdout
     assert run("search", "unknown").stdout == ""
     assert not (home / ".ttrek").exists() and not list(cwd.iterdir())
+
+    def names(query):
+        return [line.split("\t", 1)[0] for line in run("search", query).stdout.splitlines()]
+
+    for name in ("web", "webserver", "atweb", "zzwebzzz", "b", "wec", "encryption"):
+        recipe(registry, name)
+    recipe(registry, "twebserver", description="A Tcl web server.")
+    recipe(registry, "twebserver", "2.0.0", "Compression utilities.")
+    recipe(registry, "portal", description="Embedded Web platform.")
+    recipe(registry, "doc-server", description="Fast web server.")
+    recipe(registry, "doc-encryption", description="Encryption toolkit.")
+    recipe(registry, "literal-typo", description="Literal encrytion phrase.")
+    assert names("web") == ["web", "webserver", "atweb", "zzwebzzz", "twebserver", "doc-server", "portal", "wec"]
+    assert names("  WEB  ") == names("web")
+    assert "b" not in names("web")
+    assert names("web server")[:2] == ["doc-server", "twebserver"]
+    assert names("encrytion")[:3] == ["literal-typo", "encryption", "doc-encryption"]
+    assert run("search", "compression").stdout == "twebserver\tCompression utilities.\n"
+    assert "twebserver\tA Tcl web server.\n" in run("search", "web").stdout
+    assert names("b")[0] == "b"
+
+    bad = registry / "bad/1.0.0/ttrek.json"
+    for description in (42, None, {}, "bad\nline", "a" * 4097):
+        bad.parent.mkdir(parents=True, exist_ok=True)
+        bad.write_text(json.dumps({"description": description}))
+        assert "description must be" in run("search", "web", ok=False).stderr
+    bad.write_text('{')
+    assert "Invalid JSON" in run("search", "web", ok=False).stderr
+    bad.unlink()
 
     other = root / "other registry [names]"
     recipe(other, "tcli")
@@ -62,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     assert run("search", "tcl", directory=nested).stdout == "tcli\n"
     for args in (("search", "-registry", str(registry), "tcl"),
                  ("-registry", str(registry), "search", "tcl")):
-        assert run(*args, directory=nested).stdout.splitlines() == ["tcl", "tclx", "tk"]
+        assert [line.split("\t")[0] for line in run(*args, directory=nested).stdout.splitlines()] == ["tcl", "tclx", "tcl-tk", "twebserver"]
     assert not (cwd / "ttrek-venv").exists()
     lock.write_text('{"registry": "../absent"}')
     assert run("search", "tcl", ok=False).stdout == ""
@@ -75,4 +104,4 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     empty.mkdir()
     assert run("search", "-registry", str(empty), "tcl").stdout == ""
 
-print("Offline recipe search, ordering, registry selection and no-write checks passed")
+print("Name/description ranking, trigram suggestions, metadata, registry selection and no-write checks passed")

@@ -14,25 +14,33 @@ for commands and screenshots.
 - Dependency solving belongs to the standalone [satdepsolver-cpp](https://github.com/jerily/satdepsolver-cpp) C++17 library. Do not vendor another solver implementation here.
 - Installation and update use the same provider and planner. Their default strategies remain `favored` and `latest`, respectively; `locked` prevents changing a locked candidate when that version is available.
 - Linux release builds remain static. Preserve the existing range syntax, caret behavior (same major), and prerelease policy when changing the provider.
-- Recipe-name search uses the standalone [ttrie](https://github.com/jerily/ttrie) C library; registry selection remains in ttrek.
+- Search uses [ttrie](https://github.com/jerily/ttrie) for names and [ttrigrams](https://github.com/jerily/ttrigrams) for descriptions; registry selection and ranking remain in ttrek.
 
 ## Search recipes
 
 ```sh
 ttrek search tcl
+ttrek search web
+ttrek search 'web server'
 ttrek search -registry /path/to/ttrek-registry tcll
 ```
 
-Prints every recipe name within Levenshtein distance 2, one per line, ordered by
-distance then name. Exact matches come first; case and punctuation are preserved.
-Names must contain 1–255 ASCII letters, digits, `.`, `_`, `+` or `-` (excluding
-`.` and `..`). No matches succeeds with empty output.
+Prints `name<TAB>description`. Ranking is exact name, name prefix, name substring,
+literal description, name typo, then description typo. Ties prefer fewer edits,
+greater query-trigram coverage, less unmatched name text, then alphabetical name.
+`web` finds `twebserver`; short queries allow one edit, longer queries two.
+Matching ignores ASCII case. Queries accept 1–255 ASCII letters, digits, spaces,
+`.`, `_`, `+` or `-`, excluding empty queries, `.` and `..`.
 
 Search uses `-registry`, the nearest project's saved registry, or an existing
 `~/.local/ttrek-registry`, in that order. It works outside a project and indexes
-only names containing a `version/ttrek.json`, once per name. The trie is built
-only when `search` runs. No network requests, telemetry, update checks or project
+names and descriptions from every `version/ttrek.json`, once per package in the
+results. Missing descriptions are allowed; description matches display the
+matching text, otherwise the first nonempty description in alphabetical order.
+Both indexes are built only when `search` runs. No network requests, telemetry, update checks or project
 writes occur. If the local registry is missing, run `ttrek sync` first.
+Description suggestions require a shared trigram and pass a Levenshtein substring
+check; queries below three characters match descriptions literally.
 
 ## Build
 
@@ -45,7 +53,7 @@ curl, tar, Python 3 for tests, and the normal platform development tools. Rust a
 
 The script builds pinned zlib, OpenSSL, cJSON, curl, Tcl 9.1, libgit2, and libarchive
 sources, installs the [satdepsolver 0.6.0](https://github.com/jerily/satdepsolver-cpp/releases/tag/v0.6.0)
-CMake package and ttrie 0.1.1 static C library, then builds and tests
+CMake package and ttrie 0.1.1/ttrigrams 0.1.0 static C libraries, then builds and tests
 `build/ttrek`. Downloads and extracted sources are cached for reruns. OpenSSL is
 installed under `lib`, and dependency configuration uses the local static prefix.
 Tcl 9.0 static installations remain usable for manual CMake builds.
@@ -66,8 +74,9 @@ Other build controls: `JOBS` (default: 2, suitable for an 8 GB Mac), `BUILD_TYPE
 `TTREK_BUILD_DIR`, `TTREK_INSTALL_DIR`, `CMAKE`, `CTEST`, `CURL`, and `PYTHON`
 (the Python 3 test interpreter). `TTREK_SKIP_DEPS=1` skips building the seven C dependencies
 when a complete compatible static prefix already exists; it still builds, tests,
-and installs satdepsolver and ttrie and rebuilds/tests ttrek.
+and installs satdepsolver, ttrie and ttrigrams and rebuilds/tests ttrek.
 Set `TTRIE_SOURCE_DIR=/path/to/ttrie` to use a local trie checkout.
+Set `TTRIGRAMS_SOURCE_DIR=/path/to/ttrigrams` to use a local trigram checkout.
 
 To configure manually after installing dependencies:
 

@@ -1,14 +1,25 @@
-Usage: ttrek search [-registry DIRECTORY] NAME
+Usage: ttrek search [-registry DIRECTORY] QUERY
 
-Print recipe names within Levenshtein edit distance 2 (insert, delete or
-substitute). Exact matches come first, then distance and ASCII name order.
-Names are case-sensitive; punctuation is preserved. No matches prints nothing
-and succeeds. NAME must contain 1-255 ASCII letters, digits, '.', '_', '+' or '-'.
+Print package names and descriptions, separated by a tab. Ranking:
+exact name, name prefix, name substring, literal description, name typo,
+description typo. Ties prefer fewer edits, greater query-trigram coverage,
+less unmatched name text, then alphabetical name.
+
+Matching ignores ASCII case and preserves punctuation. Queries accept 1-255
+ASCII letters, digits, spaces, '.', '_', '+' or '-'; quote phrases such as
+'web server'. No matches prints nothing and succeeds.
+
+Name typos use a trie; descriptions use ttrigrams with substring verification.
+Queries of at most 3 characters allow one edit; longer queries allow two.
+Description suggestions require a shared trigram; queries below 3 characters
+match descriptions literally. Distances are Levenshtein (insert/delete/substitute).
 
 Search uses an explicit registry, the nearest project's saved registry, or an
 existing ~/.local/ttrek-registry, in that order. It works outside a project.
-Only directories containing version/ttrek.json are indexed, once per name.
-The trie is built only for this command. Search never clones, downloads,
+Descriptions from all versions are indexed; each package appears once. Missing
+descriptions are allowed. A description hit displays its matching text; name
+hits display the first nonempty description in alphabetical order.
+The indexes are built only for this command. Search never clones, downloads,
 creates project state, sends telemetry or checks for updates.
 
 If no local registry exists, run 'ttrek sync' or pass -registry DIRECTORY.

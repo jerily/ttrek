@@ -21,6 +21,7 @@ LIBGIT2_VERSION=1.9.7
 LIBARCHIVE_VERSION=3.8.11
 SATDEPSOLVER_VERSION=0.6.0
 TTRIE_VERSION=0.1.1
+TTRIGRAMS_VERSION=0.1.0
 
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
@@ -133,6 +134,20 @@ TRIE_BUILD_DIR="$BUILD_DIR/dependencies/ttrie-$TRIE_SOURCE_KEY"
 "$CMAKE" --build "$TRIE_BUILD_DIR" --parallel "$JOBS"
 "$CTEST" --test-dir "$TRIE_BUILD_DIR" --output-on-failure
 "$CMAKE" --install "$TRIE_BUILD_DIR"
+
+if [[ -z ${TTRIGRAMS_SOURCE_DIR:-} ]]; then
+    fetch_source "ttrigrams-$TTRIGRAMS_VERSION" "https://github.com/jerily/ttrigrams/releases/download/v$TTRIGRAMS_VERSION/ttrigrams-$TTRIGRAMS_VERSION.tar.gz"
+    TTRIGRAMS_SOURCE_DIR="$SOURCE_DIR/ttrigrams-$TTRIGRAMS_VERSION"
+fi
+TTRIGRAMS_SOURCE_DIR=$(cd "$TTRIGRAMS_SOURCE_DIR" && pwd)
+TRIGRAM_SOURCE_KEY=$(printf '%s' "$TTRIGRAMS_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
+TRIGRAM_BUILD_DIR="$BUILD_DIR/dependencies/ttrigrams-$TRIGRAM_SOURCE_KEY"
+"$CMAKE" -S "$TTRIGRAMS_SOURCE_DIR" -B "$TRIGRAM_BUILD_DIR" \
+    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIGRAMS_BUILD_TCL=OFF -DBUILD_TESTING=ON
+"$CMAKE" --build "$TRIGRAM_BUILD_DIR" --parallel "$JOBS"
+"$CTEST" --test-dir "$TRIGRAM_BUILD_DIR" --output-on-failure
+"$CMAKE" --install "$TRIGRAM_BUILD_DIR"
 
 # Clear old dependency paths (including Tcl 8.6 and lib64 OpenSSL) on reruns.
 "$CMAKE" -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
