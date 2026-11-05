@@ -54,9 +54,11 @@ Json fetch_spec(const std::string &name, const std::string &version, const utsna
     Tcl_DString data;
     Tcl_DStringInit(&data);
     int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
-    Json spec(cJSON_Parse(Tcl_DStringValue(&data)), cJSON_Delete);
+    const std::string error = status != TCL_OK ? Tcl_DStringValue(&data) : "";
+    Json spec(status == TCL_OK ? cJSON_Parse(Tcl_DStringValue(&data)) : nullptr, cJSON_Delete);
     Tcl_DStringFree(&data);
-    require(status == TCL_OK && cJSON_IsObject(spec.get()), "Cannot read build recipe for " + name + "@" + version);
+    require(status == TCL_OK && cJSON_IsObject(spec.get()),
+            error.empty() ? "Cannot read build recipe for " + name + "@" + version : error);
     return spec;
 }
 

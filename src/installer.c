@@ -155,7 +155,10 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     Tcl_DString ds;
     Tcl_DStringInit(&ds);
     if (TCL_OK != ttrek_RegistryGet(install_spec_url, &ds, NULL)) {
-        fprintf(stderr, "error: could not get install spec for %s@%s\n", package_name, package_version);
+        Tcl_SetObjResult(interp, Tcl_DStringLength(&ds)
+            ? Tcl_NewStringObj(Tcl_DStringValue(&ds), Tcl_DStringLength(&ds))
+            : Tcl_ObjPrintf("Could not read build recipe for %s@%s", package_name, package_version));
+        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 

@@ -271,6 +271,35 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     failed = run("gen-script", ok=False)
     assert not failed.stdout and "Invalid registry path component" in failed.stderr
 
+    # Missing direct and transitive dependencies produce one actionable error.
+    # Exercise every resolution command, without allowing a website fallback.
+    missing = "web-blog"
+    expected = (f'error: Package "{missing}" was not found in registry "{registry}". '
+                'Check the package name or use -registry DIRECTORY to select another registry.\n')
+    parent = registry / "parent/1.0.0"
+    parent.mkdir(parents=True)
+    (parent / "ttrek.json").write_text(json.dumps({"dependencies": {missing: "1.0.0"}}))
+    for dependency in (missing, "parent"):
+        for command in ("install", "update", "pretend", "gen-script"):
+            fresh = root / f"missing-{dependency}-{command}"
+            fresh.mkdir()
+            (fresh / "ttrek.json").write_text(json.dumps({"dependencies": {dependency: "1.0.0"}}))
+            failed = run(command, "-registry", str(registry), cwd=fresh, ok=False)
+            assert failed.stderr == expected, (dependency, command, failed.stderr)
+            if command == "gen-script":
+                assert not failed.stdout
+
+    # Corrupt entries keep their own diagnostic rather than being reported as absent.
+    (registry / missing).write_text("not a package directory")
+    failed = run("pretend", "-registry", str(registry), cwd=fresh, ok=False)
+    assert "Package path is not a directory" in failed.stderr and "not found" not in failed.stderr
+    (registry / missing).unlink()
+    (registry / missing / "1.0.0").mkdir(parents=True)
+    (registry / missing / "1.0.0/ttrek.json").write_text("invalid JSON")
+    failed = run("pretend", "-registry", str(registry), cwd=fresh, ok=False)
+    assert "Invalid JSON" in failed.stderr and "not found" not in failed.stderr
+    assert failed.stderr.count("error:") == 1
+
     # Global init options persist too, while ordinary init keeps the HTTP default.
     for args in (("-registry", str(registry), "init", "-y"), ("init", "-y")):
         fresh = root / ("global-init" if args[0] == "-registry" else "default-init")

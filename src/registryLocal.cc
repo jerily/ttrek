@@ -158,8 +158,12 @@ std::string read_search_description(const fs::path &path) {
 }
 
 Json versions(const std::string &package) {
+    const auto directory = registry_directory / package;
+    require(fs::exists(directory), "Package \"" + package + "\" was not found in registry \"" +
+            registry_directory.string() + "\". Check the package name or use -registry DIRECTORY to select another registry.");
+    require(fs::is_directory(directory), "Package path is not a directory: " + directory.string());
     Json result(cJSON_CreateObject(), cJSON_Delete);
-    for (const auto &path : entries(registry_directory / package)) {
+    for (const auto &path : entries(directory)) {
         if (!fs::is_directory(path)) { continue; }
         require(valid_component(path.filename().string()), "Invalid version directory: " + path.string());
         auto spec = read_spec(path);
@@ -395,6 +399,7 @@ extern "C" int ttrek_RegistryGetLocal(const char *url, Tcl_DString *result) try 
     Tcl_DStringAppend(result, json.get(), -1);
     return TCL_OK;
 } catch (const std::exception &error) {
-    fprintf(stderr, "error: local registry: %s\n", error.what());
+    Tcl_DStringSetLength(result, 0);
+    Tcl_DStringAppend(result, error.what(), -1);
     return TCL_ERROR;
 }

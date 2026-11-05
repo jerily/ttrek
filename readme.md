@@ -305,7 +305,8 @@ project registry, then `~/.local/ttrek-registry` after a successful `ttrek sync`
 then the website. Normal commands never create or clone the default directory;
 an absent or unmarked directory leaves website access enabled. An explicitly
 selected local registry remains authoritative: missing packages do not fall back
-to the website.
+to the website. A missing package produces one error naming the package and the
+registry searched, with a suggestion to check the name or select another registry.
 Automatic default selection is not saved in project lockfiles, so projects stay
 portable and fall back to the website if that checkout is later removed.
 

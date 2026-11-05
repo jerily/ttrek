@@ -13,6 +13,7 @@ extern "C" {
 
 #include "common.h"
 
+// On failure, dsPtr (if supplied) contains a diagnostic for the caller to report.
 int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData);
 int ttrek_RegistrySetDirectory(Tcl_Interp *interp, const char *directory);
 int ttrek_RegistryIsLocal(void);
