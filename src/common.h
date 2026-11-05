@@ -164,7 +164,7 @@ int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *l
 
 int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char *project_name, const char *project_version);
 Tcl_Obj *ttrek_GetFilePath(Tcl_Interp *interp, Tcl_Obj *directory, const char *filename);
-int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, const char *registry);
+int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, int save_registries);
 
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
 

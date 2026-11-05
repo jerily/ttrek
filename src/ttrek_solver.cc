@@ -1008,20 +1008,15 @@ int ttrek_ResolveBuildPlan(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const obj
 // using only the project JSON files. Do not create a venv or run install hooks.
 extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     const char *strategy = nullptr;
-    const char *registry = nullptr;
     int force = 0;
     Tcl_ArgvInfo options[] = {
-        {TCL_ARGV_STRING, "-registry", nullptr, &registry, "local registry directory", nullptr},
+        TTREK_REGISTRY_OPTIONS,
         {TCL_ARGV_STRING, "-strategy", nullptr, &strategy, "latest, favored, or locked", nullptr},
         {TCL_ARGV_CONSTANT, "-force", INT2PTR(1), &force, "include already installed packages", nullptr},
         {TCL_ARGV_END, nullptr, nullptr, nullptr, nullptr, nullptr}
     };
     Tcl_Obj **remaining = nullptr;
     if (Tcl_ParseArgsObjv(interp, options, &objc, objv, &remaining) != TCL_OK) {
-        return TCL_ERROR;
-    }
-    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) {
-        ckfree(remaining);
         return TCL_ERROR;
     }
     int status = TCL_ERROR;

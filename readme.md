@@ -287,6 +287,49 @@ registry or telemetry requests; source downloads still follow recipe URLs.
 An explicit option overrides it without changing the saved value. Relative saved
 paths resolve from the project directory.
 
+### Ordered registries
+
+Repeat `-registry` to supply an ordered list of directories and HTTP(S) API URLs:
+
+```sh
+ttrek install -y -registry ../private-recipes -registry ~/.local/ttrek-registry
+ttrek -registry https://packages.example.com/registry -registry ~/.local/ttrek-registry install -y
+ttrek init -registry ../private-recipes -registry ~/.local/ttrek-registry
+```
+
+Options before and after the command are combined in encounter order. An explicit
+list replaces the saved list and implicit defaults. Include the public registry
+explicitly when wanted, as a local directory or `https://ttrek.sh/registry`.
+
+The first source containing a package owns its versions and build recipes for
+that invocation. A version constraint that cannot be met there is an error;
+versions are not combined across sources. An absent directory entry or HTTP 404
+for package metadata advances to the next source. Unreadable or malformed
+metadata, HTTP errors, and missing recipes in the owning source stop the command.
+When all sources lack a package, the error names the package and sources searched.
+
+`init` saves multiple sources and HTTP sources in `ttrek-lock.json`:
+
+```json
+{
+  "registries": [
+    {"directory": "../private-recipes"},
+    {"url": "https://ttrek.sh/registry"}
+  ]
+}
+```
+
+The existing single-directory `registry` setting remains supported. Use either
+`registry` or `registries`, not both. Saved relative directories resolve from the
+project root; explicit options on other commands do not rewrite these settings.
+
+HTTP sources expose the existing API: `GET BASE/PACKAGE` returns an object mapping
+versions to dependencies, and `GET BASE/PACKAGE/VERSION/OS/ARCH` returns the install
+recipe. Authentication is not implemented. URLs cannot contain credentials,
+queries or fragments. Redirects require configuring the final API URL. Explicit
+registry lists send no telemetry. Source archive downloads continue to use recipe
+URLs. Search supports ordered local directories and reports an error for HTTP lists.
+
 ### Sync the local registry
 
 ```sh
@@ -303,9 +346,9 @@ overwriting the checkout. Network errors from an explicit sync are reported.
 Registry commands select the explicit `-registry` option first, then the saved
 project registry, then `~/.local/ttrek-registry` after a successful `ttrek sync`,
 then the website. Normal commands never create or clone the default directory;
-an absent or unmarked directory leaves website access enabled. An explicitly
-selected local registry remains authoritative: missing packages do not fall back
-to the website. A missing package produces one error naming the package and the
+an absent or unmarked directory leaves website access enabled. With a single
+selected local registry, missing packages do not fall back to the website.
+A missing package produces one error naming the package and the
 registry searched, with a suggestion to check the name or select another registry.
 Automatic default selection is not saved in project lockfiles, so projects stay
 portable and fall back to the website if that checkout is later removed.
@@ -371,6 +414,9 @@ libraries, and checks patches, dependency order, shell isolation and generation 
 Both tests use temporary home directories and local source archives. CMake prefers
 the dependency prefix's `bin/curl` for these tests; set `-DTTREK_TEST_CURL=/path/to/curl`
 to select another executable. Build failures include their logs in CTest output.
+
+`registry_sources` checks ordered local/HTTP lookup, source precedence, saved
+lists, error handling and installation against an isolated HTTP server.
 
 With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,

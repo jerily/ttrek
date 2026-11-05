@@ -1,7 +1,12 @@
-Usage: init [-y] [-registry DIRECTORY]
+Usage: init [-y] [-registry SOURCE]...
 
 Create ttrek.json, ttrek-lock.json and the project environment.
 -y accepts the default project name and version.
--registry saves the local registry directory as "registry" in ttrek-lock.json.
+-registry saves the selected sources in ttrek-lock.json. Repeat it to set lookup
+order. A single local directory uses "registry"; other lists use "registries".
 Later install, update, pretend and gen-script commands reuse it unless overridden.
 Relative saved paths resolve from the project directory.
+
+The first registry containing a package supplies its versions and recipe.
+Only an absent package advances to the next registry; other errors stop lookup.
+Explicit sources replace the saved list and defaults for this invocation.

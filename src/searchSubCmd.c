@@ -2,9 +2,8 @@
 #include "registry.h"
 
 int ttrek_SearchSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
-    const char *registry = NULL;
     Tcl_ArgvInfo options[] = {
-        {TCL_ARGV_STRING, "-registry", NULL, &registry, "local registry directory", NULL},
+        TTREK_REGISTRY_OPTIONS,
         {TCL_ARGV_END, NULL, NULL, NULL, NULL, NULL}
     };
     Tcl_Obj **remaining = NULL;
@@ -13,11 +12,10 @@ int ttrek_SearchSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     Tcl_Obj *matches = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(matches);
     if (objc != 2) {
-        Tcl_SetObjResult(interp, Tcl_NewStringObj("Usage: ttrek search [-registry DIRECTORY] QUERY", -1));
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("Usage: ttrek search [-registry DIRECTORY]... QUERY", -1));
         goto done;
     }
-    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK ||
-        ttrek_RegistrySearchLocal(interp, Tcl_GetString(remaining[1]), matches) != TCL_OK) { goto done; }
+    if (ttrek_RegistrySearchLocal(interp, Tcl_GetString(remaining[1]), matches) != TCL_OK) { goto done; }
     Tcl_Size count;
     Tcl_Obj **rows;
     if (Tcl_ListObjGetElements(interp, matches, &count, &rows) != TCL_OK) { goto done; }

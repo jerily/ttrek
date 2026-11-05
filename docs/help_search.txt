@@ -1,4 +1,4 @@
-Usage: ttrek search [-registry DIRECTORY] QUERY
+Usage: ttrek search [-registry DIRECTORY]... QUERY
 
 Print package names and descriptions, separated by a tab. Ranking:
 exact name, name prefix, name substring, literal description, name typo,

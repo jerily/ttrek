@@ -73,9 +73,8 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     int option_fail_verbose = 0;
 
     const char *option_strategy = NULL;
-    const char *registry = NULL;
     Tcl_ArgvInfo ArgTable[] = {
-            {TCL_ARGV_STRING, "-registry", NULL, &registry, "local registry directory", NULL},
+            TTREK_REGISTRY_OPTIONS,
 //            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
             {TCL_ARGV_CONSTANT, "-fail-verbose", INT2PTR(1),              &option_fail_verbose, "show verbose output on failure",                                     NULL},
             {TCL_ARGV_CONSTANT, "-y",            INT2PTR(1),              &option_yes,          "answer yes to all questions",                                        NULL},
@@ -99,10 +98,6 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         }
     }
 
-    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) {
-        ckfree(remObjv);
-        return TCL_ERROR;
-    }
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, 1, (ttrek_mode_t)option_mode,
                                                  ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
@@ -116,7 +111,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         ckfree(remObjv);
         return TCL_ERROR;
     }
-    if (!ttrek_RegistryIsLocal()) { ttrek_TelemetryLoadMachineId(interp); }
+    if (!ttrek_RegistryHasSources()) { ttrek_TelemetryLoadMachineId(interp); }
 
     if (TCL_OK != ttrek_EnsureGitReady(interp, state_ptr)) {
         fprintf(stderr, "error: ensuring git repository is ready failed\n");
