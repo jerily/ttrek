@@ -124,10 +124,12 @@ inline PackageVersions fetch_package_versions(const std::string &package_name) {
     Tcl_DString data;
     Tcl_DStringInit(&data);
     const auto status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
-    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> root(cJSON_Parse(Tcl_DStringValue(&data)), cJSON_Delete);
+    const std::string error = status != TCL_OK ? Tcl_DStringValue(&data) : "";
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> root(
+        status == TCL_OK ? cJSON_Parse(Tcl_DStringValue(&data)) : nullptr, cJSON_Delete);
     Tcl_DStringFree(&data);
     if (status != TCL_OK || !cJSON_IsObject(root.get())) {
-        throw std::runtime_error("Could not read registry metadata for " + package_name);
+        throw std::runtime_error(error.empty() ? "Could not read registry metadata for " + package_name : error);
     }
     for (auto *version = root->child; version; version = version->next) {
         if (!cJSON_IsObject(version)) {

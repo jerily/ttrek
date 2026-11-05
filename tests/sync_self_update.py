@@ -168,7 +168,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             stamp = checkout / ".git/ttrek-last-sync"
             stamp_content = stamp.read_bytes()
             stamp.unlink()
-            run("pretend", binary=PRODUCTION, process_env=local_env, ok=False)
+            failed = run("pretend", binary=PRODUCTION, process_env=local_env, ok=False)
+            assert failed.stderr.startswith("error: Could not read registry: "), failed.stderr
+            assert len(failed.stderr.splitlines()) == 1, failed.stderr
             assert requests[-1].startswith("http://localhost:8080/registry/")
             stamp.write_bytes(stamp_content)
             assert run("self-update", "-version").stdout.strip() == "1.0.0"

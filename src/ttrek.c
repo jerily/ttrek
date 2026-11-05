@@ -160,14 +160,14 @@ int main(int argc, char *argv[]) {
         case SUBCMD_INSTALL:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (TCL_OK != ttrek_InstallSubCmd(interp, objc-1, &objv[1])) {
-                fprintf(stderr, "error: install subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
             break;
         case SUBCMD_UPDATE:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (TCL_OK != ttrek_UpdateSubCmd(interp, objc-1, &objv[1])) {
-                fprintf(stderr, "error: update subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
             break;
