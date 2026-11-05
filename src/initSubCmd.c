@@ -14,11 +14,10 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
     int option_yes = 0;
     int option_force = 0;
-    const char *registry = NULL;
     Tcl_ArgvInfo options[] = {
         {TCL_ARGV_CONSTANT, "-y", INT2PTR(1), &option_yes, "Automatically answer yes to all questions", NULL},
         {TCL_ARGV_CONSTANT, "-f", INT2PTR(1), &option_force, "Removes protections against side effects", NULL},
-        {TCL_ARGV_STRING, "-registry", NULL, &registry, "save a local registry directory in the lock file", NULL},
+        TTREK_REGISTRY_OPTIONS,
         {TCL_ARGV_END, NULL, NULL, NULL, NULL, NULL}
     };
     Tcl_Obj **remaining = NULL;
@@ -28,9 +27,8 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         Tcl_SetObjResult(interp, Tcl_NewStringObj("Unexpected init argument", -1));
         return TCL_ERROR;
     }
-    if (ttrek_RegistrySetDirectory(interp, registry) != TCL_OK) { return TCL_ERROR; }
     if (ttrek_RegistryUseDefault(interp) != TCL_OK) { return TCL_ERROR; }
-    if (!ttrek_RegistryIsLocal()) { ttrek_TelemetryLoadMachineId(interp); }
+    if (!ttrek_RegistryHasSources()) { ttrek_TelemetryLoadMachineId(interp); }
 
     Tcl_Obj *spec_file_name_ptr = Tcl_NewStringObj(SPEC_JSON_FILE, -1);
     Tcl_IncrRefCount(spec_file_name_ptr);
@@ -114,7 +112,7 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         return TCL_ERROR;
     }
 
-    if (TCL_OK != ttrek_InitLockFile(interp, path_to_lock_ptr, ttrek_RegistryGetDirectory())) {
+    if (TCL_OK != ttrek_InitLockFile(interp, path_to_lock_ptr, 1)) {
         fprintf(stderr, "error: initializing lock file failed\n");
         Tcl_DecrRefCount(path_to_spec_ptr);
         Tcl_DecrRefCount(path_to_lock_ptr);
@@ -128,7 +126,7 @@ int ttrek_InitSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_DecrRefCount(spec_file_name_ptr);
     Tcl_DecrRefCount(lock_file_name_ptr);
 
-    if (!ttrek_RegistryIsLocal()) { ttrek_TelemetrySaveMachineId(interp); }
+    if (!ttrek_RegistryHasSources()) { ttrek_TelemetrySaveMachineId(interp); }
 
     // ensure skeleton directories exist
     int with_locking = 0;

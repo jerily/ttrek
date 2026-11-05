@@ -84,11 +84,12 @@ int main(int argc, char *argv[]) {
     int first_command = 1;
     while (first_command < argc && strcmp(argv[first_command], "-registry") == 0) {
         if (first_command + 1 >= argc) {
-            fprintf(stderr, "error: -registry requires a directory\n");
+            fprintf(stderr, "error: -registry requires a directory or API URL\n");
             exitcode = 1;
             goto done;
         }
-        if (ttrek_RegistrySetDirectory(interp, argv[first_command + 1]) != TCL_OK) {
+        int status = ttrek_RegistryAddSource(interp, argv[first_command + 1]);
+        if (status != TCL_OK) {
             fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
             exitcode = 1;
             goto done;
@@ -111,7 +112,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Init/install/update load telemetry after selecting their registry.
-    if (!ttrek_RegistryIsLocal() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
+    if (!ttrek_RegistryHasSources() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
         sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
         sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH) {
         ttrek_TelemetryLoadMachineId(interp);
@@ -229,7 +230,7 @@ int main(int argc, char *argv[]) {
     goto done;
 
 usage:
-    fprintf(stderr, "Usage: ttrek [-registry directory] <subcommand> [options]\n");
+    fprintf(stderr, "Usage: ttrek [-registry SOURCE]... <subcommand> [options]\n");
     exitcode = 1;
 
 done:

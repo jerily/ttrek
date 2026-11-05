@@ -1,4 +1,8 @@
-Usage: update [-registry DIRECTORY] [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
+Usage: update [-registry SOURCE]... [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
 
 Update project dependencies; the default strategy is latest.
--registry reads package specs and patches from a local registry directory.
+-registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.
+
+The first registry containing a package supplies its versions and recipe.
+Only an absent package advances to the next registry; other errors stop lookup.
+Explicit sources replace the saved list and defaults for this invocation.

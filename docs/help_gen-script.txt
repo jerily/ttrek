@@ -1,11 +1,11 @@
-Usage: gen-script [-registry DIRECTORY] [-shell bash|sh] [-static] [-strategy latest|favored|locked] ?package@version_range ...?
+Usage: gen-script [-registry SOURCE]... [-shell bash|sh] [-static] [-strategy latest|favored|locked] ?package@version_range ...?
 
 Write a standalone build script to stdout. The default shell is bash.
 Resolve project dependencies and include their recipes and patches in build order.
 With no package arguments, also include the project's build recipe.
 Hooks run when the generated script is executed, not during generation.
 Generation does not install packages, change project files, or send telemetry.
--registry reads package specs and patches from a local registry directory.
+-registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.
 
 The script installs into build/install beside the script and needs no ttrek binary.
 -static enables the +static USE flag for conditional recipe options.
@@ -16,3 +16,7 @@ Examples:
     ttrek gen-script -registry ../ttrek.sh/registry > build.sh
     ttrek gen-script -shell sh -static jinja2-tcl > build.sh
     bash build.sh
+
+The first registry containing a package supplies its versions and recipe.
+Only an absent package advances to the next registry; other errors stop lookup.
+Explicit sources replace the saved list and defaults for this invocation.

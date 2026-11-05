@@ -1,7 +1,7 @@
 Usage: install [options] ?package_A@version_range_A? ?package_B@version_range_B? ?...?
 
 Available options:
-    -registry DIRECTORY - read package specs and patches from a local registry
+    -registry SOURCE - append a local directory or HTTP(S) API URL; repeat to set lookup order
     -u - install using user mode (~/.local)
     -g - install using global mode (/usr/local/ttrek)
     default - If no mode is specified, install using local mode (./ttrek-venv)
@@ -21,3 +21,7 @@ Examples:
     twebserver@1.47.37
     twebserver@^1.47.37
     "twebserver@>=1.47.37,<1.50.0"
+
+The first registry containing a package supplies its versions and recipe.
+Only an absent package advances to the next registry; other errors stop lookup.
+Explicit sources replace the saved list and defaults for this invocation.

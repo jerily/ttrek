@@ -5,6 +5,7 @@
  */
 
 #include "common.h"
+#include "registry.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -707,7 +708,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     if (TCL_OK != ttrek_CheckFileExists(path_lock_file_ptr)) {
         if (mode != MODE_LOCAL) {
             DBG2(fprintf(stderr, "initialize the lock file: %s", Tcl_GetString(path_lock_file_ptr)));
-            ttrek_InitLockFile(interp, path_lock_file_ptr, NULL);
+            ttrek_InitLockFile(interp, path_lock_file_ptr, 0);
         } else {
             DBG2(fprintf(stderr, "no need to initialize the lock file"));
         }
@@ -1065,9 +1066,9 @@ int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char
     return TCL_OK;
 }
 
-int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, const char *registry) {
+int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, int save_registries) {
     cJSON *lock_root = cJSON_CreateObject();
-    if (registry) { cJSON_AddStringToObject(lock_root, "registry", registry); }
+    if (save_registries) { ttrek_RegistrySaveConfiguration(lock_root); }
     cJSON *lock_packages = cJSON_CreateObject();
     cJSON_AddItemToObject(lock_root, "packages", lock_packages);
     cJSON *lock_dependencies = cJSON_CreateObject();

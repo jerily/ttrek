@@ -137,6 +137,8 @@ add_executable(${TARGET}
         src/semver/semver.c
         src/base64.c
         src/registry.c
+        src/registrySources.cc
+        src/registryHttp.c
         src/registryLocal.cc
         src/syncSubCmd.cc
         src/selfUpdateSubCmd.cc
@@ -238,4 +240,6 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME sync_self_update COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/sync_self_update.py
         $<TARGET_FILE:ttrek_fixture> $<TARGET_FILE:ttrek>)
+    add_test(NAME registry_sources COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/registry_sources.py
+        $<TARGET_FILE:ttrek>)
 endif()

@@ -29,9 +29,9 @@ static void registry_error(Tcl_DString *result, const char *message) {
 }
 
 int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
-    if (ttrek_RegistryIsLocal()) {
-        // Local registries have no telemetry endpoint.
-        return postData ? TCL_OK : ttrek_RegistryGetLocal(url, dsPtr);
+    if (ttrek_RegistryHasSources()) {
+        // Explicit registries never receive telemetry or share credentials.
+        return postData ? TCL_OK : ttrek_RegistryGetConfigured(url, dsPtr);
     }
     int rc = TCL_OK;
 

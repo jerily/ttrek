@@ -119,10 +119,9 @@ void validate_project(cJSON *spec, cJSON *lock) {
 extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     const char *shell = "bash";
     const char *strategy = "favored";
-    const char *registry = nullptr;
     int static_build = 0;
     Tcl_ArgvInfo options[] = {
-        {TCL_ARGV_STRING, "-registry", nullptr, &registry, "local registry directory", nullptr},
+        TTREK_REGISTRY_OPTIONS,
         {TCL_ARGV_STRING, "-shell", nullptr, &shell, "bash (default) or sh", nullptr},
         {TCL_ARGV_STRING, "-strategy", nullptr, &strategy, "latest, favored, or locked", nullptr},
         {TCL_ARGV_CONSTANT, "-static", INT2PTR(1), &static_build, "enable static linking recipes", nullptr},
@@ -132,7 +131,6 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
     if (Tcl_ParseArgsObjv(interp, options, &objc, objv, &remaining) != TCL_OK) { return TCL_ERROR; }
     int status = TCL_ERROR;
     try {
-        check(interp, ttrek_RegistrySetDirectory(interp, registry));
         require(std::strcmp(shell, "bash") == 0 || std::strcmp(shell, "sh") == 0, "Unsupported shell: use bash or sh");
         require(std::strcmp(strategy, "favored") == 0 || std::strcmp(strategy, "latest") == 0 ||
                 std::strcmp(strategy, "locked") == 0, "Invalid strategy: use latest, favored, or locked");

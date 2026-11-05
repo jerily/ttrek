@@ -1,10 +1,13 @@
-Usage: ttrek [-registry DIRECTORY] COMMAND [options]
+Usage: ttrek [-registry SOURCE]... COMMAND [options]
 
--registry reads DIRECTORY/package/version/ttrek.json and adjacent .diff patches.
-It replaces the registry API for this invocation. Source downloads still use
-the URLs in each recipe. It also works after init, install, update, pretend or gen-script.
-init saves the directory in ttrek-lock.json; other commands use it for that invocation.
-An explicit option overrides the saved registry. Relative saved paths use the project directory.
+-registry accepts a directory or an HTTP(S) registry API base URL. Repeat it to
+search sources in order. Directories contain package/version/ttrek.json and
+adjacent .diff patches. The first source containing a package supplies all its
+versions and recipes; only an absent package advances to another source.
+Source downloads still use recipe URLs. Options also work after init, install,
+update, pretend or gen-script. init saves the ordered list in ttrek-lock.json;
+other commands use it for that invocation. Explicit options replace saved or
+default sources. Relative saved paths use the project directory.
 Otherwise ~/.local/ttrek-registry is used after a successful ttrek sync, before
 the ttrek.sh website. Normal commands never create or clone this directory.
 
