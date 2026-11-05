@@ -56,7 +56,7 @@ std::vector<fs::path> entries(const fs::path &directory) {
 }
 
 int select_search_registry(Tcl_Interp *interp) {
-    if (ttrek_RegistryHasSources()) { return TCL_OK; }
+    if (ttrek_RegistryHasSources()) { return ttrek_RegistryUseDefault(interp); }
     // Search works outside projects and never creates project state or directories.
     auto project = fs::current_path();
     while (true) {
@@ -79,6 +79,8 @@ int select_search_registry(Tcl_Interp *interp) {
         if (project == project.root_path()) { break; }
         project = project.parent_path();
     }
+    int status = ttrek_RegistryUseDefault(interp);
+    if (status != TCL_OK || ttrek_RegistryHasSources()) { return status; }
     const char *directory = ttrek_RegistryDefaultDirectory();
     require(directory && fs::is_directory(directory),
             "No local registry; run 'ttrek sync' or use 'ttrek search -registry DIRECTORY NAME'");

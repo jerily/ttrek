@@ -82,7 +82,13 @@ int main(int argc, char *argv[]) {
 #endif
 
     int first_command = 1;
-    while (first_command < argc && strcmp(argv[first_command], "-registry") == 0) {
+    while (first_command < argc) {
+        if (strcmp(argv[first_command], "-add-pubreg") == 0) {
+            *ttrek_RegistryPublicOption() = 1;
+            ++first_command;
+            continue;
+        }
+        if (strcmp(argv[first_command], "-registry") != 0) { break; }
         if (first_command + 1 >= argc) {
             fprintf(stderr, "error: -registry requires a directory or API URL\n");
             exitcode = 1;

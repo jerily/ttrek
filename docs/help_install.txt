@@ -2,6 +2,7 @@ Usage: install [options] ?package_A@version_range_A? ?package_B@version_range_B?
 
 Available options:
     -registry SOURCE - append a local directory or HTTP(S) API URL; repeat to set lookup order
+    -add-pubreg - append the public default after explicit or saved sources (synced local copy, otherwise API)
     -u - install using user mode (~/.local)
     -g - install using global mode (/usr/local/ttrek)
     default - If no mode is specified, install using local mode (./ttrek-venv)

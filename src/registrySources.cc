@@ -16,10 +16,12 @@ struct Source {
     std::string location;
     std::string argument;
     bool http;
+    bool public_registry = false;
 };
 std::vector<Source> sources;
 std::map<std::string, size_t> owners;
 bool implicit_source = false;
+int include_public = 0;
 
 void require(bool condition, const std::string &message) {
     if (!condition) { throw std::runtime_error(message); }
@@ -116,6 +118,8 @@ extern "C" void *ttrek_RegistryOptionHandler(void) {
     return reinterpret_cast<void *>(ttrek_RegistryOption);
 }
 
+extern "C" int *ttrek_RegistryPublicOption(void) { return &include_public; }
+
 extern "C" int ttrek_RegistryHasSources(void) { return !sources.empty(); }
 extern "C" int ttrek_RegistryIsLocal(void) {
     return !sources.empty() && std::none_of(sources.begin(), sources.end(), [](const Source &s) { return s.http; });
@@ -132,13 +136,19 @@ extern "C" const char *ttrek_RegistryDefaultDirectory(void) {
 }
 
 extern "C" int ttrek_RegistryUseDefault(Tcl_Interp *interp) try {
-    if (!sources.empty()) { return TCL_OK; }
+    const bool append_public = include_public && std::none_of(sources.begin(), sources.end(),
+        [](const Source &source) { return source.public_registry; });
+    if (!sources.empty() && !append_public) { return TCL_OK; }
     const char *directory = ttrek_RegistryDefaultDirectory();
-    if (!directory) { return TCL_OK; }
     std::error_code error;
-    if (!fs::is_regular_file(fs::path(directory) / ".git/ttrek-last-sync", error)) { return TCL_OK; }
-    add_source(directory);
-    implicit_source = true;
+    const bool synced = directory && fs::is_regular_file(fs::path(directory) / ".git/ttrek-last-sync", error);
+    if (append_public) {
+        add_source(synced ? directory : REGISTRY_URL);
+        sources.back().public_registry = true;
+    } else if (synced) {
+        add_source(directory);
+        implicit_source = true;
+    }
     return TCL_OK;
 } catch (const std::exception &error) {
     Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
@@ -146,7 +156,7 @@ extern "C" int ttrek_RegistryUseDefault(Tcl_Interp *interp) try {
 }
 
 extern "C" int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, const cJSON *lock) try {
-    if (!sources.empty()) { return TCL_OK; }
+    if (!sources.empty()) { return ttrek_RegistryUseDefault(interp); }
     const auto *legacy = cJSON_GetObjectItemCaseSensitive(lock, "registry");
     const auto *list = cJSON_GetObjectItemCaseSensitive(lock, "registries");
     require(!legacy || !list, "Lock file must not contain both registry and registries");
@@ -157,6 +167,14 @@ extern "C" int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, 
         require(cJSON_IsArray(list) && cJSON_GetArraySize(list), "Lock file registries must be a nonempty array");
         const cJSON *item;
         cJSON_ArrayForEach(item, list) {
+            const auto *public_registry = cJSON_GetObjectItemCaseSensitive(item, "public");
+            if (public_registry) {
+                require(cJSON_IsObject(item) && cJSON_GetArraySize(item) == 1 &&
+                        cJSON_IsTrue(public_registry) && !item->next,
+                        "Public registry must be the final entry, with only public set to true");
+                include_public = 1;
+                continue;
+            }
             const auto *directory = cJSON_GetObjectItemCaseSensitive(item, "directory");
             const auto *url = cJSON_GetObjectItemCaseSensitive(item, "url");
             const auto *source = directory ? directory : url;
@@ -166,8 +184,8 @@ extern "C" int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, 
             require(cJSON_GetArraySize(item) == 1, "Unknown registry setting; store only directory or url");
             add_source(source->valuestring, Tcl_GetString(project));
         }
-    } else { return ttrek_RegistryUseDefault(interp); }
-    return TCL_OK;
+    }
+    return ttrek_RegistryUseDefault(interp);
 } catch (const std::exception &error) {
     sources.clear();
     owners.clear();
@@ -177,14 +195,18 @@ extern "C" int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, 
 
 extern "C" void ttrek_RegistrySaveConfiguration(cJSON *lock) {
     if (implicit_source || sources.empty()) { return; }
-    if (sources.size() == 1 && !sources[0].http) {
+    if (sources.size() == 1 && !sources[0].http && !sources[0].public_registry) {
         cJSON_AddStringToObject(lock, "registry", sources[0].argument.c_str());
         return;
     }
     auto *list = cJSON_AddArrayToObject(lock, "registries");
     for (const auto &source : sources) {
         auto *entry = cJSON_CreateObject();
-        cJSON_AddStringToObject(entry, source.http ? "url" : "directory", source.argument.c_str());
+        if (source.public_registry) {
+            cJSON_AddBoolToObject(entry, "public", 1);
+        } else {
+            cJSON_AddStringToObject(entry, source.http ? "url" : "directory", source.argument.c_str());
+        }
         cJSON_AddItemToArray(list, entry);
     }
 }
