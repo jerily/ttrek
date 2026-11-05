@@ -292,14 +292,18 @@ paths resolve from the project directory.
 Repeat `-registry` to supply an ordered list of directories and HTTP(S) API URLs:
 
 ```sh
-ttrek install -y -registry ../private-recipes -registry ~/.local/ttrek-registry
-ttrek -registry https://packages.example.com/registry -registry ~/.local/ttrek-registry install -y
-ttrek init -registry ../private-recipes -registry ~/.local/ttrek-registry
+ttrek install -y -registry ../private-recipes -registry ../shared-recipes
+ttrek -registry https://packages.example.com/registry -add-pubreg install -y
+ttrek init -registry ../private-recipes -add-pubreg
 ```
 
-Options before and after the command are combined in encounter order. An explicit
-list replaces the saved list and implicit defaults. Include the public registry
-explicitly when wanted, as a local directory or `https://ttrek.sh/registry`.
+`-registry` options before and after the command are combined in encounter order.
+An explicit list replaces the saved list and implicit defaults. `-add-pubreg`
+appends the public default after those sources, regardless of where the flag
+appears. It uses `~/.local/ttrek-registry` after a successful `ttrek sync`, otherwise
+`https://ttrek.sh/registry`. Repeating the flag adds the public default only once.
+With no `-registry` options, the flag appends to the saved project sources.
+You can still name the public directory or API explicitly to choose its position.
 
 The first source containing a package owns its versions and build recipes for
 that invocation. A version constraint that cannot be met there is an error;
@@ -308,16 +312,21 @@ for package metadata advances to the next source. Unreadable or malformed
 metadata, HTTP errors, and missing recipes in the owning source stop the command.
 When all sources lack a package, the error names the package and sources searched.
 
-`init` saves multiple sources and HTTP sources in `ttrek-lock.json`:
+`init` saves multiple sources, HTTP sources and the public default in
+`ttrek-lock.json`. For example, `init -registry ../private-recipes -add-pubreg` saves:
 
 ```json
 {
   "registries": [
     {"directory": "../private-recipes"},
-    {"url": "https://ttrek.sh/registry"}
+    {"public": true}
   ]
 }
 ```
+
+The `{"public": true}` entry must be last. It resolves the public default on each
+invocation without embedding a home directory in the lock file. HTTP sources use
+`{"url": "https://packages.example.com/registry"}` entries.
 
 The existing single-directory `registry` setting remains supported. Use either
 `registry` or `registries`, not both. Saved relative directories resolve from the

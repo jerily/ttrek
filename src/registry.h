@@ -19,8 +19,11 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData);
 int ttrek_RegistryAddSource(Tcl_Interp *interp, const char *source);
 Tcl_Size ttrek_RegistryOption(void *, Tcl_Interp *, Tcl_Size, Tcl_Obj *const *, void *);
 void *ttrek_RegistryOptionHandler(void);
+// The public fallback is resolved after all explicit or saved sources are loaded.
+int *ttrek_RegistryPublicOption(void);
 #define TTREK_REGISTRY_OPTIONS \
-    {TCL_ARGV_GENFUNC, "-registry", ttrek_RegistryOptionHandler(), NULL, "append a registry directory or API URL", NULL}
+    {TCL_ARGV_GENFUNC, "-registry", ttrek_RegistryOptionHandler(), NULL, "append a registry directory or API URL", NULL}, \
+    {TCL_ARGV_CONSTANT, "-add-pubreg", INT2PTR(1), ttrek_RegistryPublicOption(), "append the default public registry", NULL}
 int ttrek_RegistryHasSources(void);
 int ttrek_RegistryIsLocal(void);
 int ttrek_RegistrySourceCount(void);

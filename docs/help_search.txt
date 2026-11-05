@@ -1,4 +1,4 @@
-Usage: ttrek search [-registry DIRECTORY]... QUERY
+Usage: ttrek search [-registry DIRECTORY]... [-add-pubreg] QUERY
 
 Print package names and descriptions, separated by a tab. Ranking:
 exact name, name prefix, name substring, literal description, name typo,
@@ -16,6 +16,8 @@ match descriptions literally. Distances are Levenshtein (insert/delete/substitut
 
 Search uses an explicit registry, the nearest project's saved registry, or an
 existing ~/.local/ttrek-registry, in that order. It works outside a project.
+-add-pubreg appends the public default after explicit or saved sources. Search
+requires a local copy created by 'ttrek sync'; HTTP registry search is unsupported.
 Descriptions from all versions are indexed; each package appears once. Missing
 descriptions are allowed. A description hit displays its matching text; name
 hits display the first nonempty description in alphabetical order.

@@ -1,4 +1,4 @@
-Usage: ttrek [-registry SOURCE]... COMMAND [options]
+Usage: ttrek [-registry SOURCE]... [-add-pubreg] COMMAND [options]
 
 -registry accepts a directory or an HTTP(S) registry API base URL. Repeat it to
 search sources in order. Directories contain package/version/ttrek.json and
@@ -8,8 +8,12 @@ Source downloads still use recipe URLs. Options also work after init, install,
 update, pretend or gen-script. init saves the ordered list in ttrek-lock.json;
 other commands use it for that invocation. Explicit options replace saved or
 default sources. Relative saved paths use the project directory.
-Otherwise ~/.local/ttrek-registry is used after a successful ttrek sync, before
-the ttrek.sh website. Normal commands never create or clone this directory.
+-add-pubreg appends the public default after the explicit or saved sources,
+regardless of option placement: the synced ~/.local/ttrek-registry when available,
+otherwise https://ttrek.sh/registry. init saves this as a portable public entry.
+With no explicit or saved sources, ~/.local/ttrek-registry is used after a
+successful ttrek sync, otherwise the ttrek.sh website. Normal commands never
+create or clone this directory.
 
 Available commands:
     init

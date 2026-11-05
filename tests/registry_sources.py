@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from urllib.parse import urlsplit
 
 BINARY = Path(sys.argv[1]).resolve()
 
@@ -22,8 +23,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                http_proxy="http://127.0.0.1:9", https_proxy="http://127.0.0.1:9",
                ALL_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1", no_proxy="127.0.0.1")
 
-    def run(*args, ok=True, cwd=project):
-        result = subprocess.run([BINARY, *args], cwd=cwd, env=env,
+    def run(*args, ok=True, cwd=project, process_env=env):
+        result = subprocess.run([BINARY, *args], cwd=cwd, env=process_env,
                                 capture_output=True, text=True, timeout=30)
         assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
         return result
@@ -65,8 +66,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
 
         def do_GET(self):
             requests.append((self.command, self.path, dict(self.headers)))
-            parts = self.path.strip("/").split("/")
+            parts = urlsplit(self.path).path.strip("/").split("/")
             source, name = (parts + ["", ""])[:2]
+            if source == "registry":
+                source = "second"  # Built-in public API, reached through a local test proxy.
             status = 200
             body = None
             if source == "first" and first_status is not None:
@@ -183,9 +186,71 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             assert "Invalid JSON" in run("pretend", *local_options, ok=False).stderr
             assert "local registries" in run("search", "app", ok=False).stderr
 
+            # The shortcut always appends the public default, regardless of option placement.
+            public = home / ".local/ttrek-registry"
+            stamp = public / ".git/ttrek-last-sync"
+            stamp.parent.mkdir(parents=True)
+            stamp.write_text("synced")
+            recipe(public, "public-only")
+            recipe(public, "shadow", "9.0.0")
+            dependency("public-only")
+            lock_file.write_text(json.dumps({"registry": "../local registry"}))
+            before = lock_file.read_bytes()
+            run("pretend", ok=False)
+            for args in (("pretend", "-add-pubreg"),
+                         ("-add-pubreg", "pretend"),
+                         ("-add-pubreg", "-registry", str(local), "pretend"),
+                         ("-registry", str(local), "pretend", "-add-pubreg"),
+                         ("pretend", "-add-pubreg", "-registry", str(local), "-add-pubreg")):
+                assert "public-only@1.0.0" in run(*args).stdout
+            assert lock_file.read_bytes() == before
+            assert run("gen-script", "-add-pubreg").stdout.startswith("#!")
+            run("install", "-y", "-add-pubreg")
+            run("update", "-y", "-add-pubreg")
+            assert json.loads(lock_file.read_text())["registry"] == "../local registry"
+            assert "registries" not in json.loads(lock_file.read_text())
+            assert run("search", "-registry", str(local), "-add-pubreg", "public-only").stdout == \
+                "public-only\tpublic-only\n"
+            dependency("shadow", ">=1.0.0")
+            assert "shadow@3.0.0" in run("-add-pubreg", "pretend", "-registry", str(local)).stdout
+
+            # init persists a portable public marker, including when it is the only source.
+            portable = root / "portable"
+            portable.mkdir()
+            run("-add-pubreg", "init", "-y", "-registry", "../local registry", "-add-pubreg", cwd=portable)
+            saved = {"registries": [{"directory": "../local registry"}, {"public": True}]}
+            assert json.loads((portable / "ttrek-lock.json").read_text())["registries"] == saved["registries"]
+            (portable / "ttrek.json").write_text(json.dumps({"dependencies": {"public-only": "1.0.0"}}))
+            assert "public-only@1.0.0" in run("pretend", cwd=portable).stdout
+            assert "public-only" in run("search", "public-only", cwd=portable).stdout
+            public_project = root / "public project"
+            public_project.mkdir()
+            run("init", "-y", "-add-pubreg", cwd=public_project)
+            assert json.loads((public_project / "ttrek-lock.json").read_text())["registries"] == [{"public": True}]
+            dependency("public-only")
+            lock_file.write_text(json.dumps(saved))
+            assert "public-only@1.0.0" in run("pretend").stdout
+            # Explicit sources replace the saved public fallback unless the flag is supplied again.
+            run("pretend", "-registry", str(local), ok=False)
+            assert "public-only@1.0.0" in run("pretend", "-registry", str(local), "-add-pubreg").stdout
+
+            # Without a completed sync, the marker resolves to the public API, not the directory.
+            stamp.unlink()
+            public_env = dict(env, ENV="LOCAL", http_proxy=base, NO_PROXY="", no_proxy="", ALL_PROXY="")
+            requests.clear()
+            assert "public-only@1.0.0" in run("pretend", process_env=public_env).stdout
+            assert run("gen-script", "-registry", str(local), "-add-pubreg", process_env=public_env).stdout.startswith("#!")
+            assert requests and all(path.startswith("http://localhost:8080/registry/") for _, path, _ in requests)
+            assert all(method == "GET" and "Authorization" not in headers and
+                       "TTrek-Environment-Id" not in headers for method, _, headers in requests)
+            assert "local registries" in run("search", "public-only", ok=False).stderr
+            stamp.write_text("synced")
+
             # Bad configuration does not become an implicit public fallback.
             for invalid in ([], "bad", [{"url": 42}], [{"url": first, "directory": str(local)}],
-                            [{"url": first, "unexpected": True}], [{"directory": first}]):
+                            [{"url": first, "unexpected": True}], [{"directory": first}],
+                            [{"public": False}], [{"public": "true"}], [{"public": True, "url": first}],
+                            [{"public": True}, {"directory": str(local)}], [{"public": True}, {"public": True}]):
                 requests.clear()
                 lock_file.write_text(json.dumps({"registries": invalid}))
                 run("pretend", ok=False)

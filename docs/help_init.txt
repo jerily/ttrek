@@ -1,4 +1,4 @@
-Usage: init [-y] [-registry SOURCE]...
+Usage: init [-y] [-registry SOURCE]... [-add-pubreg]
 
 Create ttrek.json, ttrek-lock.json and the project environment.
 -y accepts the default project name and version.
@@ -6,6 +6,9 @@ Create ttrek.json, ttrek-lock.json and the project environment.
 order. A single local directory uses "registry"; other lists use "registries".
 Later install, update, pretend and gen-script commands reuse it unless overridden.
 Relative saved paths resolve from the project directory.
+-add-pubreg appends the public default and saves {"public":true} as the last
+registries entry. It uses the synced ~/.local/ttrek-registry when available,
+otherwise https://ttrek.sh/registry, without saving a machine-specific path.
 
 The first registry containing a package supplies its versions and recipe.
 Only an absent package advances to the next registry; other errors stop lookup.

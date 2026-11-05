@@ -1,7 +1,9 @@
-Usage: update [-registry SOURCE]... [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
+Usage: update [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
 
 Update project dependencies; the default strategy is latest.
 -registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.
+-add-pubreg appends the public default after explicit or saved sources
+(synced local copy, otherwise API) without changing the saved configuration.
 
 The first registry containing a package supplies its versions and recipe.
 Only an absent package advances to the next registry; other errors stop lookup.
