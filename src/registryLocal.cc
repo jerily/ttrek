@@ -156,6 +156,26 @@ std::string read_search_description(const fs::path &path) {
     return text;
 }
 
+// Both sections participate recursively in the existing dependency graph.
+// Keep the registry wire format (version -> requirements) and lockfile requires
+// unchanged, including conditional USE-flag dependency values.
+Json recipe_dependencies(const cJSON *spec) {
+    Json result(cJSON_CreateObject(), cJSON_Delete);
+    for (const char *section : {"dependencies", "devDependencies"}) {
+        const auto *dependencies = cJSON_GetObjectItemCaseSensitive(spec, section);
+        require(!dependencies || cJSON_IsObject(dependencies), std::string(section) + " must be an object");
+        const cJSON *dependency;
+        cJSON_ArrayForEach(dependency, dependencies) {
+            require(dependency->string && dependency->string[0], "dependency names must not be empty");
+            require(!cJSON_HasObjectItem(result.get(), dependency->string),
+                    std::string("package ") + dependency->string +
+                    " is listed more than once in dependencies/devDependencies; keep it in only one section");
+            cJSON_AddItemToObject(result.get(), dependency->string, cJSON_Duplicate(dependency, 1));
+        }
+    }
+    return result;
+}
+
 Json versions(const fs::path &registry_directory, const std::string &package) {
     const auto directory = registry_directory / package;
     require(fs::exists(directory), "Package \"" + package + "\" was not found in registry \"" +
@@ -166,8 +186,7 @@ Json versions(const fs::path &registry_directory, const std::string &package) {
         if (!fs::is_directory(path)) { continue; }
         require(valid_component(path.filename().string()), "Invalid version directory: " + path.string());
         auto spec = read_spec(path);
-        cJSON_AddItemToObject(result.get(), path.filename().c_str(),
-            cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
+        cJSON_AddItemToObject(result.get(), path.filename().c_str(), recipe_dependencies(spec.get()).release());
     }
     return result;
 }
@@ -221,8 +240,7 @@ Json recipe(const fs::path &registry_directory, const std::vector<std::string> &
 
     Json result(cJSON_CreateObject(), cJSON_Delete);
     cJSON_AddStringToObject(result.get(), "version", parts[1].c_str());
-    cJSON_AddItemToObject(result.get(), "dependencies",
-        cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
+    cJSON_AddItemToObject(result.get(), "dependencies", recipe_dependencies(spec.get()).release());
     cJSON_AddItemToObject(result.get(), "install_script", cJSON_Duplicate(steps, 1));
     auto scripts = resolve_scripts(cJSON_GetObjectItemCaseSensitive(spec.get(), "scripts"), directory);
     cJSON_AddItemToObject(result.get(), "scripts", scripts.release());

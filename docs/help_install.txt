@@ -57,7 +57,10 @@ Examples:
     ttrek install -force web-wiki
     ttrek install -strategy latest web-blog
 
-A package name must appear in only one of dependencies or devDependencies.
+Both sections are followed recursively in registry recipes, including devDependencies
+of devDependencies. Transitive packages share the project prefix and are recorded
+in lockfile/manifest requires without becoming direct project dependencies.
+A package name must appear in only one section in each project or recipe.
 Manifests listing the same name in both sections are rejected.
 
 The lockfile records resolved versions; it is not proof of installation.

@@ -379,6 +379,7 @@ static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTabl
 
 static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install, bool force_requested,
                                             const std::map<std::string, std::string> &requirements,
+                                            const std::map<std::string, std::unordered_set<std::string>> &dependencies,
                                             Tcl_HashTable *global_use_flags_ht_ptr,
                                             std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
                                             std::map<std::string, std::set<UseFlag>> &use_flags_map,
@@ -393,6 +394,17 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
                                                             &package_installed_p);
 
     const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name.c_str());
+    // An older install may predate transitive devDependencies even when those
+    // tools are already installed independently. Rebuild once to record the new
+    // edges in requires, so later updates and uninstall see the complete graph.
+    bool missing_dependencies = false;
+    auto selected_dependencies = dependencies.find(package_name);
+    if (selected_dependencies != dependencies.end()) {
+        const cJSON *installed_requires = cJSON_GetObjectItem(installed, "requires");
+        for (const auto &dependency : selected_dependencies->second) {
+            if (!cJSON_HasObjectItem(installed_requires, dependency.c_str())) { missing_dependencies = true; }
+        }
+    }
     bool exact_use_flags_p = cJSON_IsObject(cJSON_GetObjectItem(installed, "requires")) &&
         cJSON_IsArray(cJSON_GetObjectItem(installed, "iuse")) &&
         cJSON_IsArray(cJSON_GetObjectItem(installed, "use")) && ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, global_use_flags_ht_ptr,
@@ -403,7 +415,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
 
     ttrek_install_type_t install_type;
-    if (force_requested || !exact_package_installed_p || !exact_use_flags_p) {
+    if (force_requested || !exact_package_installed_p || !exact_use_flags_p || missing_dependencies) {
         install_type = in_requirements_p ? DIRECT_INSTALL : DEP_INSTALL;
     } else {
         install_type = ALREADY_INSTALLED;
@@ -457,7 +469,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
             continue;
         }
         bool force_requested = state_ptr->option_force && requirements.count(install.substr(0, install.find('=')));
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, force_requested, enhanced_requirements, global_use_flags_ht_ptr,
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, force_requested, enhanced_requirements, dependencies_from_solver_map, global_use_flags_ht_ptr,
                                         iuse_flags_map, use_flags_map, execution_plan);
     }
 
