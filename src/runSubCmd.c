@@ -20,6 +20,17 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int option_global = 0;
     const char *option_script = NULL;
     const char *option_package = NULL;
+    Tcl_Size argument_count = 0;
+    Tcl_Obj *const *arguments = NULL;
+    // Everything after -- belongs to the script/command, including ttrek options.
+    for (Tcl_Size i = 1; i < objc; ++i) {
+        if (strcmp(Tcl_GetString(objv[i]), "--") == 0) {
+            argument_count = objc - i - 1;
+            arguments = objv + i + 1;
+            objc = i;
+            break;
+        }
+    }
     Tcl_ArgvInfo ArgTable[] = {
         { TCL_ARGV_CONSTANT, "-u",      INT2PTR(1), &option_user,   "run in user mode",            NULL },
         { TCL_ARGV_CONSTANT, "-g",      INT2PTR(1), &option_global, "run in global mode",          NULL },
@@ -42,7 +53,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         goto error;
     }
     if (option_script && (!option_script[0] || objc != 1)) {
-        SetResult("named script usage: ttrek run ?-u|-g? ?-package PACKAGE? -script NAME");
+        SetResult("named script usage: ttrek run ?-u|-g? ?-package PACKAGE? -script NAME ?-- ARGS...?");
         goto error;
     }
 
@@ -85,6 +96,11 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             goto error;
         }
 
+        argv = ckrealloc(argv, sizeof(char *) * (objc + argument_count + 1));
+        for (Tcl_Size i = 0; i < argument_count; ++i) {
+            argv[objc++] = Tcl_GetString(arguments[i]);
+        }
+
     } else {
 
         // Skip the command "run"
@@ -92,15 +108,18 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         objv = remObjv + 1;
 
         DBG2(fprintf(stderr, "objc: %" TCL_SIZE_MODIFIER "d", objc));
-        if (objc < 1) {
+        if (objc + argument_count < 1) {
             SetResult("no command to execute");
             goto error;
         }
 
-        argv = ckalloc(sizeof(char *) * (objc + 1));
+        argv = ckalloc(sizeof(char *) * (objc + argument_count + 1));
         for (Tcl_Size i = 0; i < objc; i++) {
             DBG2(fprintf(stderr, "add arg #%" TCL_SIZE_MODIFIER "d: [%s]", i, Tcl_GetString(objv[i])));
             argv[i] = Tcl_GetString(objv[i]);
+        }
+        for (Tcl_Size i = 0; i < argument_count; ++i) {
+            argv[objc++] = Tcl_GetString(arguments[i]);
         }
 
     }
