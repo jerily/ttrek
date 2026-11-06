@@ -53,6 +53,8 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         return TCL_ERROR;
     }
 
+    state_ptr->resolve_all_latest = objc == 1;
+
     if (ttrek_RegistryLoadFromLock(interp, state_ptr->project_home_dir_ptr, state_ptr->lock_root) != TCL_OK) {
         ttrek_DestroyState(state_ptr);
         ckfree(remObjv);

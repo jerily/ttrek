@@ -96,11 +96,13 @@ void append_package(Tcl_Interp *interp, std::string &script, const std::string &
 
 void validate_project(cJSON *spec, cJSON *lock) {
     require(cJSON_IsObject(spec) && cJSON_IsObject(lock), "Invalid project spec or lock JSON");
-    auto *dependencies = cJSON_GetObjectItemCaseSensitive(spec, "dependencies");
-    require(!dependencies || cJSON_IsObject(dependencies), "dependencies must be an object");
     const cJSON *item;
-    cJSON_ArrayForEach(item, dependencies) {
-        require(cJSON_IsString(item), "Project dependency constraints must be strings");
+    for (const char *section : {"dependencies", "devDependencies"}) {
+        auto *dependencies = cJSON_GetObjectItemCaseSensitive(spec, section);
+        require(!dependencies || cJSON_IsObject(dependencies), std::string(section) + " must be an object");
+        cJSON_ArrayForEach(item, dependencies) {
+            require(cJSON_IsString(item), "Project dependency constraints must be strings");
+        }
     }
     auto *packages = cJSON_GetObjectItemCaseSensitive(lock, "packages");
     require(!packages || cJSON_IsObject(packages), "Locked packages must be an object");

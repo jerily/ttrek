@@ -26,10 +26,12 @@ static char STRING_USE[] = "use";
 
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
-    cJSON *dependencies = cJSON_GetObjectItem(spec_root, STRING_DEPENDENCIES);
+    cJSON *dev_dependencies = cJSON_GetObjectItem(spec_root, "devDependencies");
+    const char *section = cJSON_HasObjectItem(dev_dependencies, package_name) ? "devDependencies" : STRING_DEPENDENCIES;
+    cJSON *dependencies = cJSON_GetObjectItem(spec_root, section);
     if (!dependencies) {
         dependencies = cJSON_CreateObject();
-        cJSON_AddItemToObject(spec_root, STRING_DEPENDENCIES, dependencies);
+        cJSON_AddItemToObject(spec_root, section, dependencies);
     }
 
     if (cJSON_HasObjectItem(dependencies, package_name)) {
@@ -574,13 +576,8 @@ static int ttrek_RemovePackageFromLockRoot(cJSON *lock_root, const char *package
 }
 
 static int ttrek_RemovePackageFromSpecRoot(cJSON *spec_root, const char *package_name) {
-    if (!cJSON_HasObjectItem(spec_root, "dependencies")) {
-        return TCL_ERROR;
-    }
-    cJSON *dependencies = cJSON_GetObjectItem(spec_root, "dependencies");
-    if (cJSON_HasObjectItem(dependencies, package_name)) {
-        cJSON_DeleteItemFromObject(dependencies, package_name);
-    }
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(spec_root, "dependencies"), package_name);
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(spec_root, "devDependencies"), package_name);
     return TCL_OK;
 }
 

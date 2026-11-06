@@ -8,3 +8,9 @@ Update project dependencies; the default strategy is latest.
 The first registry containing a package supplies its versions and recipe.
 Only an absent package advances to the next registry; other errors stop lookup.
 Explicit sources replace the saved list and defaults for this invocation.
+
+Both dependencies and devDependencies participate, retaining their sections.
+Named updates prefer installed versions outside the request when compatible.
+Without package arguments, update considers the entire dependency graph.
+Changed or forced packages rebuild their transitive reverse dependencies;
+unchanged forward dependencies and unrelated packages are not rebuilt.
