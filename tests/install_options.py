@@ -77,47 +77,44 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     assert "middle" not in json.loads(spec_path.read_text())["dependencies"]
     assert built("install", "-y", "top") == []
 
-    # Dev dependencies of dev dependencies install recursively, and remain
-    # transitive in the consuming project's manifest.
-    recipe("mock-service", {}, dev_dependencies={"helper": "^1.0.0"})
-    recipe("toolkit", {}, dev_dependencies={"mock-service": "^1.0.0"})
+    # A root devDependency installs its regular dependencies recursively, but
+    # none of the installed recipes' own devDependencies are followed. Missing
+    # packages and impossible constraints there must not enter resolution.
+    recipe("mock-service", {"helper": "^1.0.0"}, dev_dependencies={"missing-test-tool": "^1.0.0"})
+    recipe("toolkit", {"mock-service": "^1.0.0"}, dev_dependencies={"helper": "^99.0.0"})
     assert built("install", "-y", "-D", "toolkit") == ["mock-service@1.0.0", "toolkit@1.0.0"]
     assert json.loads(spec_path.read_text())["devDependencies"] == {"toolkit": "^1.0.0"}
     installed = json.loads((project / "ttrek-venv/ttrek-manifest.json").read_text())
     locked = json.loads((project / "ttrek-lock.json").read_text())
     for name, dependencies in (("toolkit", {"mock-service": "^1.0.0"}), ("mock-service", {"helper": "^1.0.0"})):
         assert installed[name]["requires"] == locked["packages"][name]["requires"] == dependencies
+    assert "missing-test-tool" not in installed
     assert built("install", "-y", "toolkit") == []
     assert built("install", "-y", "-force", "mock-service") == ["mock-service@1.0.0", "toolkit@1.0.0"]
-    recipe("mock-service", {}, "1.1.0", dev_dependencies={"helper": "^1.0.0"})
+    recipe("mock-service", {"helper": "^1.0.0"}, "1.1.0", dev_dependencies={"missing-test-tool": "^1.0.0"})
     assert built("update", "-y", "mock-service") == ["mock-service@1.1.0", "toolkit@1.0.0"]
 
-    # Refresh old same-version installations even if the newly discovered dev
-    # dependency was already installed separately.
-    installed = json.loads((project / "ttrek-venv/ttrek-manifest.json").read_text())
-    installed["toolkit"]["requires"] = {}
-    (project / "ttrek-venv/ttrek-manifest.json").write_text(json.dumps(installed))
-    assert built("install", "-y", "toolkit") == ["toolkit@1.0.0"]
-    assert built("install", "-y", "toolkit") == []
+    # The rule is identical whether toolkit is a root runtime or dev dependency.
+    for section in ("dependencies", "devDependencies"):
+        fresh = root / ("fresh-" + section)
+        fresh.mkdir()
+        fresh_spec = {"dependencies": {}, "devDependencies": {}}
+        fresh_spec[section]["toolkit"] = "^1.0.0"
+        (fresh / "ttrek.json").write_text(json.dumps(fresh_spec))
+        plan = run("pretend", "-registry", str(registry), cwd=fresh).stdout
+        assert "mock-service@1.1.0" in plan and "helper@1.0.0" in plan
+        assert "missing-test-tool" not in plan
+        assert not (fresh / "ttrek-venv").exists()
+        generated = run("gen-script", "-registry", str(registry), cwd=fresh).stdout
+        assert "mock-service" in generated and "helper" in generated
+        assert "missing-test-tool" not in generated
+        run("install", "-y", "-registry", str(registry), cwd=fresh)
+        assert (fresh / "ttrek-venv/build-order.log").read_text().splitlines() == [
+            "helper@1.0.0", "mock-service@1.1.0", "toolkit@1.0.0"]
+        assert json.loads((fresh / "ttrek.json").read_text()) == fresh_spec
+        fresh_installed = json.loads((fresh / "ttrek-venv/ttrek-manifest.json").read_text())
+        assert set(fresh_installed) == {"helper", "mock-service", "toolkit"}
 
-    fresh_dev = root / "fresh-dev"
-    fresh_dev.mkdir()
-    (fresh_dev / "ttrek.json").write_text(json.dumps({"dependencies": {}, "devDependencies": {"toolkit": "^1.0.0"}}))
-    plan = run("pretend", "-registry", str(registry), cwd=fresh_dev).stdout
-    assert "mock-service@1.1.0" in plan and "helper@1.0.0" in plan
-    assert not (fresh_dev / "ttrek-venv").exists()
-    generated = run("gen-script", "-registry", str(registry), cwd=fresh_dev).stdout
-    assert "mock-service" in generated and "helper" in generated
-    run("install", "-y", "-registry", str(registry), cwd=fresh_dev)
-    assert (fresh_dev / "ttrek-venv/build-order.log").read_text().splitlines() == [
-        "helper@1.0.0", "mock-service@1.1.0", "toolkit@1.0.0"]
-
-    recipe("conflicting-tool", {}, dev_dependencies={"mock-service": "^2.0.0"})
-    assert "Nothing to install!" not in run("pretend", "conflicting-tool", ok=False).stdout
-    recipe("duplicate-tool", {"helper": "^1.0.0"}, dev_dependencies={"helper": "^1.0.0"})
-    assert "only one section" in run("pretend", "duplicate-tool", ok=False).stderr
-    recipe("invalid-tool", {}, dev_dependencies=["helper"])
-    assert "devDependencies must be an object" in run("pretend", "invalid-tool", ok=False).stderr
     # Restore the original fixture graph before the existing upgrade tests.
     run("uninstall", "-y", "toolkit", "mock-service")
 
