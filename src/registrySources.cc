@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <set>
+#include <git2.h>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -50,6 +52,55 @@ std::string validate_url(const std::string &value) {
     return result;
 }
 
+fs::path sync_stamp(const fs::path &directory) {
+    auto stamp = directory / ".git/ttrek-last-sync";
+    // A linked worktree has a .git file, not a metadata directory.
+    std::error_code error;
+    if (fs::is_regular_file(directory / ".git", error)) {
+        git_libgit2_init();
+        git_repository *repo = nullptr;
+        if (git_repository_open_ext(&repo, directory.c_str(), GIT_REPOSITORY_OPEN_NO_SEARCH, nullptr) == 0) {
+            stamp = fs::path(git_repository_path(repo)) / "ttrek-last-sync";
+        }
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+    }
+    return stamp;
+}
+
+void warn_registry_freshness(const std::string &location) {
+    static std::set<std::string> warned;
+    if (warned.count(location)) { return; }
+    std::error_code error;
+    const auto stamp = sync_stamp(location);
+    if (!fs::is_regular_file(stamp, error)) { return; } // Only ttrek-sync-managed checkouts.
+    const auto modified = fs::last_write_time(stamp, error);
+    const bool old = !error && fs::file_time_type::clock::now() - modified > std::chrono::hours(24);
+    size_t ahead = 0, behind = 0;
+    git_libgit2_init();
+    git_repository *repo = nullptr;
+    if (git_repository_open_ext(&repo, location.c_str(), GIT_REPOSITORY_OPEN_NO_SEARCH, nullptr) == 0) {
+        git_oid head, upstream;
+        if (git_reference_name_to_id(&head, repo, "HEAD") == 0 &&
+            git_reference_name_to_id(&upstream, repo, "refs/remotes/origin/main") == 0) {
+            if (git_graph_ahead_behind(&ahead, &behind, repo, &head, &upstream) != 0) { behind = 0; }
+        }
+    }
+    git_repository_free(repo);
+    git_libgit2_shutdown();
+    if (!old && !behind) { return; }
+    warned.insert(location);
+    const char *default_directory = ttrek_RegistryDefaultDirectory();
+    const bool is_default = default_directory && fs::equivalent(location, default_directory, error);
+    if (behind) {
+        std::fprintf(stderr, "Local registry %s is behind the last fetched origin/main by %zu commit(s); ", location.c_str(), behind);
+    } else {
+        std::fprintf(stderr, "Local registry %s may be out of date (last synced over 24 hours ago); ", location.c_str());
+    }
+    std::fprintf(stderr, is_default ? "run 'ttrek sync' to refresh it.\n" :
+        "run 'ttrek sync .' from that directory to refresh it.\n");
+}
+
 void add_source(const std::string &argument, const fs::path &project = {}) {
     require(!argument.empty(), "-registry requires a directory or API URL");
     const bool http = is_url(argument);
@@ -58,17 +109,7 @@ void add_source(const std::string &argument, const fs::path &project = {}) {
     sources.push_back({location, http ? location : argument, http});
     implicit_source = false;
     owners.clear();
-    const char *default_directory = ttrek_RegistryDefaultDirectory();
-    std::error_code error;
-    if (!http && default_directory && fs::equivalent(location, default_directory, error)) {
-        const auto stamp = fs::path(location) / ".git/ttrek-last-sync";
-        if (fs::is_regular_file(stamp, error)) {
-            const auto modified = fs::last_write_time(stamp, error);
-            if (!error && fs::file_time_type::clock::now() - modified > std::chrono::hours(24)) {
-                std::fprintf(stderr, "Local registry has not been synced in over 24 hours; run 'ttrek sync' to refresh %s.\n", default_directory);
-            }
-        }
-    }
+    if (!http) { warn_registry_freshness(location); }
 }
 
 int read_source(const Source &source, const std::string &suffix, Tcl_DString *result) {
@@ -141,7 +182,7 @@ extern "C" int ttrek_RegistryUseDefault(Tcl_Interp *interp) try {
     if (!sources.empty() && !append_public) { return TCL_OK; }
     const char *directory = ttrek_RegistryDefaultDirectory();
     std::error_code error;
-    const bool synced = directory && fs::is_regular_file(fs::path(directory) / ".git/ttrek-last-sync", error);
+    const bool synced = directory && fs::is_regular_file(sync_stamp(directory), error);
     if (append_public) {
         add_source(synced ? directory : REGISTRY_URL);
         sources.back().public_registry = true;

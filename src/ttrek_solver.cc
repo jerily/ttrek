@@ -5,6 +5,7 @@
  */
 
 #include <algorithm>
+#include <filesystem>
 #include <sstream>
 #include <cassert>
 #include <iostream>
@@ -76,10 +77,9 @@ void ttrek_ParseLockedPackages(ttrek_state_t *state_ptr, PackageDatabase &db) {
     }
 }
 
-static void ttrek_ParseReverseDependenciesFromLock(cJSON *lock_root,
+static void ttrek_ParseReverseDependencies(cJSON *packages,
                                                    std::map<std::string, std::unordered_set<std::string>> &reverse_dependencies_map) {
 
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
     if (!packages) {
         return;
     }
@@ -87,7 +87,6 @@ static void ttrek_ParseReverseDependenciesFromLock(cJSON *lock_root,
     for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
         cJSON *package = cJSON_GetArrayItem(packages, i);
         std::string package_name = package->string;
-        std::string package_version = cJSON_GetStringValue(cJSON_GetObjectItem(package, "version"));
         if (!cJSON_HasObjectItem(package, "requires")) {
             continue;
         }
@@ -131,11 +130,10 @@ static void ttrek_ParseDependenciesFromLock(cJSON *lock_root,
 }
 
 static void
-ttrek_ParseUseFlagsFromLockFile(cJSON *lock_root,
+ttrek_ParseInstalledUseFlags(cJSON *packages,
                                 std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
                                 std::map<std::string, std::set<UseFlag>> &use_flags_map) {
 
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
     if (!packages) {
         return;
     }
@@ -190,6 +188,8 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
             std::vector<std::string> &installs) try {
 
     UNUSED(interp);
+
+    if (ttrek_CheckDependencySections(interp, state_ptr->spec_root) != TCL_OK) { return TCL_ERROR; }
 
     // Keep requested packages separate from the full set needed by the solver.
     if (objc == 0) {
@@ -288,32 +288,25 @@ static int ttrek_UpdateManifestFileAfterInstall(Tcl_Interp *interp, ttrek_state_
     return TCL_OK;
 }
 
-static int ttrek_ExistsInLock(cJSON *lock_root, const char *package_name, const char *package_version,
-                              int *package_name_exists_in_lock_p) {
-
-    *package_name_exists_in_lock_p = 0;
-
-    cJSON *packages = cJSON_GetObjectItem(lock_root, "packages");
-    if (!packages) {
-        return 0;
+static int ttrek_IsInstalled(ttrek_state_t *state_ptr, const char *name, const char *version,
+                              int *package_installed_p) {
+    const cJSON *package = cJSON_GetObjectItem(state_ptr->manifest_root, name);
+    *package_installed_p = cJSON_IsObject(package);
+    const cJSON *installed_version = cJSON_GetObjectItem(package, "version");
+    const cJSON *files = cJSON_GetObjectItem(package, "files");
+    if (!cJSON_IsString(installed_version) || strcmp(installed_version->valuestring, version) != 0 ||
+        !cJSON_IsArray(files) || !state_ptr->project_install_dir_ptr) { return 0; }
+    const std::filesystem::path prefix(Tcl_GetString(state_ptr->project_install_dir_ptr));
+    std::error_code error;
+    if (!std::filesystem::is_directory(prefix, error)) { return 0; }
+    const cJSON *file;
+    cJSON_ArrayForEach(file, files) {
+        if (!cJSON_IsString(file)) { return 0; }
+        const std::filesystem::path relative(file->valuestring);
+        if (relative.is_absolute()) { return 0; }
+        for (const auto &part : relative) { if (part == "..") { return 0; } }
+        if (!std::filesystem::exists(prefix / relative, error)) { return 0; }
     }
-
-    cJSON *package = cJSON_GetObjectItem(packages, package_name);
-    if (!package) {
-        return 0;
-    }
-
-    *package_name_exists_in_lock_p = 1;
-
-    cJSON *version = cJSON_GetObjectItem(package, "version");
-    if (!version) {
-        return 0;
-    }
-
-    if (strcmp(version->valuestring, package_version) != 0) {
-        return 0;
-    }
-
     return 1;
 }
 
@@ -330,8 +323,8 @@ struct InstallSpec {
     std::string package_name;
     std::string package_version;
     std::string direct_version_requirement;
-    int package_name_exists_in_lock_p;
-    int exact_package_exists_in_lock_p;
+    int package_installed_p;
+    int exact_package_installed_p;
     int exact_use_flags_p;
 };
 
@@ -394,12 +387,15 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     auto package_name = install.substr(0, index);
     auto package_version = install.substr(index + 1);
 
-    int package_name_exists_in_lock_p;
-    int exact_package_exists_in_lock_p = ttrek_ExistsInLock(state_ptr->lock_root, package_name.c_str(),
+    int package_installed_p;
+    int exact_package_installed_p = ttrek_IsInstalled(state_ptr, package_name.c_str(),
                                                             package_version.c_str(),
-                                                            &package_name_exists_in_lock_p);
+                                                            &package_installed_p);
 
-    bool exact_use_flags_p = ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, global_use_flags_ht_ptr,
+    const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name.c_str());
+    bool exact_use_flags_p = cJSON_IsObject(cJSON_GetObjectItem(installed, "requires")) &&
+        cJSON_IsArray(cJSON_GetObjectItem(installed, "iuse")) &&
+        cJSON_IsArray(cJSON_GetObjectItem(installed, "use")) && ttrek_HashTableCompareUseFlagsEqual(state_ptr->interp, global_use_flags_ht_ptr,
                                                                  iuse_flags_map[package_name],
                                                                  use_flags_map[package_name]);
 
@@ -407,7 +403,7 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
 
     ttrek_install_type_t install_type;
-    if (force_requested || !exact_package_exists_in_lock_p || !exact_use_flags_p) {
+    if (force_requested || !exact_package_installed_p || !exact_use_flags_p) {
         install_type = in_requirements_p ? DIRECT_INSTALL : DEP_INSTALL;
     } else {
         install_type = ALREADY_INSTALLED;
@@ -417,8 +413,8 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
             package_name,
             package_version,
             direct_version_requirement,
-            package_name_exists_in_lock_p,
-            exact_package_exists_in_lock_p,
+            package_installed_p,
+            exact_package_installed_p,
             exact_use_flags_p};
     execution_plan.push_back(install_spec);
 }
@@ -431,7 +427,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
                             std::vector<InstallSpec> &execution_plan) {
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
+    ttrek_ParseReverseDependencies(state_ptr->manifest_root, reverse_dependencies_map);
 
     std::map<std::string, std::unordered_set<std::string>> dependencies_map;
     ttrek_ParseDependenciesFromLock(state_ptr->lock_root, dependencies_map);
@@ -452,7 +448,7 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
 
     std::map<std::string, std::set<UseFlag>> iuse_flags_map;
     std::map<std::string, std::set<UseFlag>> use_flags_map;
-    ttrek_ParseUseFlagsFromLockFile(state_ptr->lock_root, iuse_flags_map, use_flags_map);
+    ttrek_ParseInstalledUseFlags(state_ptr->manifest_root, iuse_flags_map, use_flags_map);
 
     // add installs to initial execution plan
     for (const auto &install: installs) {
@@ -508,7 +504,7 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
         }
 
         if ((install_spec.install_type == DEP_INSTALL || install_spec.install_type == DIRECT_INSTALL) &&
-            install_spec.exact_package_exists_in_lock_p && !install_spec.exact_use_flags_p) {
+            install_spec.exact_package_installed_p && !install_spec.exact_use_flags_p) {
             std::cout << " (USE flags changed)";
         }
 
@@ -594,7 +590,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     }
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
+    ttrek_ParseReverseDependencies(state_ptr->manifest_root, reverse_dependencies_map);
     db.set_reverse_dependencies_map(reverse_dependencies_map);
 
     std::map<std::string, std::string> requirements;
@@ -705,7 +701,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
 
         // perform the installation
-        std::vector<InstallSpec> installs_from_lock_file_sofar;
+        std::vector<InstallSpec> previously_installed;
         for (const auto &install_spec: execution_plan) {
             if (install_spec.install_type == ALREADY_INSTALLED) {
                 continue;
@@ -713,13 +709,13 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             auto package_name = install_spec.package_name;
             auto package_version = install_spec.package_version;
             auto direct_version_requirement = install_spec.direct_version_requirement;
-            auto package_name_exists_in_lock_p = install_spec.package_name_exists_in_lock_p;
+            auto package_installed_p = install_spec.package_installed_p;
 
             // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, &global_use_flags_ht, package_name.c_str(),
                                                 package_version.c_str(), sysinfo.sysname, sysinfo.machine,
-                                                direct_version_requirement.c_str(), package_name_exists_in_lock_p,
+                                                direct_version_requirement.c_str(), package_installed_p,
                                                 ++package_num_current, package_num_total);
 
             ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
@@ -728,8 +724,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             if (TCL_OK != outcome) {
 
-                for (const auto &spec: installs_from_lock_file_sofar) {
-                    if (package_name_exists_in_lock_p) {
+                for (const auto &spec: previously_installed) {
+                    if (spec.package_installed_p) {
                         fprintf(stderr, "restoring package files from old installation: %s\n",
                                 spec.package_name.c_str());
                         if (TCL_OK != ttrek_RestoreTempFiles(interp, state_ptr, spec.package_name.c_str())) {
@@ -744,12 +740,27 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             }
 
-            if (package_name_exists_in_lock_p) {
-                installs_from_lock_file_sofar.push_back(install_spec);
+            if (package_installed_p) {
+                previously_installed.push_back(install_spec);
             }
         }
         Tcl_DecrRefCount(use_flags_list_ptr);
         Tcl_DeleteHashTable(&global_use_flags_ht);
+
+        // Refresh the selected lock graph even when a package did not need rebuilding.
+        cJSON *locked_packages = cJSON_GetObjectItem(state_ptr->lock_root, "packages");
+        if (!locked_packages) { locked_packages = cJSON_AddObjectToObject(state_ptr->lock_root, "packages"); }
+        for (const auto &spec : execution_plan) {
+            if (spec.install_type != ALREADY_INSTALLED) { continue; }
+            const char *name = spec.package_name.c_str();
+            const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, name);
+            cJSON *locked = cJSON_CreateObject();
+            for (const char *field : {"version", "iuse", "use", "requires"}) {
+                cJSON_AddItemToObject(locked, field, cJSON_Duplicate(cJSON_GetObjectItem(installed, field), 1));
+            }
+            cJSON_DeleteItemFromObject(locked_packages, name);
+            cJSON_AddItemToObject(locked_packages, name, locked);
+        }
 
         for (const auto &spec : execution_plan) {
             if (!requirements.count(spec.package_name)) { continue; }
@@ -766,9 +777,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             if (version.empty()) { version = "^" + spec.package_version; }
             cJSON_DeleteItemFromObject(deps, name);
             cJSON_AddStringToObject(deps, name, version.c_str());
-            if (state_ptr->option_save_dev) {
-                cJSON_DeleteItemFromObject(cJSON_GetObjectItem(state_ptr->spec_root, "dependencies"), name);
-            }
+            const char *other_section = strcmp(section, "dependencies") == 0 ? "devDependencies" : "dependencies";
+            cJSON_DeleteItemFromObject(cJSON_GetObjectItem(state_ptr->spec_root, other_section), name);
             cJSON *lock_deps = cJSON_GetObjectItem(state_ptr->lock_root, "dependencies");
             if (!lock_deps) {
                 lock_deps = cJSON_CreateObject();
@@ -791,7 +801,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
-        for (const auto &install_spec: installs_from_lock_file_sofar) {
+        for (const auto &install_spec: previously_installed) {
             ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
         }
 
@@ -803,6 +813,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ttrek_state_t *state_ptr, int autoremove,
                     int *abort) {
 
+    if (ttrek_CheckDependencySections(interp, state_ptr->spec_root) != TCL_OK) { return TCL_ERROR; }
     std::unordered_set<std::string> uninstalls;
 
     // prepare the initial list of packages to uninstall
@@ -814,7 +825,7 @@ int ttrek_Uninstall(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], tt
     // prepare the list of reverse dependencies to uninstall
 
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
-    ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
+    ttrek_ParseReverseDependencies(state_ptr->manifest_root, reverse_dependencies_map);
 
     bool changed;
     do {
@@ -1001,8 +1012,13 @@ extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *c
         ckfree(remaining);
         return TCL_ERROR;
     }
+    Tcl_Obj *venv = ttrek_GetProjectVenvDir(interp, project);
+    Tcl_Obj *prefix = ttrek_GetVenvSubDir(interp, venv, INSTALL_DIR);
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> manifest(ttrek_GetManifestRoot(interp, venv), cJSON_Delete);
+    Tcl_DecrRefCount(venv);
     Tcl_DecrRefCount(project);
     try {
+        if (!cJSON_IsObject(manifest.get())) { throw std::runtime_error("Invalid installed manifest JSON"); }
         if (!cJSON_IsObject(spec.get()) || !cJSON_IsObject(lock.get())) {
             throw std::runtime_error("Invalid project spec or lock JSON");
         }
@@ -1013,8 +1029,11 @@ extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *c
         state.interp = interp;
         state.spec_root = spec.get();
         state.lock_root = lock.get();
+        state.manifest_root = manifest.get();
+        state.project_install_dir_ptr = prefix;
         state.mode = MODE_LOCAL;
         state.strategy = ttrek_StrategyFromString(strategy, STRATEGY_FAVORED);
+        state.resolve_all_latest = objc == 1;
         state.option_force = force;
         state.option_pretend = 1;
         int abort = 0;
@@ -1022,6 +1041,7 @@ extern "C" int ttrek_PretendSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *c
     } catch (const std::exception &error) {
         Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
     }
+    Tcl_DecrRefCount(prefix);
     ckfree(remaining);
     return status;
 }

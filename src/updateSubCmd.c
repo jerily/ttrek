@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT.
  */
 
+#include <string.h>
 #include "subCmdDecls.h"
 #include "ttrek_solver.h"
 #include "ttrek_git.h"
@@ -32,6 +33,20 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
 
     Tcl_Obj **remObjv = NULL;
     if (Tcl_ParseArgsObjv(interp, ArgTable, &objc, objv, &remObjv) != TCL_OK) {
+        return TCL_ERROR;
+    }
+
+    for (Tcl_Size i = 1; i < objc; ++i) {
+        if (Tcl_GetString(remObjv[i])[0] == '-') {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("unknown update option: %s", Tcl_GetString(remObjv[i])));
+            ckfree(remObjv);
+            return TCL_ERROR;
+        }
+    }
+    if (option_strategy && strcmp(option_strategy, "latest") != 0 &&
+            strcmp(option_strategy, "favored") != 0 && strcmp(option_strategy, "locked") != 0) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("invalid strategy: expected latest, favored, or locked", -1));
+        ckfree(remObjv);
         return TCL_ERROR;
     }
 

@@ -180,7 +180,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             dependency("shadow", ">=1.0.0")
             assert "shadow@1.0.0" in run("pretend", *local_options).stdout
             dependency("local-only")
-            assert "local-only@1.0.0" in run("pretend", *local_options).stdout
+            assert "Nothing to install!" in run("pretend", *local_options).stdout
             corrupt = recipe(earlier, "local-only")
             corrupt.write_text("invalid JSON")
             assert "Invalid JSON" in run("pretend", *local_options, ok=False).stderr
@@ -202,7 +202,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                          ("-add-pubreg", "-registry", str(local), "pretend"),
                          ("-registry", str(local), "pretend", "-add-pubreg"),
                          ("pretend", "-add-pubreg", "-registry", str(local), "-add-pubreg")):
-                assert "public-only@1.0.0" in run(*args).stdout
+                assert "Nothing to install!" in run(*args).stdout
             assert lock_file.read_bytes() == before
             assert run("gen-script", "-add-pubreg").stdout.startswith("#!")
             run("install", "-y", "-add-pubreg")
@@ -229,16 +229,16 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             assert json.loads((public_project / "ttrek-lock.json").read_text())["registries"] == [{"public": True}]
             dependency("public-only")
             lock_file.write_text(json.dumps(saved))
-            assert "public-only@1.0.0" in run("pretend").stdout
+            assert "Nothing to install!" in run("pretend").stdout
             # Explicit sources replace the saved public fallback unless the flag is supplied again.
             run("pretend", "-registry", str(local), ok=False)
-            assert "public-only@1.0.0" in run("pretend", "-registry", str(local), "-add-pubreg").stdout
+            assert "Nothing to install!" in run("pretend", "-registry", str(local), "-add-pubreg").stdout
 
             # Without a completed sync, the marker resolves to the public API, not the directory.
             stamp.unlink()
             public_env = dict(env, ENV="LOCAL", http_proxy=base, NO_PROXY="", no_proxy="", ALL_PROXY="")
             requests.clear()
-            assert "public-only@1.0.0" in run("pretend", process_env=public_env).stdout
+            assert "Nothing to install!" in run("pretend", process_env=public_env).stdout
             assert run("gen-script", "-registry", str(local), "-add-pubreg", process_env=public_env).stdout.startswith("#!")
             assert requests and all(path.startswith("http://localhost:8080/registry/") for _, path, _ in requests)
             assert all(method == "GET" and "Authorization" not in headers and

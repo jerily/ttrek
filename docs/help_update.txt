@@ -1,4 +1,4 @@
-Usage: update [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-y] [-force] ?package@version_range ...?
+Usage: update [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-y] [-force] [-u|-g] ?package@version_range ...?
 
 Update project dependencies; the default strategy is latest.
 -registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.
@@ -10,7 +10,18 @@ Only an absent package advances to the next registry; other errors stop lookup.
 Explicit sources replace the saved list and defaults for this invocation.
 
 Both dependencies and devDependencies participate, retaining their sections.
-Named updates prefer installed versions outside the request when compatible.
+Named updates prefer locked versions outside the request when compatible.
 Without package arguments, update considers the entire dependency graph.
 Changed or forced packages rebuild their transitive reverse dependencies;
 unchanged forward dependencies and unrelated packages are not rebuilt.
+
+With no package names, root constraints come from both dependency sections.
+All locked packages remain in the resolution graph; latest chooses the newest
+versions satisfying the root and transitive constraints. A named update keeps
+its saved range unless NAME@RANGE explicitly replaces it. Unrequested locked
+versions are favored when compatible. New packages, changed versions or USE
+flags, forced targets, and their reverse dependencies form the execution plan.
+An already-current, fully installed graph does not rebuild packages.
+The resolved versions refresh ttrek-lock.json, including packages already installed.
+Installed-state checks use ttrek-venv/ttrek-manifest.json and its recorded files.
+-u updates the user environment; -g updates the global environment.

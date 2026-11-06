@@ -208,7 +208,7 @@ Create a project directory and run:
 /path/to/ttrek/build/ttrek update
 ```
 
-`pretend` reads the project's `ttrek.json` and optional `ttrek-lock.json`, resolves
+`pretend` reads the project's `ttrek.json`, optional `ttrek-lock.json` and installed manifest, resolves
 against the live registry, and prints the same installation plan as `install`.
 It does not create a venv, modify project files, run hooks, install packages,
 or initialize/send telemetry. It supports `-force` and
@@ -216,18 +216,38 @@ or initialize/send telemetry. It supports `-force` and
 With no package arguments it resolves existing project requirements.
 Resolution conflicts and malformed/failed metadata requests return a nonzero exit.
 
-`install --save-dev PACKAGE` (or `-D`, with `-save-dev` also accepted) records
+`install -save-dev PACKAGE` (or `-D`) records
 explicitly named packages in `devDependencies`. Existing runtime dependencies
 move to that section even if no rebuild is needed. Plain install and update
 resolve both sections and preserve the classification; transitive packages stay
-in the lockfile. Uninstall removes entries from either section.
+in the lockfile. Uninstall removes entries from either section. A package name must occur in only
+one section; manifests with duplicate names across the two sections are rejected.
 
 `install -force PACKAGE` rebuilds that package and its transitive reverse
 dependencies. Changed versions and USE flags also rebuild affected dependents,
 in dependency order, while unchanged forward dependencies remain installed.
-Targeted updates prefer installed versions outside the request when compatible;
+Targeted updates prefer locked versions outside the request when compatible;
 `update` without package arguments considers the entire dependency graph.
 See `ttrek help install` for all install options and strategies.
+
+The lockfile records resolution choices. Installed state comes from
+`ttrek-venv/ttrek-manifest.json`: each package records its version, files, `iuse`,
+`use`, `requires`, and scripts. A lockfile copied into a fresh checkout does not
+skip installation. Missing files or mismatching installed versions/flags trigger
+reinstallation; old manifests without build metadata are rebuilt once.
+Resolution defaults stay `favored` for install and `latest` for update. Update
+selects newer versions within the saved constraints and refreshes the lockfile.
+
+Rollback history lives in `ttrek-venv/.ttrek-git`, accessed explicitly by ttrek.
+Existing internal `.git` directories are renamed on the next install/update,
+preserving history. No `.git` pointer remains for ordinary Git/editor discovery.
+An editor that already registered the old repository may need a reload.
+
+For registries managed by `ttrek sync`, commands warn when the checkout is behind
+its fetched `origin/main` or was last synced over 24 hours ago. The warning
+suggests `ttrek sync` for the default registry, or `ttrek sync .` from a custom
+registry directory. This uses local metadata; it does not fetch during resolution.
+
 
 `ttrek.json` also describes ttrek’s pinned static build. `build-ttrek.sh` remains available.
 
@@ -375,11 +395,12 @@ registry searched, with a suggestion to check the name or select another registr
 Automatic default selection is not saved in project lockfiles, so projects stay
 portable and fall back to the website if that checkout is later removed.
 
-Sync records `.git/ttrek-last-sync`. After 24 hours, commands using the default
-checkout print a refresh reminder to stderr with `ttrek sync`. This reports the
-age of the last successful sync, without requiring a network check or claiming
-to know GitHub's current commit. Stale data remains usable offline. `gen-script`
-continues to emit only the script on stdout.
+Sync records `ttrek-last-sync` in the checkout's Git metadata directory, including
+linked worktrees. Commands warn on stderr if the last sync was over 24 hours ago
+or HEAD is behind the fetched `origin/main`. The message suggests `ttrek sync`
+for the default checkout or `ttrek sync .` inside a custom checkout. This uses
+local metadata and does not claim to know GitHub's current commit. Stale data
+remains usable offline. `gen-script` continues to emit only the script on stdout.
 
 ### Update the ttrek executable
 

@@ -823,7 +823,23 @@ ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strate
 }
 
 
+int ttrek_CheckDependencySections(Tcl_Interp *interp, const cJSON *spec_root) {
+    const cJSON *dependencies = cJSON_GetObjectItemCaseSensitive(spec_root, "dependencies");
+    const cJSON *dev_dependencies = cJSON_GetObjectItemCaseSensitive(spec_root, "devDependencies");
+    const cJSON *dependency;
+    cJSON_ArrayForEach(dependency, dependencies) {
+        if (dependency->string && cJSON_GetObjectItemCaseSensitive(dev_dependencies, dependency->string)) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+                "package %s is listed in both dependencies and devDependencies; keep it in only one section",
+                dependency->string));
+            return TCL_ERROR;
+        }
+    }
+    return TCL_OK;
+}
+
 int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
+    if (ttrek_CheckDependencySections(interp, spec_root) != TCL_OK) { return TCL_ERROR; }
     const char *sections[] = {"dependencies", "devDependencies"};
     for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); ++i) {
         cJSON *deps = cJSON_GetObjectItem(spec_root, sections[i]);
