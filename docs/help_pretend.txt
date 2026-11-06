@@ -1,7 +1,8 @@
 Usage: pretend [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-force] ?package@version_range ...?
 
 Resolve the project with the same solver and planner used by install/update.
-Read ttrek.json and the optional ttrek-lock.json, and print the install plan.
+Read ttrek.json and the optional ttrek-lock.json and ttrek-venv/ttrek-manifest.json,
+check installed files, and print the install plan.
 Do not write project files, create a venv, run hooks, or install packages.
 The default strategy is favored, as for install; use latest to preview update.
 -registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.

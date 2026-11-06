@@ -75,7 +75,6 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     const char *option_strategy = NULL;
     Tcl_ArgvInfo ArgTable[] = {
             TTREK_REGISTRY_OPTIONS,
-            {TCL_ARGV_CONSTANT, "--save-dev", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
             {TCL_ARGV_CONSTANT, "-D", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
             {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
             {TCL_ARGV_CONSTANT, "-fail-verbose", INT2PTR(1),              &option_fail_verbose, "show verbose output on failure",                                     NULL},

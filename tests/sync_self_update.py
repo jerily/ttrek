@@ -89,7 +89,14 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     (mirror / "next").write_text("next")
     git("-C", str(mirror), "add", ".")
     git("-C", str(mirror), "commit", "-m", "next")
+    git("-C", str(checkout), "fetch", "origin", "main")
+    stamp.touch()  # A recent timestamp must not hide a known newer remote commit.
+    behind = run("gen-script", "-registry", str(checkout), "-registry", str(checkout))
+    assert "behind the last fetched origin/main" in behind.stderr
+    assert behind.stderr.count("run 'ttrek sync'") == 1
+    assert behind.stdout == generated.stdout
     run("sync")
+    assert "run 'ttrek sync'" not in run("gen-script").stderr
     assert (checkout / "next").read_text() == "next"
     (checkout / "dirty").write_text("keep")
     run("sync", ok=False)
@@ -104,6 +111,18 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     current.mkdir()
     run("sync", ".", cwd=current)
     assert (current / ".git").exists()
+    os.utime(current / ".git/ttrek-last-sync", (old, old))
+    custom_stale = run("gen-script", "-registry", str(current))
+    assert "may be out of date" in custom_stale.stderr and "ttrek sync ." in custom_stale.stderr
+    assert custom_stale.stdout == generated.stdout
+    git("-C", str(current), "switch", "-c", "worktree-test")
+    worktree = root / "registry worktree"
+    git("-C", str(current), "worktree", "add", str(worktree), "main")
+    worktree_gitdir = Path(git("-C", str(worktree), "rev-parse", "--absolute-git-dir"))
+    worktree_stamp = worktree_gitdir / "ttrek-last-sync"
+    worktree_stamp.write_text(git("-C", str(worktree), "rev-parse", "HEAD"))
+    os.utime(worktree_stamp, (old, old))
+    assert "ttrek sync ." in run("gen-script", "-registry", str(worktree)).stderr
     run("sync", str(root / "separate checkout"))
     divergent = root / "separate checkout"
     git("-C", str(divergent), "config", "user.name", "Test")

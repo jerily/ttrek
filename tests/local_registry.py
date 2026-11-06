@@ -186,6 +186,19 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     finally:
         hidden_registry.rename(registry)
 
+    # Desired lock flags cannot stand in for the flags used by the installed build.
+    spec["useFlags"] = ["+static"]
+    spec_file.write_text(json.dumps(spec))
+    desired = json.loads(lock_file.read_text())
+    for package in desired["packages"].values():
+        package["use"] = ["+static"]
+    lock_file.write_text(json.dumps(desired))
+    assert "USE flags changed" in run("pretend").stdout
+    run("install", "-y")
+    assert (project / "ttrek-venv/local/lib/libbase.a").exists()
+    assert json.loads(manifest_file.read_text())["base"]["use"] == ["+static"]
+    assert "Nothing to install!" in run("pretend").stdout
+
     shutil.copytree(registry / "base/1.0.0", registry / "base/1.1.0")
     newer = copy.deepcopy(recipes["base"])
     newer["version"] = "1.1.0"

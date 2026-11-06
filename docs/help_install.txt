@@ -7,8 +7,7 @@ Available options:
     -force - reinstall requested packages even when unchanged, plus their transitive reverse dependencies
     -strategy STRATEGY - dependency resolution: favored (default), latest, or locked
     -fail-verbose - show the build log when installation fails
-    --save-dev, -D - save explicitly named packages in devDependencies (as in npm)
-    -save-dev - single-dash alias for --save-dev
+    -save-dev, -D - save explicitly named packages in devDependencies
     -u - install using user mode (~/.local)
     -g - install using global mode (/usr/local/ttrek)
     default - If no mode is specified, install using local mode (./ttrek-venv)
@@ -35,14 +34,14 @@ Explicit sources replace the saved list and defaults for this invocation.
 
 Without package arguments, install resolves both dependencies and devDependencies,
 runs the project's build instructions, and preserves each dependency's section.
---save-dev affects only explicitly named packages; it also moves an existing
+-save-dev affects only explicitly named packages; it also moves an existing
 runtime dependency to devDependencies without requiring a rebuild. Transitive
 packages are not added to either direct-dependency section.
 
 Strategies:
-    favored - prefer installed versions that satisfy the requirements
+    favored - prefer versions recorded in the lockfile that satisfy the requirements
     latest  - prefer newest compatible versions for requested packages; keep
-              other installed versions when compatible with the requested change
+              other locked versions when compatible with the requested change
               (without package arguments, consider the entire dependency graph)
     locked  - require locked versions for packages already in the lock file
 
@@ -53,7 +52,15 @@ The preInstall and postInstall project hooks run around the install operation.
 
 Examples:
     ttrek install -y twebserver
-    ttrek install --save-dev cmake
+    ttrek install -save-dev cmake
     ttrek install -D ninja
     ttrek install -force web-wiki
     ttrek install -strategy latest web-blog
+
+A package name must appear in only one of dependencies or devDependencies.
+Manifests listing the same name in both sections are rejected.
+
+The lockfile records resolved versions; it is not proof of installation.
+ttrek-venv/ttrek-manifest.json records installed versions, files, build flags,
+and dependencies. Missing installations or files are rebuilt even when locked.
+Older manifests without build metadata are refreshed by reinstalling once.

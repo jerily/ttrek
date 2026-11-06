@@ -1,6 +1,7 @@
 """Check installed artifacts and build order using a disposable local registry."""
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -75,15 +76,86 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     assert "middle" not in json.loads(spec_path.read_text())["dependencies"]
     assert built("install", "-y", "top") == []
 
+    # Lock preferences and installed state are independent. A cloned lock still builds.
+    cloned = root / "cloned"
+    cloned.mkdir()
+    for filename in ("ttrek.json", "ttrek-lock.json"):
+        shutil.copyfile(project / filename, cloned / filename)
+    clone_plan = run("pretend", cwd=cloned).stdout
+    assert "Nothing to install!" not in clone_plan
+    assert not (cloned / "ttrek-venv").exists()
+    run("install", "-y", cwd=cloned)
+    for name in ("helper", "base", "middle", "top", "unrelated"):
+        assert (cloned / f"ttrek-venv/local/share/{name}.txt").read_text() == "1.0.0"
+
+    manifest_path = project / "ttrek-venv/ttrek-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["base"]["requires"] == {"helper": "^1.0.0"}
+    assert manifest["base"]["iuse"] == manifest["base"]["use"] == []
+    # Repair missing files, missing entries and versions that disagree with the lock.
+    (project / "ttrek-venv/local/share/base.txt").unlink()
+    assert built("install", "-y") == ["base@1.0.0", "middle@1.0.0", "top@1.0.0"]
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["unrelated"]
+    (project / "ttrek-venv/local/share/unrelated.txt").unlink()
+    manifest_path.write_text(json.dumps(manifest))
+    assert built("install", "-y") == ["unrelated@1.0.0"]
+    assert json.loads(manifest_path.read_text())["unrelated"]["files"] == ["share/unrelated.txt"]
+    manifest = json.loads(manifest_path.read_text())
+    manifest["base"]["version"] = "0.9.0"
+    manifest_path.write_text(json.dumps(manifest))
+    assert built("install", "-y") == ["base@1.0.0", "middle@1.0.0", "top@1.0.0"]
+    # Older manifests have no build flags; rebuild once to populate them.
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["unrelated"]["iuse"]
+    manifest_path.write_text(json.dumps(manifest))
+    assert built("install", "-y") == ["unrelated@1.0.0"]
+    assert built("install", "-y") == []
+
+    # Internal history is retained but ordinary Git discovery cannot see it.
+    venv = project / "ttrek-venv"
+    gitdir = venv / ".ttrek-git"
+    def git(*args):
+        return subprocess.run(["git", "--git-dir", str(gitdir), *args], env=env,
+                              text=True, capture_output=True, check=True).stdout.strip()
+    assert gitdir.is_dir() and not (venv / ".git").exists()
+    assert not any(path.startswith(".ttrek-git/") for path in git("ls-files").splitlines())
+    assert subprocess.run(["git", "-C", str(venv), "rev-parse", "--show-toplevel"],
+                          env=env, capture_output=True).returncode != 0
+    head = git("rev-parse", "HEAD")
+    gitdir.rename(venv / ".git")
+    assert built("install", "-y", "top") == []
+    assert gitdir.is_dir() and not (venv / ".git").exists()
+    assert git("rev-parse", "HEAD") == head
+    # Recovery from an interrupted install still uses the renamed history.
+    (venv / "local/share/base.txt").write_text("broken")
+    manifest_path.write_text("{}")
+    (venv / ".dirty").touch()
+    assert built("install", "-y", "top") == []
+    assert (venv / "local/share/base.txt").read_text() == "1.0.0"
+    assert gitdir.is_dir()
+
     recipe("base", graph["base"], "1.1.0")
     recipe("unrelated", graph["unrelated"], "1.1.0")
+    shutil.rmtree(cloned / "ttrek-venv")
+    run("install", "-y", cwd=cloned)
+    assert (cloned / "ttrek-venv/local/share/base.txt").read_text() == "1.0.0"
+    assert (cloned / "ttrek-venv/local/share/unrelated.txt").read_text() == "1.0.0"
+    assert "unrelated@1.1.0" in run("pretend", "-strategy", "latest").stdout
     assert built("update", "-y", "base") == [
         "base@1.1.0", "middle@1.0.0", "top@1.0.0"]
     assert (project / "ttrek-venv/local/share/unrelated.txt").read_text() == "1.0.0"
-    assert built("install", "-y", "--save-dev", "devtool") == ["devtool@1.0.0"]
+    # A stale lock may select an already installed version: refresh it without rebuilding.
+    lock_path = project / "ttrek-lock.json"
+    locked = json.loads(lock_path.read_text())
+    locked["packages"]["base"]["version"] = "1.0.0"
+    lock_path.write_text(json.dumps(locked))
+    assert built("update", "-y", "base") == []
+    assert json.loads(lock_path.read_text())["packages"]["base"]["version"] == "1.1.0"
+    assert built("install", "-y", "-save-dev", "devtool") == ["devtool@1.0.0"]
     assert built("install", "-y", "-D", "top") == []
     spec = json.loads(spec_path.read_text())
-    assert built("install", "-y", "--save-dev") == []
+    assert built("install", "-y", "-save-dev") == []
     assert json.loads(spec_path.read_text()) == spec
     assert "Nothing to install!" in run("pretend").stdout
     assert spec["devDependencies"] == {"devtool": "^1.0.0", "top": "^1.0.0"}
@@ -107,6 +179,26 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     run("uninstall", "-y", "devtool")
     assert "devtool" not in json.loads(spec_path.read_text())["devDependencies"]
 
+    # Duplicate names are rejected consistently, including differing constraints.
+    duplicate = root / "duplicate"
+    duplicate.mkdir()
+    invalid = {"dependencies": {"base": "1.0.0"}, "devDependencies": {"base": "1.1.0"}}
+    invalid_path = duplicate / "ttrek.json"
+    invalid_path.write_text(json.dumps(invalid))
+    for command in ("install", "update", "pretend", "gen-script"):
+        for packages in ((), ("base",)):
+            failed = run(command, "-registry", str(registry), *packages, cwd=duplicate, ok=False)
+            assert "base is listed in both dependencies and devDependencies" in failed.stderr
+            assert json.loads(invalid_path.read_text()) == invalid
+
+    # Updates respect saved ranges, and explicit overrides only change that target.
+    recipe("unrelated", graph["unrelated"], "2.0.0")
+    assert built("update", "-y", "unrelated") == []
+    assert built("update", "-y", "unrelated@2.0.0") == ["unrelated@2.0.0"]
+    assert json.loads(spec_path.read_text())["dependencies"]["unrelated"] == "2.0.0"
+    assert "invalid strategy" in run("update", "-strategy", "invalid", ok=False).stderr
+    assert "unknown update option" in run("update", "-bogus", ok=False).stderr
+
     # Reach every reverse dependency even through chains longer than ten packages.
     deep = root / "deep"
     deep.mkdir()
@@ -120,12 +212,17 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
         packages[name] = {"version": "1.0.0", "requires": dependencies}
     (deep / "ttrek.json").write_text(json.dumps({"dependencies": {"chain12": "1.0.0"}}))
     (deep / "ttrek-lock.json").write_text(json.dumps({"registry": str(registry), "packages": packages}))
+    (deep / "ttrek-venv/local").mkdir(parents=True)
+    installed = {name: dict(package, files=[], iuse=[], use=[]) for name, package in packages.items()}
+    (deep / "ttrek-venv/ttrek-manifest.json").write_text(json.dumps(installed))
     plan = run("pretend", "-force", "chain0", cwd=deep).stdout
+    assert plan.count("reverse dependency") == 12, plan
     for index in range(13):
         assert f"chain{index}@1.0.0" in plan, plan
 
     assert "invalid strategy" in run("install", "-strategy", "invalid", ok=False).stderr
-    for flag in ("--save-dev", "-D", "-save-dev", "-force", "-strategy", "-fail-verbose", "-y"):
+    assert "unknown install option: --save-dev" in run("install", "--save-dev", "devtool", ok=False).stderr
+    for flag in ("-save-dev", "-D", "-force", "-strategy", "-fail-verbose", "-y"):
         assert flag in run("help", "install").stdout
 
 print("Install options passed: dev dependencies, targeted rebuilds/updates, ordering, fresh installs, and deep reverse dependencies")

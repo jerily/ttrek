@@ -9,6 +9,30 @@
 
 #define MAX_GIT_DEPTH 3
 
+#define TTREK_GIT_DIR ".ttrek-git"
+
+static int ttrek_GitOpen(git_repository **repo, ttrek_state_t *state_ptr) {
+    Tcl_Obj *directory = ttrek_GetVenvSubDir(state_ptr->interp, state_ptr->project_venv_dir_ptr, TTREK_GIT_DIR);
+    int result = git_repository_open(repo, Tcl_GetString(directory));
+    Tcl_DecrRefCount(directory);
+    if (result == 0) {
+        result = git_repository_set_workdir(*repo, Tcl_GetString(state_ptr->project_venv_dir_ptr), 0);
+    }
+    if (result == 0) { result = git_ignore_add_rule(*repo, "/" TTREK_GIT_DIR "/"); }
+    return result;
+}
+
+static int ttrek_GitConfigure(git_repository *repo, ttrek_state_t *state_ptr) {
+    git_config *config = NULL;
+    int result = git_repository_config(&config, repo);
+    if (result == 0) { result = git_config_set_bool(config, "core.bare", 0); }
+    if (result == 0) { result = git_config_set_string(config, "core.worktree", ".."); }
+    git_config_free(config);
+    if (result == 0) { result = git_repository_set_workdir(repo, Tcl_GetString(state_ptr->project_venv_dir_ptr), 0); }
+    if (result == 0) { result = git_ignore_add_rule(repo, "/" TTREK_GIT_DIR "/"); }
+    return result;
+}
+
 int ttrek_GitInit(ttrek_state_t *state_ptr) {
     // initialize the libgit2 library
     git_libgit2_init();
@@ -20,7 +44,10 @@ int ttrek_GitInit(ttrek_state_t *state_ptr) {
     git_tree *tree = NULL;
 
     // initialize a new git repository in the given path
-    int error = git_repository_init(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr), 0);
+    Tcl_Obj *directory = ttrek_GetVenvSubDir(state_ptr->interp, state_ptr->project_venv_dir_ptr, TTREK_GIT_DIR);
+    int error = git_repository_init(&repo, Tcl_GetString(directory), 1);
+    Tcl_DecrRefCount(directory);
+    if (error == 0) { error = ttrek_GitConfigure(repo, state_ptr); }
     if (error < 0) {
         const git_error *e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
@@ -183,7 +210,7 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
     git_commit *commit = NULL;
     const char *commit_sha = "HEAD";
 
-    if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+    if (ttrek_GitOpen(&repo, state_ptr) != 0) {
         fprintf(stderr, "error: opening repository failed\n");
         git_libgit2_shutdown();
         return TCL_ERROR;
@@ -239,7 +266,7 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
     git_tree *tree = NULL;
     git_commit *parent = NULL;
 
-    if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+    if (ttrek_GitOpen(&repo, state_ptr) != 0) {
         fprintf(stderr, "error: opening repository failed\n");
         git_libgit2_shutdown();
         return TCL_ERROR;
@@ -374,7 +401,7 @@ int ttrek_GitAmend(ttrek_state_t *state_ptr) {
     git_tree *tree = NULL;
     git_commit *parent = NULL;
 
-    if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+    if (ttrek_GitOpen(&repo, state_ptr) != 0) {
         fprintf(stderr, "error: opening repository failed\n");
         git_libgit2_shutdown();
         return TCL_ERROR;
@@ -489,21 +516,40 @@ int ttrek_GitAmend(ttrek_state_t *state_ptr) {
 
 int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
 
-    // check if .git exists in ttrek-venv directory
-
-    Tcl_Obj *git_dir_ptr = ttrek_GetVenvSubDir(interp, state_ptr->project_venv_dir_ptr, ".git");
-    int exists;
-    if (TCL_OK != ttrek_DirectoryExists(interp, git_dir_ptr, &exists)) {
-        fprintf(stderr, "error: could not check if .git exists\n");
-        return TCL_ERROR;
+    Tcl_Obj *git_dir_ptr = ttrek_GetVenvSubDir(interp, state_ptr->project_venv_dir_ptr, TTREK_GIT_DIR);
+    Tcl_Obj *old_dir_ptr = ttrek_GetVenvSubDir(interp, state_ptr->project_venv_dir_ptr, ".git");
+    int exists = 0, old_exists = 0;
+    int status = ttrek_DirectoryExists(interp, git_dir_ptr, &exists);
+    if (status == TCL_OK) { status = ttrek_DirectoryExists(interp, old_dir_ptr, &old_exists); }
+    if (status == TCL_OK && exists && old_exists) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("both .git and .ttrek-git exist in ttrek-venv; resolve the conflict before installing", -1));
+        status = TCL_ERROR;
     }
+    if (status == TCL_OK && !exists && old_exists) {
+        status = Tcl_FSRenameFile(old_dir_ptr, git_dir_ptr);
+        if (status == TCL_OK) {
+            git_libgit2_init();
+            git_repository *repo = NULL;
+            int result = git_repository_open(&repo, Tcl_GetString(git_dir_ptr));
+            if (result == 0) { result = ttrek_GitConfigure(repo, state_ptr); }
+            git_repository_free(repo);
+            git_libgit2_shutdown();
+            if (result < 0) {
+                Tcl_FSRenameFile(git_dir_ptr, old_dir_ptr);
+                Tcl_SetObjResult(interp, Tcl_NewStringObj("could not migrate the internal Git repository", -1));
+                status = TCL_ERROR;
+            } else { exists = 1; }
+        }
+    }
+    Tcl_DecrRefCount(old_dir_ptr);
     Tcl_DecrRefCount(git_dir_ptr);
+    if (status != TCL_OK) { return TCL_ERROR; }
 
     if (exists) {
         // try to open the repository
         git_libgit2_init();
         git_repository *repo = NULL;
-        if (git_repository_open(&repo, Tcl_GetString(state_ptr->project_venv_dir_ptr)) != 0) {
+        if (ttrek_GitOpen(&repo, state_ptr) != 0) {
             fprintf(stderr, "error: opening repository failed\n");
             git_repository_free(repo);
             git_libgit2_shutdown();
@@ -523,6 +569,14 @@ int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
                 fprintf(stderr, "error: resetting git repository failed\n");
                 return TCL_ERROR;
             }
+            // The reset restored installed metadata as well as package files.
+            cJSON *manifest = ttrek_GetManifestRoot(interp, state_ptr->project_venv_dir_ptr);
+            if (!cJSON_IsObject(manifest)) {
+                cJSON_Delete(manifest);
+                return TCL_ERROR;
+            }
+            cJSON_Delete(state_ptr->manifest_root);
+            state_ptr->manifest_root = manifest;
         }
 
     } else {

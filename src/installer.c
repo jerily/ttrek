@@ -1,3 +1,4 @@
+#include <unistd.h>
 /**                                  n
  * Copyright Jerily LTD. All Rights Reserved.
  * SPDX-FileCopyrightText: 2024 Neofytos Dimitriou (neo@jerily.cy)
@@ -39,6 +40,8 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
     } else {
         cJSON_AddStringToObject(dependencies, package_name, version_requirement);
     }
+    const char *other_section = strcmp(section, "dependencies") == 0 ? "devDependencies" : "dependencies";
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(spec_root, other_section), package_name);
     fprintf(stderr, "Added dependency %s to spec: %s\n", package_name, version_requirement);
 }
 
@@ -333,6 +336,13 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
     ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, package_version,
         scripts, fsmonitor_state_ptr->files_diff);
+    // Installed build metadata belongs to the manifest, independently of the desired lock.
+    cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
+    cJSON *locked = cJSON_GetObjectItem(cJSON_GetObjectItem(state_ptr->lock_root, "packages"), package_name);
+    const char *fields[] = {"iuse", "use", "requires"};
+    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i) {
+        cJSON_AddItemToObject(installed, fields[i], cJSON_Duplicate(cJSON_GetObjectItem(locked, fields[i]), 1));
+    }
 
     Tcl_DecrRefCount(iuse_list_ptr);
     Tcl_DecrRefCount(use_list_ptr);
@@ -418,6 +428,10 @@ static int ttrek_BackupPackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         // move the file from install dir to temp dir
 
         ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
+        if (Tcl_FSAccess(file_path_ptr, F_OK) != 0) {
+            Tcl_DecrRefCount(file_path_ptr);
+            continue;
+        }
         ttrek_ResolvePath(interp, temp_package_dir_ptr, Tcl_NewStringObj(file_path, -1), &temp_file_path_ptr);
 
         // create directory structure if it does not exist in temp_file_path_ptr
@@ -462,6 +476,10 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
         const char *file_path = file->valuestring;
         ttrek_ResolvePath(interp, state_ptr->project_install_dir_ptr, Tcl_NewStringObj(file_path, -1), &file_path_ptr);
         DBG(fprintf(stderr, "deleting... file_path: %s\n", Tcl_GetString(file_path_ptr)));
+        if (Tcl_FSAccess(file_path_ptr, F_OK) != 0) {
+            Tcl_DecrRefCount(file_path_ptr);
+            continue;
+        }
         if (TCL_OK != Tcl_FSDeleteFile(file_path_ptr)) {
             fprintf(stderr, "error: could not delete file %s\n", file_path);
             Tcl_DecrRefCount(file_path_ptr);
@@ -525,10 +543,10 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
                          const char *package_version, const char *os, const char *arch,
-                         const char *direct_version_requirement, int package_name_exists_in_lock_p,
+                         const char *direct_version_requirement, int package_installed_p,
                          int package_num_current, int package_num_total) {
 
-    if (package_name_exists_in_lock_p) {
+    if (package_installed_p) {
         if (TCL_OK != ttrek_BackupPackageFiles(interp, state_ptr, package_name)) {
             fprintf(stderr, "error: could not backup package files from existing installation\n");
             return TCL_ERROR;
