@@ -203,7 +203,7 @@ int ttrek_ScriptsDefineRunArgs(Tcl_Interp *interp, Tcl_Obj *file_ptr, Tcl_Size *
 
     argv[0] = shell;
     argv[1] = "-c";
-    argv[2] = "exec \"$1\"";
+    argv[2] = "exec \"$@\"";
     argv[3] = "ttrek-script";
     argv[4] = Tcl_GetString(file_ptr);
     argv[5] = NULL;

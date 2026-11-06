@@ -74,7 +74,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
         recipes[name] = {"name": name, "version": "1.0.0", "dependencies": dependencies, "build": build}
         recipes[name]["scripts"] = {
             "hello": "#!/bin/sh\nset -eu\nprintf '%s\\n' '" + name + "@1.0.0 café' \"$PROJECT_HOME\" \"$PROJECT_INSTALL_DIR\" \"$PWD\"\n"
-                     "test -f \"$PROJECT_INSTALL_DIR/include/" + name + ".h\"\n",
+                     "test -f \"$PROJECT_INSTALL_DIR/include/" + name + ".h\"\n"
+                     'for argument do printf "%s\\n" "$argument"; done\n',
             "preInstall": 'touch "$PROJECT_HOME/unexpected-package-hook"',
             "fail": "exit 7\n",
         }
@@ -144,9 +145,20 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
             output = run("run", "-package", package, "-script", "hello", cwd=nested).stdout.splitlines()
             prefix = str(project / "ttrek-venv/local")
             assert output == [package + "@1.0.0 café", str(project), prefix, prefix], output
+            arguments = ["", "two words", "café 世界", "one\ntwo", "'quoted'", '"double"',
+                         "$(touch injected)", "`touch injected`", "; touch injected", "*",
+                         "-u", "-g", "-script", "-package", "--", "-registry"]
+            forwarded = run("run", "-package", package, "-script", "hello", "--", *arguments).stdout
+            assert forwarded == "\n".join(output + arguments) + "\n", repr(forwarded)
+            assert not (project / "ttrek-venv/local/injected").exists()
+            assert run("run", "-package", package, "-script", "hello", "--").stdout.splitlines() == output
         assert run("run", "-script", "hello").stdout == "project-script"
         assert run("run", "-script", "HELLO").stdout == "project-script"
         assert run("run", "sh", "-c", "printf direct-command").stdout == "direct-command"
+        assert run("run", "--", "sh", "-c", 'printf "%s" "$1"', "test", "-u").stdout == "-u"
+        spec["scripts"]["args"] = 'for argument do printf "%s\\n" "$argument"; done'
+        spec_file.write_text(json.dumps(spec))
+        assert run("run", "-script", "args", "--", "", "a b", "-g").stdout == "\na b\n-g\n"
         # Stream bytes without re-encoding UTF-8 or truncating at NUL/chunk boundaries.
         streamed = subprocess.run([BINARY, "run", sys.executable, "-c",
                                    "import os; os.write(1, bytes(range(256)) * 100)"],

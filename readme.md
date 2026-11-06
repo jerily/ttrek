@@ -287,6 +287,14 @@ script's shebang. `PROJECT_HOME` names the project root and `PROJECT_INSTALL_DIR
 names the installation prefix. `PATH` and `LD_LIBRARY_PATH` select that environment.
 Keep databases, uploads and other runtime data outside `ttrek-venv`.
 
+Named scripts accept positional arguments after `--`, for example
+`ttrek run -package my-app -script start -- --port 3015 --data-dir "my data"`.
+Arguments retain spaces, empty strings and shell metacharacters; they are not
+evaluated as shell code. Script bodies can read `$1`, `$2`, and so on, or forward
+them with `"$@"`. Options after `--` belong to the script, including `-u`, `-g`,
+`-package` and `-script`. Use `ttrek run -- COMMAND ARGS...` for the same protection
+when invoking a command directly. Arguments to named scripts require `--`.
+
 ### Generate a standalone build script
 
 ```sh

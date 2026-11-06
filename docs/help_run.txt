@@ -1,9 +1,15 @@
-Usage: ttrek run [-u|-g] [-package PACKAGE] -script NAME
+Usage: ttrek run [-u|-g] [-package PACKAGE] -script NAME [-- ARGS...]
        ttrek run [-u|-g] COMMAND [ARGS...]
 
 Run a named shell script from the project's ttrek.json, or a command in its
 installed environment. -package selects the scripts saved with that installed
 package's recipe. It requires -script and does not contact a registry.
+
+Pass script arguments after --. They are forwarded literally as $1, $2, ...;
+shell scripts should use "$@" to forward them to their program. For example:
+  ttrek run -package my-app -script start -- --port 3015 --data-dir "my data"
+Options after -- are never interpreted as ttrek options. The separator also
+works with direct commands: ttrek run -- COMMAND [ARGS...].
 
 Use 'ttrek scripts -package PACKAGE ls' to list available package scripts.
 Older installations without cached scripts need 'ttrek install -force PACKAGE'
