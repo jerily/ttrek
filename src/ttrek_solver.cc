@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT.
  */
 
+#include <algorithm>
 #include <sstream>
 #include <cassert>
 #include <iostream>
@@ -37,15 +38,15 @@ int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::
 
 static void
 ttrek_ParseRequirementsFromSpecFile(ttrek_state_t *state_ptr, std::map<std::string, std::string> &requirements) {
-    cJSON *dependencies = cJSON_GetObjectItem(state_ptr->spec_root, "dependencies");
-    if (dependencies) {
-        for (int i = 0; i < cJSON_GetArraySize(dependencies); i++) {
-            cJSON *dep_item = cJSON_GetArrayItem(dependencies, i);
-            std::string package_name = dep_item->string;
-            std::string package_version_requirement = cJSON_GetStringValue(dep_item);
-            DBG(std::cerr << "(direct from spec) package_name: " << package_name << " package_version_requirement: "
-                          << package_version_requirement << std::endl);
-            requirements[package_name] = package_version_requirement;
+    for (const char *section : {"dependencies", "devDependencies"}) {
+        cJSON *dependencies = cJSON_GetObjectItem(state_ptr->spec_root, section);
+        if (dependencies && !cJSON_IsObject(dependencies)) {
+            throw std::runtime_error(std::string(section) + " must be an object");
+        }
+        cJSON *dep;
+        cJSON_ArrayForEach(dep, dependencies) {
+            if (!cJSON_IsString(dep)) { throw std::runtime_error("Project dependency constraints must be strings"); }
+            requirements[dep->string] = cJSON_GetStringValue(dep);
         }
     }
 }
@@ -190,10 +191,21 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
     UNUSED(interp);
 
-    // Parse additional requirements from spec file
-    ttrek_ParseRequirementsFromLockFile(state_ptr, requirements);
-    ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
-    ttrek_ParseRequirements(objc, objv, requirements);
+    // Keep requested packages separate from the full set needed by the solver.
+    if (objc == 0) {
+        ttrek_ParseRequirementsFromSpecFile(state_ptr, requirements);
+    } else {
+        ttrek_ParseRequirements(objc, objv, requirements);
+    }
+    std::map<std::string, std::string> solver_requirements;
+    ttrek_ParseRequirementsFromLockFile(state_ptr, solver_requirements);
+    ttrek_ParseRequirementsFromSpecFile(state_ptr, solver_requirements);
+    for (auto &requirement : requirements) {
+        if (requirement.second.empty() && solver_requirements.count(requirement.first)) {
+            requirement.second = solver_requirements.at(requirement.first);
+        }
+        solver_requirements[requirement.first] = requirement.second;
+    }
 
     ttrek_ParseLockedPackages(state_ptr, db);
 
@@ -203,7 +215,7 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
 
     // Construct a problem to be solved by the solver
     std::vector<VersionSetId> requirements_vector;
-    for (const auto &requirement: requirements) {
+    for (const auto &requirement: solver_requirements) {
         requirements_vector.push_back(db.alloc_requirement_from_str(requirement.first, requirement.second));
     }
 
@@ -372,7 +384,7 @@ static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTabl
     return true;
 }
 
-static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install,
+static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std::string &install, bool force_requested,
                                             const std::map<std::string, std::string> &requirements,
                                             Tcl_HashTable *global_use_flags_ht_ptr,
                                             std::map<std::string, std::set<UseFlag>> &iuse_flags_map,
@@ -395,12 +407,10 @@ static void ttrek_AddInstallToExecutionPlan(ttrek_state_t *state_ptr, const std:
     auto direct_version_requirement = in_requirements_p ? requirements.at(package_name) : "none";
 
     ttrek_install_type_t install_type;
-    if (state_ptr->option_force) {
-        install_type = DIRECT_INSTALL;
-    } else if (in_requirements_p && (!exact_package_exists_in_lock_p || !exact_use_flags_p)) {
-        install_type = DIRECT_INSTALL;
+    if (force_requested || !exact_package_exists_in_lock_p || !exact_use_flags_p) {
+        install_type = in_requirements_p ? DIRECT_INSTALL : DEP_INSTALL;
     } else {
-        install_type = UNKNOWN_INSTALL;
+        install_type = ALREADY_INSTALLED;
     }
     auto install_spec = InstallSpec{
             install_type,
@@ -428,6 +438,11 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
     for (const auto &dependency: dependencies_from_solver_map) {
         dependencies_map[dependency.first] = dependency.second;
     }
+    for (const auto &dependency : dependencies_map) {
+        for (const auto &name : dependency.second) {
+            reverse_dependencies_map[name].insert(dependency.first);
+        }
+    }
 
     std::map<std::string, std::string> enhanced_requirements;
     ttrek_ParseRequirementsFromSpecFile(state_ptr, enhanced_requirements);
@@ -445,116 +460,30 @@ ttrek_GenerateExecutionPlan(ttrek_state_t *state_ptr, const std::vector<std::str
         if (install.find("use:") != std::string::npos) {
             continue;
         }
-        ttrek_AddInstallToExecutionPlan(state_ptr, install, enhanced_requirements, global_use_flags_ht_ptr,
+        bool force_requested = state_ptr->option_force && requirements.count(install.substr(0, install.find('=')));
+        ttrek_AddInstallToExecutionPlan(state_ptr, install, force_requested, enhanced_requirements, global_use_flags_ht_ptr,
                                         iuse_flags_map, use_flags_map, execution_plan);
     }
 
-    // check there is at least one direct install
-    bool has_direct_install = false;
-    for (const auto &install_spec: execution_plan) {
-        if (install_spec.install_type == DIRECT_INSTALL) {
-            has_direct_install = true;
-            break;
+    // Rebuild dependents of changed packages, including transitive dependents.
+    // Unchanged forward dependencies and unrelated packages keep their files.
+    std::unordered_set<std::string> affected;
+    for (const auto &spec : execution_plan) {
+        if (spec.install_type != ALREADY_INSTALLED) { affected.insert(spec.package_name); }
+    }
+    std::vector<std::string> pending(affected.begin(), affected.end());
+    for (size_t i = 0; i < pending.size(); ++i) {
+        auto found = reverse_dependencies_map.find(pending[i]);
+        if (found == reverse_dependencies_map.end()) { continue; }
+        for (const auto &name : found->second) {
+            if (affected.insert(name).second) { pending.push_back(name); }
         }
     }
-
-    if (!has_direct_install) {
-        execution_plan.clear();
-        return;
+    for (auto &spec : execution_plan) {
+        if (spec.install_type == ALREADY_INSTALLED && affected.count(spec.package_name)) {
+            spec.install_type = RDEP_INSTALL;
+        }
     }
-
-    int max_depth = 10;
-    std::unordered_set<std::string> dependencies;
-    std::unordered_set<std::string> reverse_dependencies;
-    bool changed;
-    do {
-        changed = false;
-        dependencies.clear();
-        reverse_dependencies.clear();
-
-        // compute dependencies and reverse dependencies of direct installs
-        for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DIRECT_INSTALL) {
-
-                if (reverse_dependencies_map.find(install_spec.package_name) !=
-                    reverse_dependencies_map.end()) {
-
-                    auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                    reverse_dependencies.insert(rdeps.begin(), rdeps.end());
-                }
-
-                if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                    auto deps = dependencies_map.at(install_spec.package_name);
-                    dependencies.insert(deps.begin(), deps.end());
-                }
-
-            } else if (install_spec.install_type == RDEP_INSTALL) {
-                install_spec.install_type = UNKNOWN_INSTALL;
-            }
-        }
-
-        // every UNKNOWN_INSTALL that is a reverse dependency of a direct install is a reverse dependency
-        // and should be marked as RDEP_INSTALL
-        bool has_unknown;
-        do {
-            has_unknown = false;
-            for (auto &install_spec: execution_plan) {
-                if (install_spec.install_type == UNKNOWN_INSTALL) {
-                    if (reverse_dependencies.find(install_spec.package_name) != reverse_dependencies.end()) {
-                        install_spec.install_type = RDEP_INSTALL;
-
-                        if (reverse_dependencies_map.find(install_spec.package_name) !=
-                            reverse_dependencies_map.end()) {
-
-                            auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                            reverse_dependencies.insert(rdeps.begin(), rdeps.end());
-                        }
-
-                        if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                            auto deps = dependencies_map.at(install_spec.package_name);
-                            dependencies.insert(deps.begin(), deps.end());
-                        }
-
-                    } else if (dependencies.find(install_spec.package_name) != dependencies.end()) {
-                        install_spec.install_type = DEP_INSTALL;
-
-                        if (reverse_dependencies_map.find(install_spec.package_name) !=
-                            reverse_dependencies_map.end()) {
-
-                            auto rdeps = reverse_dependencies_map.at(install_spec.package_name);
-                            reverse_dependencies.insert(rdeps.begin(), rdeps.end());
-                        }
-
-                        if (dependencies_map.find(install_spec.package_name) != dependencies_map.end()) {
-                            auto deps = dependencies_map.at(install_spec.package_name);
-                            dependencies.insert(deps.begin(), deps.end());
-                        }
-
-                    } else {
-                        DBG(std::cerr << "unknown install sofar: " << install_spec.package_name << std::endl);
-                        if (enhanced_requirements.find(install_spec.package_name) != enhanced_requirements.end()) {
-                            install_spec.install_type = ALREADY_INSTALLED;
-                        } else {
-                            has_unknown = true;
-                        }
-                    }
-                }
-            }
-            max_depth--;
-        } while (has_unknown && max_depth > 0);
-
-        // set ALREADY_INSTALLED if the package is already installed and it is a DEP_INSTALL
-        for (auto &install_spec: execution_plan) {
-            if (install_spec.install_type == DEP_INSTALL && install_spec.exact_package_exists_in_lock_p &&
-                install_spec.exact_use_flags_p) {
-                install_spec.install_type = ALREADY_INSTALLED;
-                reverse_dependencies_map.erase(install_spec.package_name);
-                dependencies_map.erase(install_spec.package_name);
-                changed = true;
-            }
-        }
-
-    } while (changed && max_depth > 0);
 }
 
 static void
@@ -655,6 +584,15 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
     PackageDatabase db;
     db.set_strategy(state_ptr->strategy);
 
+    if (state_ptr->strategy == STRATEGY_LATEST && objc > 0 && !state_ptr->resolve_all_latest) {
+        std::map<std::string, std::string> requested;
+        ttrek_ParseRequirements(objc, objv, requested);
+        cJSON *package;
+        cJSON_ArrayForEach(package, cJSON_GetObjectItem(state_ptr->lock_root, "packages")) {
+            if (!requested.count(package->string)) { db.favored_packages.insert(package->string); }
+        }
+    }
+
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     ttrek_ParseReverseDependenciesFromLock(state_ptr->lock_root, reverse_dependencies_map);
     db.set_reverse_dependencies_map(reverse_dependencies_map);
@@ -707,8 +645,15 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_OK;
         }
 
-        std::cout << "The following packages will be installed:" << std::endl;
-        ttrek_PrintExecutionPlan(execution_plan);
+        bool has_installs = std::any_of(execution_plan.begin(), execution_plan.end(), [](const InstallSpec &spec) {
+            return spec.install_type != ALREADY_INSTALLED;
+        });
+        if (has_installs) {
+            std::cout << "The following packages will be installed:" << std::endl;
+            ttrek_PrintExecutionPlan(execution_plan);
+        } else {
+            std::cout << "Nothing to install!" << std::endl;
+        }
 
         if (state_ptr->option_pretend) {
             *abort = 1;
@@ -805,6 +750,33 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         }
         Tcl_DecrRefCount(use_flags_list_ptr);
         Tcl_DeleteHashTable(&global_use_flags_ht);
+
+        for (const auto &spec : execution_plan) {
+            if (!requirements.count(spec.package_name)) { continue; }
+            const char *name = spec.package_name.c_str();
+            cJSON *dev = cJSON_GetObjectItem(state_ptr->spec_root, "devDependencies");
+            const char *section = state_ptr->option_save_dev || cJSON_HasObjectItem(dev, name)
+                ? "devDependencies" : "dependencies";
+            cJSON *deps = cJSON_GetObjectItem(state_ptr->spec_root, section);
+            if (!deps) {
+                deps = cJSON_CreateObject();
+                cJSON_AddItemToObject(state_ptr->spec_root, section, deps);
+            }
+            std::string version = requirements.at(spec.package_name);
+            if (version.empty()) { version = "^" + spec.package_version; }
+            cJSON_DeleteItemFromObject(deps, name);
+            cJSON_AddStringToObject(deps, name, version.c_str());
+            if (state_ptr->option_save_dev) {
+                cJSON_DeleteItemFromObject(cJSON_GetObjectItem(state_ptr->spec_root, "dependencies"), name);
+            }
+            cJSON *lock_deps = cJSON_GetObjectItem(state_ptr->lock_root, "dependencies");
+            if (!lock_deps) {
+                lock_deps = cJSON_CreateObject();
+                cJSON_AddItemToObject(state_ptr->lock_root, "dependencies", lock_deps);
+            }
+            cJSON_DeleteItemFromObject(lock_deps, name);
+            cJSON_AddStringToObject(lock_deps, name, version.c_str());
+        }
 
         if (TCL_OK != ttrek_UpdateSpecFileAfterInstall(interp, state_ptr)) {
             return TCL_ERROR;

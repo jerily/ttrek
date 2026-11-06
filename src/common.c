@@ -721,6 +721,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->with_locking = with_locking;
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
+    state_ptr->option_save_dev = 0;
+    state_ptr->resolve_all_latest = 0;
     state_ptr->option_pretend = 0;
     state_ptr->mode = mode;
     state_ptr->is_local_build = 0;
@@ -822,19 +824,23 @@ ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strate
 
 
 int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
-    cJSON *deps = cJSON_GetObjectItem(spec_root, "dependencies");
-    if (!deps) {
-        return TCL_ERROR;
-    }
-
-    cJSON *dep = NULL;
-    for (int i = 0; i < cJSON_GetArraySize(deps); i++) {
-        dep = cJSON_GetArrayItem(deps, i);
-        char spec[256];
-        snprintf(spec, 256, "%s@%s", dep->string, dep->valuestring);
-        DBG(fprintf(stderr, "spec: %s\n", spec));
-        if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, Tcl_NewStringObj(dep->string, -1))) {
+    const char *sections[] = {"dependencies", "devDependencies"};
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); ++i) {
+        cJSON *deps = cJSON_GetObjectItem(spec_root, sections[i]);
+        if (deps && !cJSON_IsObject(deps)) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s must be an object", sections[i]));
             return TCL_ERROR;
+        }
+        cJSON *dep;
+        cJSON_ArrayForEach(dep, deps) {
+            if (!cJSON_IsString(dep)) {
+                Tcl_SetObjResult(interp, Tcl_NewStringObj("Project dependency constraints must be strings", -1));
+                return TCL_ERROR;
+            }
+            if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr,
+                    Tcl_ObjPrintf("%s@%s", dep->string, dep->valuestring))) {
+                return TCL_ERROR;
+            }
         }
     }
     return TCL_OK;

@@ -66,7 +66,7 @@ done:
 
 int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-//    int option_save_dev = 0;
+    int option_save_dev = 0;
     int option_yes = 0;
     int option_force = 0;
     int option_mode = MODE_LOCAL;
@@ -75,7 +75,9 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     const char *option_strategy = NULL;
     Tcl_ArgvInfo ArgTable[] = {
             TTREK_REGISTRY_OPTIONS,
-//            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
+            {TCL_ARGV_CONSTANT, "--save-dev", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
+            {TCL_ARGV_CONSTANT, "-D", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
+            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "save requested packages to devDependencies", NULL},
             {TCL_ARGV_CONSTANT, "-fail-verbose", INT2PTR(1),              &option_fail_verbose, "show verbose output on failure",                                     NULL},
             {TCL_ARGV_CONSTANT, "-y",            INT2PTR(1),              &option_yes,          "answer yes to all questions",                                        NULL},
             {TCL_ARGV_CONSTANT, "-u",            INT2PTR(MODE_USER),      &option_mode,         "install as a user package",                                          NULL},
@@ -98,6 +100,13 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         }
     }
 
+    if (option_strategy && strcmp(option_strategy, "latest") != 0 &&
+            strcmp(option_strategy, "favored") != 0 && strcmp(option_strategy, "locked") != 0) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("invalid strategy: expected latest, favored, or locked", -1));
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, 1, (ttrek_mode_t)option_mode,
                                                  ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
@@ -105,6 +114,10 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         ckfree(remObjv);
         return TCL_ERROR;
     }
+
+    state_ptr->option_save_dev = option_save_dev && objc > 1;
+
+    state_ptr->resolve_all_latest = objc == 1;
 
     if (ttrek_RegistryLoadFromLock(interp, state_ptr->project_home_dir_ptr, state_ptr->lock_root) != TCL_OK) {
         ttrek_DestroyState(state_ptr);

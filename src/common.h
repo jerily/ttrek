@@ -121,6 +121,8 @@ typedef struct {
     int with_locking;
     int option_yes;
     int option_force;
+    int option_save_dev;
+    int resolve_all_latest;
     int option_pretend;
     ttrek_mode_t mode;
     int is_local_build;

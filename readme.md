@@ -216,6 +216,19 @@ or initialize/send telemetry. It supports `-force` and
 With no package arguments it resolves existing project requirements.
 Resolution conflicts and malformed/failed metadata requests return a nonzero exit.
 
+`install --save-dev PACKAGE` (or `-D`, with `-save-dev` also accepted) records
+explicitly named packages in `devDependencies`. Existing runtime dependencies
+move to that section even if no rebuild is needed. Plain install and update
+resolve both sections and preserve the classification; transitive packages stay
+in the lockfile. Uninstall removes entries from either section.
+
+`install -force PACKAGE` rebuilds that package and its transitive reverse
+dependencies. Changed versions and USE flags also rebuild affected dependents,
+in dependency order, while unchanged forward dependencies remain installed.
+Targeted updates prefer installed versions outside the request when compatible;
+`update` without package arguments considers the entire dependency graph.
+See `ttrek help install` for all install options and strategies.
+
 `ttrek.json` also describes ttrek’s pinned static build. `build-ttrek.sh` remains available.
 
 ### Run installed package scripts

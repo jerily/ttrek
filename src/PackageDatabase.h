@@ -298,6 +298,7 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
     std::map<std::string, std::unordered_set<std::string>> reverse_dependencies_map;
     std::unordered_set<UseFlag> global_use_flags;
     std::map<std::string, std::string> locked_packages;
+    std::unordered_set<std::string> favored_packages;
     ttrek_strategy_t the_strategy = STRATEGY_LATEST;
 
     PackageDatabase() {
@@ -364,7 +365,7 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
             auto locked = locked_packages.find(package_name);
             if (locked != locked_packages.end() && candidate.get_inner().to_string() == locked->second) {
                 if (the_strategy == STRATEGY_LOCKED) { result.locked = id; }
-                if (the_strategy == STRATEGY_FAVORED) { result.favored = id; }
+                if (the_strategy == STRATEGY_FAVORED || favored_packages.count(package_name)) { result.favored = id; }
             }
         }
         return result;

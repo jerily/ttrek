@@ -3,6 +3,12 @@ Usage: install [options] ?package_A@version_range_A? ?package_B@version_range_B?
 Available options:
     -registry SOURCE - append a local directory or HTTP(S) API URL; repeat to set lookup order
     -add-pubreg - append the public default after explicit or saved sources (synced local copy, otherwise API)
+    -y - answer yes to the installation confirmation
+    -force - reinstall requested packages even when unchanged, plus their transitive reverse dependencies
+    -strategy STRATEGY - dependency resolution: favored (default), latest, or locked
+    -fail-verbose - show the build log when installation fails
+    --save-dev, -D - save explicitly named packages in devDependencies (as in npm)
+    -save-dev - single-dash alias for --save-dev
     -u - install using user mode (~/.local)
     -g - install using global mode (/usr/local/ttrek)
     default - If no mode is specified, install using local mode (./ttrek-venv)
@@ -26,3 +32,28 @@ Examples:
 The first registry containing a package supplies its versions and recipe.
 Only an absent package advances to the next registry; other errors stop lookup.
 Explicit sources replace the saved list and defaults for this invocation.
+
+Without package arguments, install resolves both dependencies and devDependencies,
+runs the project's build instructions, and preserves each dependency's section.
+--save-dev affects only explicitly named packages; it also moves an existing
+runtime dependency to devDependencies without requiring a rebuild. Transitive
+packages are not added to either direct-dependency section.
+
+Strategies:
+    favored - prefer installed versions that satisfy the requirements
+    latest  - prefer newest compatible versions for requested packages; keep
+              other installed versions when compatible with the requested change
+              (without package arguments, consider the entire dependency graph)
+    locked  - require locked versions for packages already in the lock file
+
+New or changed packages and their transitive reverse dependencies are installed
+in dependency order. Unchanged forward dependencies and unrelated packages are
+not rebuilt. With no package arguments, -force targets all direct dependencies.
+The preInstall and postInstall project hooks run around the install operation.
+
+Examples:
+    ttrek install -y twebserver
+    ttrek install --save-dev cmake
+    ttrek install -D ninja
+    ttrek install -force web-wiki
+    ttrek install -strategy latest web-blog
