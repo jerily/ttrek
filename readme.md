@@ -219,8 +219,13 @@ Resolution conflicts and malformed/failed metadata requests return a nonzero exi
 `install -save-dev PACKAGE` (or `-D`) records
 explicitly named packages in `devDependencies`. Existing runtime dependencies
 move to that section even if no rebuild is needed. Plain install and update
-resolve both sections and preserve the classification; transitive packages stay
-in the lockfile. Uninstall removes entries from either section. A package name must occur in only
+resolve both sections recursively in projects and registry recipes and preserve
+the project classification; transitive packages stay in the lockfile. This includes
+devDependencies of devDependencies. All packages share the project installation
+prefix; no nested environments or production-only install mode are created.
+Both registry API endpoints expose the combined requirements. Lockfile and installed
+manifest `requires` record those edges for rebuilds and uninstall. Existing installs
+missing newly discovered edges are rebuilt once to refresh their metadata. Uninstall removes entries from either section. A package name must occur in only
 one section; manifests with duplicate names across the two sections are rejected.
 
 `install -force PACKAGE` rebuilds that package and its transitive reverse
