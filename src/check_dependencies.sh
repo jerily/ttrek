@@ -25,6 +25,12 @@ if [ -n "$missing" ]; then
         '  sudo apt install build-essential cmake bash curl git patch pkg-config perl tar gzip ca-certificates' \
         'build-essential supplies GCC, G++ and Make.' \
         'For a newer CMake, use: sudo snap install cmake --classic' \
+        'macOS:' \
+        '  xcode-select --install' \
+        'Finish the Apple Command Line Tools installation (Clang C/C++, Make and Git).' \
+        'Install Homebrew from https://brew.sh and follow its shellenv setup instructions, then:' \
+        '  brew install cmake pkgconf' \
+        'pkgconf provides pkg-config; macOS supplies Bash, curl, patch, Perl, tar and gzip.' \
         'On other systems, install the equivalent tools with your system package manager.' \
         'Ensure the installed commands are on PATH (including /snap/bin when using snap).' >&2
     exit 1
