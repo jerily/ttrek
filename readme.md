@@ -61,8 +61,35 @@ sudo apt install build-essential cmake bash curl git patch pkg-config perl tar g
 [build-essential](https://packages.ubuntu.com/noble/build-essential) supplies
 GCC, G++ and Make. For a newer CMake, use
 `sudo snap install cmake --classic` and include `/snap/bin` on `PATH`
-([CMake distribution](https://cmake.org/download/)). These are presence checks;
-individual recipes may require additional tools or minimum tool versions.
+([CMake distribution](https://cmake.org/download/)).
+
+On macOS, install Apple's Command Line Tools and wait for installation to finish:
+
+```sh
+xcode-select --install
+```
+
+The [Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/)
+provide Clang for C/C++, Make and Git. ttrek accepts Clang; a separate GCC
+installation is unnecessary. macOS supplies Bash, curl, patch, Perl, tar and gzip.
+Install [Homebrew](https://brew.sh/) if needed and follow its printed `brew shellenv`
+instructions so its tools are on `PATH`. Then install the remaining tools:
+
+```sh
+brew install cmake pkgconf
+```
+
+[pkgconf](https://formulae.brew.sh/formula/pkgconf) provides the `pkg-config`
+command. Building ttrek itself and running its tests additionally needs Python 3
+(`brew install python`). These are presence checks; individual recipes may
+require additional tools or minimum tool versions.
+
+The preflight script is embedded in the executable. CMake converts
+`src/check_dependencies.sh` into `check_dependencies.sh.h`, a byte-array header
+included by `src/common.c`. At runtime, ttrek passes that embedded string to
+`/bin/sh -c`; no separate script file is installed or loaded. CMake tracks the
+script as a build dependency, so changing it regenerates the header and rebuilds
+the executable.
 
 ## Build
 
