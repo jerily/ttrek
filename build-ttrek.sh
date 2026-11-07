@@ -11,6 +11,27 @@ PYTHON=${PYTHON:-python3}
 JOBS=${JOBS:-2}
 BUILD_TYPE=${BUILD_TYPE:-Release}
 
+# Autoconf/OpenSSL builds and CMake must agree on the minimum macOS version.
+# Pass it explicitly to CMake too, so a cached SDK default cannot override it.
+BUILD_SYSTEM=$(uname -s)
+if [[ $BUILD_SYSTEM == Darwin ]]; then
+    MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-$(sw_vers -productVersion)}
+    if [[ ! $MACOSX_DEPLOYMENT_TARGET =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+        echo "Invalid MACOSX_DEPLOYMENT_TARGET: $MACOSX_DEPLOYMENT_TARGET" >&2
+        exit 1
+    fi
+    export MACOSX_DEPLOYMENT_TARGET
+    echo "macOS deployment target: $MACOSX_DEPLOYMENT_TARGET"
+fi
+
+cmake_configure() {
+    if [[ $BUILD_SYSTEM == Darwin ]]; then
+        "$CMAKE" "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" "$@"
+    else
+        "$CMAKE" "$@"
+    fi
+}
+
 # Keep dependencies pinned. No Rust toolchain is needed by satdepsolver.
 ZLIB_VERSION=1.3.2
 OPENSSL_VERSION=3.5.9
@@ -47,7 +68,7 @@ fetch_source() {
 cmake_dependency() {
     local name=$1
     shift
-    "$CMAKE" -S "$SOURCE_DIR/$name" -B "$BUILD_DIR/dependencies/$name" \
+    cmake_configure -S "$SOURCE_DIR/$name" -B "$BUILD_DIR/dependencies/$name" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
         -DBUILD_SHARED_LIBS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "$@"
@@ -114,7 +135,7 @@ SATDEPSOLVER_SOURCE_DIR=$(cd "$SATDEPSOLVER_SOURCE_DIR" && pwd)
 SOLVER_SOURCE_KEY=$(printf '%s' "$SATDEPSOLVER_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
 SOLVER_BUILD_DIR="$BUILD_DIR/dependencies/satdepsolver-$SOLVER_SOURCE_KEY"
 
-"$CMAKE" -S "$SATDEPSOLVER_SOURCE_DIR" -B "$SOLVER_BUILD_DIR" \
+cmake_configure -S "$SATDEPSOLVER_SOURCE_DIR" -B "$SOLVER_BUILD_DIR" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DSATDEPSOLVER_BUILD_TESTS=ON
 "$CMAKE" --build "$SOLVER_BUILD_DIR" --parallel "$JOBS"
@@ -128,7 +149,7 @@ fi
 TTRIE_SOURCE_DIR=$(cd "$TTRIE_SOURCE_DIR" && pwd)
 TRIE_SOURCE_KEY=$(printf '%s' "$TTRIE_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
 TRIE_BUILD_DIR="$BUILD_DIR/dependencies/ttrie-$TRIE_SOURCE_KEY"
-"$CMAKE" -S "$TTRIE_SOURCE_DIR" -B "$TRIE_BUILD_DIR" \
+cmake_configure -S "$TTRIE_SOURCE_DIR" -B "$TRIE_BUILD_DIR" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIE_BUILD_TCL=OFF -DBUILD_TESTING=ON
 "$CMAKE" --build "$TRIE_BUILD_DIR" --parallel "$JOBS"
@@ -142,7 +163,7 @@ fi
 TTRIGRAMS_SOURCE_DIR=$(cd "$TTRIGRAMS_SOURCE_DIR" && pwd)
 TRIGRAM_SOURCE_KEY=$(printf '%s' "$TTRIGRAMS_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
 TRIGRAM_BUILD_DIR="$BUILD_DIR/dependencies/ttrigrams-$TRIGRAM_SOURCE_KEY"
-"$CMAKE" -S "$TTRIGRAMS_SOURCE_DIR" -B "$TRIGRAM_BUILD_DIR" \
+cmake_configure -S "$TTRIGRAMS_SOURCE_DIR" -B "$TRIGRAM_BUILD_DIR" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIGRAMS_BUILD_TCL=OFF -DBUILD_TESTING=ON
 "$CMAKE" --build "$TRIGRAM_BUILD_DIR" --parallel "$JOBS"
@@ -150,7 +171,7 @@ TRIGRAM_BUILD_DIR="$BUILD_DIR/dependencies/ttrigrams-$TRIGRAM_SOURCE_KEY"
 "$CMAKE" --install "$TRIGRAM_BUILD_DIR"
 
 # Clear old dependency paths (including Tcl 8.6 and lib64 OpenSSL) on reruns.
-"$CMAKE" -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
+cmake_configure -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DBUILD_TESTING=ON -DSATDEPSOLVER_SOURCE_DIR= \
     -DPython3_EXECUTABLE="$(command -v "$PYTHON")" \

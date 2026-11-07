@@ -39,12 +39,15 @@ with tempfile.TemporaryDirectory(prefix='ttrek-dependencies-') as temporary:
     # Isolate one missing dependency and honor explicit compiler overrides.
     names = ('bash', 'cmake', 'make', 'curl', 'git', 'patch', 'pkg-config',
              'perl', 'tar', 'gzip', 'cc', 'c++')
+    stub = root / 'tool-stub'
+    stub.write_text('#!/bin/sh\nexit 0\n')
+    stub.chmod(0o755)
     for name in names:
-        (tools / name).symlink_to('/bin/true')
+        (tools / name).symlink_to(stub)
     (tools / 'cmake').unlink()
     result = run('install', '-y')
     assert 'missing external build dependencies: cmake\n' in result.stderr, result.stderr
-    (tools / 'cmake').symlink_to('/bin/true')
+    (tools / 'cmake').symlink_to(stub)
     env['CC'] = 'missing-cc -O2'
     env['CXX'] = 'missing-cxx'
     result = run('update', '-y')

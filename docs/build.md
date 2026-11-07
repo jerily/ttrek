@@ -39,6 +39,27 @@ and installs satdepsolver, ttrie and ttrigrams and rebuilds/tests ttrek.
 Set `TTRIE_SOURCE_DIR=/path/to/ttrie` to use a local trie checkout.
 Set `TTRIGRAMS_SOURCE_DIR=/path/to/ttrigrams` to use a local trigram checkout.
 
+On macOS, `build-ttrek.sh` uses `MACOSX_DEPLOYMENT_TARGET` for every dependency
+and the final executable, defaulting to the build machine's macOS version.
+Set it explicitly when targeting an older supported macOS version. CMake receives
+the same value explicitly, including when reconfiguring an existing build tree.
+
+If the linker reports objects built for a newer macOS version than the link
+target, rebuild all dependencies in fresh build **and** install directories.
+Changing the target does not rebuild cached Autoconf objects automatically.
+For example, to target macOS 14.0 without deleting an existing build:
+
+```sh
+MACOSX_DEPLOYMENT_TARGET=14.0 \
+  TTREK_BUILD_DIR="$PWD/build/macos-14-clean" \
+  TTREK_INSTALL_DIR="$PWD/local-static/macos-14-clean" \
+  ./build-ttrek.sh
+```
+
+Use previously unused directory names and leave `TTREK_SKIP_DEPS` unset for
+this rebuild. SDK headers can be newer than the deployment target; compiled
+dependencies must support the minimum version selected for the executable.
+
 To configure manually after installing dependencies:
 
 ```sh
