@@ -11,10 +11,10 @@ if [[ $# != 0 ]]; then
 fi
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
-lipo -verify_arch arm64 dist/macos-arm64/ttrek
-lipo -verify_arch x86_64 dist/macos-x86_64/ttrek
+lipo dist/macos-arm64/ttrek -verify_arch arm64
+lipo dist/macos-x86_64/ttrek -verify_arch x86_64
 mkdir -p dist/macos-universal2
 lipo -create dist/macos-arm64/ttrek dist/macos-x86_64/ttrek \
     -output dist/macos-universal2/ttrek
-lipo -verify_arch arm64 x86_64 dist/macos-universal2/ttrek
+lipo dist/macos-universal2/ttrek -verify_arch arm64 x86_64
 chmod +x dist/macos-universal2/ttrek

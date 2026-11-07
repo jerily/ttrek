@@ -45,6 +45,6 @@ export JOBS=${JOBS:-2} TTREK_MAKE_THREADS=${JOBS:-2} BUILD_TYPE=Release
 export TTREK_BUILD_DIR=${TTREK_BUILD_DIR:-"$PWD/build/$build_variant"}
 export TTREK_INSTALL_DIR=${TTREK_INSTALL_DIR:-"$PWD/local-static/$build_variant"}
 bash ./build-ttrek.sh
-lipo -verify_arch "$architecture" "$TTREK_BUILD_DIR/ttrek"
+lipo "$TTREK_BUILD_DIR/ttrek" -verify_arch "$architecture"
 mkdir -p "dist/$target"
 cp "$TTREK_BUILD_DIR/ttrek" "dist/$target/ttrek"
