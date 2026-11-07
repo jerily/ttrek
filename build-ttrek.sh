@@ -15,6 +15,10 @@ BUILD_TYPE=${BUILD_TYPE:-Release}
 # Pass it explicitly to CMake too, so a cached SDK default cannot override it.
 BUILD_SYSTEM=$(uname -s)
 if [[ $BUILD_SYSTEM == Darwin ]]; then
+    # Resolve the SDK from the selected Xcode explicitly. The compiler's default
+    # SDK can point at newer Command Line Tools with incompatible C++ headers.
+    SDKROOT=${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}
+    export SDKROOT
     MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-$(sw_vers -productVersion)}
     if [[ ! $MACOSX_DEPLOYMENT_TARGET =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
         echo "Invalid MACOSX_DEPLOYMENT_TARGET: $MACOSX_DEPLOYMENT_TARGET" >&2
@@ -26,7 +30,8 @@ fi
 
 cmake_configure() {
     if [[ $BUILD_SYSTEM == Darwin ]]; then
-        "$CMAKE" "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" "$@"
+        "$CMAKE" "-DCMAKE_OSX_SYSROOT=$SDKROOT" \
+            "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" "$@"
     else
         "$CMAKE" "$@"
     fi
