@@ -1102,3 +1102,17 @@ int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, int save_r
     cJSON_Delete(lock_root);
     return TCL_OK;
 }
+
+/* Diagnostic text and checks live in src/check_dependencies.sh. */
+int ttrek_CheckDependencies(Tcl_Interp *interp) {
+    static const char script[] = {
+#include "check_dependencies.sh.h"
+        0
+    };
+    const char *argv[] = {"/bin/sh", "-c", script, NULL};
+    if (ttrek_ExecuteCommand(interp, 3, argv, NULL) != TCL_OK) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("external dependency check failed", -1));
+        return TCL_ERROR;
+    }
+    return TCL_OK;
+}

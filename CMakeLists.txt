@@ -120,7 +120,14 @@ foreach (HELP_TOPIC ${HELP_TOPICS})
     )
 endforeach()
 
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/check_dependencies.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/check_dependencies.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/check_dependencies.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/check_dependencies.sh
+)
+
 add_executable(${TARGET}
+        ${CMAKE_CURRENT_BINARY_DIR}/check_dependencies.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_static.sh.h
@@ -238,6 +245,8 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
+    add_test(NAME dependencies COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/dependencies.py
+        $<TARGET_FILE:ttrek>)
     add_test(NAME install_options COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install_options.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME sync_self_update COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/sync_self_update.py

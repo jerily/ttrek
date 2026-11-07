@@ -42,6 +42,28 @@ writes occur. If the local registry is missing, run `ttrek sync` first.
 Description suggestions require a shared trigram and pass a Levenshtein substring
 check; queries below three characters match descriptions literally.
 
+## External dependencies
+
+`ttrek install` and `ttrek update` check for Bash, CMake, Make, curl, Git,
+patch, pkg-config, Perl, tar, gzip and C/C++ compilers before creating project
+state, contacting a registry or running hooks. Missing tools are reported
+together with installation commands. `CC` and `CXX` select explicit compiler
+commands; otherwise GCC or Clang are accepted. Read-only commands such as
+`search`, `pretend` and `gen-script` do not require a build toolchain.
+
+On Ubuntu/Debian:
+
+```sh
+sudo apt update
+sudo apt install build-essential cmake bash curl git patch pkg-config perl tar gzip ca-certificates
+```
+
+[build-essential](https://packages.ubuntu.com/noble/build-essential) supplies
+GCC, G++ and Make. For a newer CMake, use
+`sudo snap install cmake --classic` and include `/snap/bin` on `PATH`
+([CMake distribution](https://cmake.org/download/)). These are presence checks;
+individual recipes may require additional tools or minimum tool versions.
+
 ## Build
 
 Requires C/C++ compilers with C++17, CMake 3.22.1+, Make, Bash, Perl, pkg-config,

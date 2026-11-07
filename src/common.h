@@ -151,6 +151,8 @@ int ttrek_WriteChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj *contents_pt
 
 int ttrek_TouchFile(Tcl_Interp *interp, Tcl_Obj *path_ptr);
 
+int ttrek_CheckDependencies(Tcl_Interp *interp);
+
 int ttrek_ExecuteCommand(Tcl_Interp *interp, Tcl_Size argc, const char *argv[], Tcl_Obj *resultObj);
 
 Tcl_Obj *ttrek_GetProjectHomeDir(Tcl_Interp *interp, ttrek_mode_t mode);

@@ -58,6 +58,11 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         return TCL_ERROR;
     }
 
+    if (ttrek_CheckDependencies(interp) != TCL_OK) {
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     int with_locking = 1;
     ttrek_mode_t mode = option_user ? MODE_USER : (option_global ? MODE_GLOBAL : MODE_LOCAL);
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, with_locking, mode,
