@@ -106,6 +106,11 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         return TCL_ERROR;
     }
 
+    if (ttrek_CheckDependencies(interp) != TCL_OK) {
+        ckfree(remObjv);
+        return TCL_ERROR;
+    }
+
     ttrek_state_t *state_ptr = ttrek_CreateState(interp, option_yes, option_force, 1, (ttrek_mode_t)option_mode,
                                                  ttrek_StrategyFromString(option_strategy, STRATEGY_FAVORED));
     if (!state_ptr) {
