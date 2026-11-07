@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import pty
+import select
 import shutil
 import subprocess
 import sys
@@ -230,12 +231,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
                 result = subprocess.run([str(BINARY), "sync"], env=interactive_env, cwd=project,
                                         stdout=subprocess.PIPE, stderr=slave, timeout=15)
                 assert result.returncode == 0
-                os.close(slave)
-                slave = None
-                # A PTY read can return only part of the output. BSD signals EOF
-                # with an empty read; Linux can report EIO after the slave closes.
+                # Drain before closing the slave: macOS can discard queued
+                # output when the last slave descriptor closes.
                 chunks = []
-                while True:
+                while select.select([master], [], [], 0)[0]:
                     try:
                         chunk = os.read(master, 65536)
                     except OSError as error:
