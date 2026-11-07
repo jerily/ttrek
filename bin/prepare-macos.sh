@@ -20,18 +20,26 @@ case $architecture in
     arm64) prefix=/opt/homebrew ;;
     x86_64) prefix=/usr/local ;;
 esac
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+# A local toolset also supports Macs without a second Homebrew installation.
+if [[ -x "$PWD/build/tools-$architecture/bin/cmake" ]]; then
+    prefix="$PWD/build/tools-$architecture"
+fi
 export PATH="$prefix/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export CC=/usr/bin/clang CXX=/usr/bin/clang++
-export CMAKE="$prefix/bin/cmake" CTEST="$prefix/bin/ctest" PYTHON="$prefix/bin/python3"
+export CMAKE=${CMAKE:-"$prefix/bin/cmake"} CTEST=${CTEST:-"$prefix/bin/ctest"} PYTHON=${PYTHON:-"$prefix/bin/python3"}
 for tool in "$CMAKE" "$CTEST" "$PYTHON" "$prefix/bin/pkg-config"; do
     if [[ ! -x $tool ]]; then
-        echo "Install this architecture's tools with: $prefix/bin/brew install cmake pkg-config python" >&2
+        echo "Missing build tool: $tool" >&2
+        echo "Provide $architecture tools in $PWD/build/tools-$architecture/bin (cmake, ctest, python3, pkg-config)." >&2
+        if [[ -x $prefix/bin/brew ]]; then
+            echo "Or install with: /usr/bin/arch -$architecture $prefix/bin/brew install cmake pkg-config python" >&2
+        fi
         exit 1
     fi
 done
 "$PYTHON" -c 'import platform, sys; assert platform.machine() == sys.argv[1]' "$architecture"
 
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 target=macos-$architecture
 export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-$(sw_vers -productVersion)}
 if [[ ! $MACOSX_DEPLOYMENT_TARGET =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then

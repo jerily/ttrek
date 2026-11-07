@@ -49,6 +49,12 @@ selected architecture, using its Homebrew tools and a matching Python
 interpreter. Outputs go to `dist/macos-arm64/ttrek` or
 `dist/macos-x86_64/ttrek`. `JOBS` defaults to 2.
 
+Without a matching Homebrew installation, provide `cmake`, `ctest`, `python3`,
+and `pkg-config` in `build/tools-<architecture>/bin`. The wrapper uses this
+local toolset when its `cmake` is present. Tools must run under the selected
+architecture (universal binaries work too). `CMAKE`, `CTEST`, and `PYTHON`
+can override the corresponding executable paths.
+
 The wrapper exports `MACOSX_DEPLOYMENT_TARGET` to the full build, defaulting to
 the build machine's macOS version. Select it explicitly for release builds:
 
