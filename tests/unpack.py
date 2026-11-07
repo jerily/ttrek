@@ -10,7 +10,8 @@ import zipfile
 BINARY = Path(sys.argv[1]).resolve()
 
 with tempfile.TemporaryDirectory(prefix="ttrek unpack ") as temporary:
-    root = Path(temporary)
+    # macOS temporary directories can start with /var, a symlink to /private/var.
+    root = Path(temporary).resolve()
     source = root / "source"
     source.mkdir()
     # Extract the generated parser before its older input, as PostgreSQL's

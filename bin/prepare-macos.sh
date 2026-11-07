@@ -33,8 +33,17 @@ done
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 target=macos-$architecture
+export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-$(sw_vers -productVersion)}
+if [[ ! $MACOSX_DEPLOYMENT_TARGET =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+    echo "Invalid MACOSX_DEPLOYMENT_TARGET: $MACOSX_DEPLOYMENT_TARGET" >&2
+    exit 1
+fi
+# Keep deployment targets separate from each other and from older, unversioned
+# caches, whose dependency objects may have used a different SDK default.
+build_variant=$target-$MACOSX_DEPLOYMENT_TARGET
 export JOBS=${JOBS:-2} TTREK_MAKE_THREADS=${JOBS:-2} BUILD_TYPE=Release
-export TTREK_BUILD_DIR="$PWD/build/$target" TTREK_INSTALL_DIR="$PWD/local-static/$target"
+export TTREK_BUILD_DIR=${TTREK_BUILD_DIR:-"$PWD/build/$build_variant"}
+export TTREK_INSTALL_DIR=${TTREK_INSTALL_DIR:-"$PWD/local-static/$build_variant"}
 bash ./build-ttrek.sh
 lipo -verify_arch "$architecture" "$TTREK_BUILD_DIR/ttrek"
 mkdir -p "dist/$target"

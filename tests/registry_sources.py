@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 BINARY = Path(sys.argv[1]).resolve()
 
 with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporary:
-    root = Path(temporary)
+    root = Path(temporary).resolve()
     home = root / "home"
     home.mkdir()
     project = root / "project"

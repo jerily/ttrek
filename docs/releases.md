@@ -47,8 +47,22 @@ ttrek run -script prepare-macos-x86_64
 `bin/prepare-macos.sh` requires macOS and runs the full build and tests in the
 selected architecture, using its Homebrew tools and a matching Python
 interpreter. Outputs go to `dist/macos-arm64/ttrek` or
-`dist/macos-x86_64/ttrek`; build/install directories are separate for each.
-`JOBS` defaults to 2.
+`dist/macos-x86_64/ttrek`. `JOBS` defaults to 2.
+
+The wrapper exports `MACOSX_DEPLOYMENT_TARGET` to the full build, defaulting to
+the build machine's macOS version. Select it explicitly for release builds:
+
+```sh
+MACOSX_DEPLOYMENT_TARGET=14.0 ./bin/prepare-macos.sh arm64
+MACOSX_DEPLOYMENT_TARGET=14.0 ./bin/prepare-macos.sh x86_64
+```
+
+Build and install caches are separated by architecture and minimum macOS version:
+for example, `build/macos-arm64-14.0` and `local-static/macos-arm64-14.0`.
+The older directories without a version suffix are not reused. The wrapper also
+honors `TTREK_BUILD_DIR` and `TTREK_INSTALL_DIR`; use fresh directories for both
+when changing the SDK or repairing an existing cache. Keep custom directories
+separate for each architecture and deployment target.
 
 After collecting both tested binaries in `dist/` on a Mac, optionally combine
 and verify them with `lipo`:

@@ -15,7 +15,8 @@ CMAKE = Path(sys.argv[2]).resolve()
 CURL = Path(sys.argv[3]).absolute()
 
 with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
-    root = Path(temporary)
+    # Match the physical paths returned by Tcl and child processes on macOS.
+    root = Path(temporary).resolve()
     home = root / "home"
     home.mkdir()
     tools = root / "bin"

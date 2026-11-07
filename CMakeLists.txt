@@ -115,8 +115,13 @@ foreach (HELP_TOPIC ${HELP_TOPICS})
     list(APPEND HELP_TOPICS_H ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h)
     add_custom_command(
       OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
-      COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC} | sed -e 's/"/\\\\"/g' | sed -e :a -e '/$$/N\; s/\\n/\\\\n/\; ta' | sed -e 's/.*/\\"&\\"/' >${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h
-      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}
+      COMMAND "${CMAKE_COMMAND}"
+        "-DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}"
+        "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/${HELP_TOPIC}.h"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedHelp.cmake"
+      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/docs/${HELP_TOPIC}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedHelp.cmake"
+      VERBATIM
     )
 endforeach()
 
@@ -232,6 +237,8 @@ if(BUILD_TESTING)
     add_test(NAME package_solver COMMAND test_solver)
 
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME help COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/help.py
+        $<TARGET_FILE:ttrek>)
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
         $<TARGET_FILE:ttrek>)
     # The dependency build installs curl here. Prefer it over a host curl that

@@ -1,4 +1,5 @@
 """Exercise registry synchronization, local precedence and atomic self-update offline."""
+import errno
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -231,8 +232,21 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
                 assert result.returncode == 0
                 os.close(slave)
                 slave = None
-                output = os.read(master, 65536).decode()
-                assert "ttrek 2.0.0 is available" in output
+                # A PTY read can return only part of the output. BSD signals EOF
+                # with an empty read; Linux can report EIO after the slave closes.
+                chunks = []
+                while True:
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError as error:
+                        if error.errno != errno.EIO:
+                            raise
+                        break
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                output = b"".join(chunks).decode()
+                assert "ttrek 2.0.0 is available" in output, output
             finally:
                 if slave is not None:
                     os.close(slave)
