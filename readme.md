@@ -27,5 +27,5 @@ to update your project's packages.
 ## Learn more
 
 - [Usage guide](docs/usage.md): find, install and use packages.
-- Try a complete example: [OpenACS](docs/openacs/readme.md) or [Tk's widget demos](docs/tk/readme.md).
+- Try a complete example: [a personal site](docs/example/readme.md), [OpenACS](docs/openacs/readme.md), or [Tk's widget demos](docs/tk/readme.md).
 - [All documentation](docs/readme.md): registries, scripts, building ttrek and more.
