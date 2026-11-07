@@ -26,7 +26,10 @@ ttrek run -script prepare-linux-arm64-musl
 local exporter copies only the executable; build/install directories remain
 isolated by image and architecture. Foreign architectures need a suitable
 builder or emulation (included in Docker Desktop), which can be slow.
-These are static Linux builds; glibc's static resolver/dlopen limitations apply.
+Musl builds are fully static. Glibc builds use the host's libc (glibc 2.35 or
+newer, matching the Ubuntu 22.04 build baseline), with static third-party and
+C++ runtime libraries. This keeps hostname lookups compatible with the host's
+NSS modules.
 
 ## macOS release binaries
 

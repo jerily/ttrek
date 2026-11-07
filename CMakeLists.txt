@@ -204,7 +204,15 @@ find_package(ttrigrams 0.1 CONFIG REQUIRED)
 target_link_libraries(${TARGET} PRIVATE ttrie::core ttrigrams::core)
 if (NOT APPLE)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
-        target_link_options(${TARGET} PRIVATE -static)
+        include(CheckSymbolExists)
+        check_symbol_exists(__GLIBC__ "features.h" TTREK_USE_GLIBC)
+        if(TTREK_USE_GLIBC)
+            # Static glibc can dlopen incompatible host NSS modules during DNS
+            # lookups. Use the host libc while keeping other dependencies static.
+            target_link_options(${TARGET} PRIVATE -static-libgcc -static-libstdc++)
+        else()
+            target_link_options(${TARGET} PRIVATE -static)
+        endif()
     endif()
 endif()
 
