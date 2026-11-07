@@ -8,6 +8,7 @@
 - [Use ttrek](usage.md): create projects, find packages, install, preview and update.
 - [Registries](registries.md): sync the public catalog and select local or HTTP sources.
 - [Scripts](scripts.md): run project and package scripts, or generate standalone builds.
+- [Personal-site example](example/readme.md): install a Tcl site and edit its journal and notebook.
 - [OpenACS quickstart](openacs/readme.md): install and start a local OpenACS instance.
 - [Tk quickstart](tk/readme.md): install Tk and explore its widget demos.
 
