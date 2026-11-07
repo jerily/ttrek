@@ -6,6 +6,17 @@ if [[ $# != 2 || ! $1 =~ ^(amd64|arm64)$ || ! $2 =~ ^(glibc|musl)$ ]]; then
     exit 1
 fi
 
+if ! command -v docker >/dev/null 2>&1; then
+    echo "Linux release builds require Docker with the Buildx plugin." >&2
+    exit 1
+fi
+if ! docker buildx version >/dev/null 2>&1; then
+    echo "Linux release builds require the Docker Buildx plugin." >&2
+    echo "On macOS with Homebrew: brew install docker-buildx" >&2
+    echo "Follow the installation instructions from brew info docker-buildx to enable the plugin." >&2
+    exit 1
+fi
+
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 case $2 in
     glibc) base_image=ubuntu:22.04 ;;
