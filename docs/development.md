@@ -1,0 +1,67 @@
+# Development
+
+[Documentation](readme.md) · [Project overview](../readme.md)
+
+## Rules and principles
+
+- `ttrek` owns registry access, semantic version policy, USE flags, lockfiles, build scripts, and installation ordering.
+- Dependency solving belongs to the standalone [satdepsolver-cpp](https://github.com/jerily/satdepsolver-cpp) C++17 library. Do not vendor another solver implementation here.
+- Installation and update use the same provider and planner. Their default strategies remain `favored` and `latest`, respectively; `locked` prevents changing a locked candidate when that version is available.
+- Linux release builds remain static. Preserve the existing range syntax, caret behavior (same major), and prerelease policy when changing the provider.
+- Search uses [ttrie](https://github.com/jerily/ttrie) for names and [ttrigrams](https://github.com/jerily/ttrigrams) for descriptions; registry selection and ranking remain in ttrek.
+
+## Dependency preflight
+
+The preflight script is embedded in the executable. CMake converts
+`src/check_dependencies.sh` into `check_dependencies.sh.h`, a byte-array header
+included by `src/common.c`. At runtime, ttrek passes that embedded string to
+`/bin/sh -c`; no separate script file is installed or loaded. CMake tracks the
+script as a build dependency, so changing it regenerates the header and rebuilds
+the executable.
+
+## Solver integration
+
+`PackageDatabase.h` implements `DependencyProvider<Range<Pack>>` and owns
+package metadata. `ttrek_solver.cc` calls `solve_packages` and retains the existing
+execution planner and installer. The provider uses IDs from one shared solver pool,
+returns owned candidates and dependency lists, and translates failures through
+`DisplayUnsat`. Registry strings and parsed semantic versions own their storage.
+
+The solver copies its provider. After solving, ttrek retrieves that populated copy
+and records dependencies only for selected versions. Dependencies of rejected
+candidates do not affect installation order. The provider retains existing USE
+flag filtering and version strategy decisions. No Rust FFI types or generated
+binding headers remain in the build.
+
+Migration order: merge the standalone library PR, then this dependent consumer PR.
+The webserver's embedded solver copy is not modified by these PRs.
+
+## Tests
+
+`package_solver` tests the production provider against a local JSON fixture:
+backtracking, dependency order, constraints, locks, favored/latest selection,
+USE flags, conflict messages, transport/metadata errors, and version ownership.
+Assertions stay enabled in Release. Debug builds enable address and undefined
+behavior sanitizers.
+
+`gen_script` exercises the CLI with a fixture registry, builds shared and static
+libraries, and checks patches, dependency order, shell isolation and generation errors.
+`local_registry` checks directory registries, saved settings, installs and updates.
+Both tests use temporary home directories and local source archives. CMake prefers
+the dependency prefix's `bin/curl` for these tests; set `-DTTREK_TEST_CURL=/path/to/curl`
+to select another executable. Build failures include their logs in CTest output.
+
+`registry_sources` checks ordered local/HTTP lookup, source precedence, saved
+lists, error handling and installation against an isolated HTTP server.
+
+With the website available (or a synced default registry), the optional read-only smoke test verifies
+`tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,
+and that preview leaves the project untouched:
+
+```sh
+python3 src/sat-solver/tests/registry_smoke.py build/ttrek
+```
+
+See [Build ttrek from source](build.md) for build and CTest commands,
+[releases](releases.md) for release checks, and [security](security.md) for
+trust boundaries and current limitations.
