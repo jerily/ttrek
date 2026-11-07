@@ -1,0 +1,145 @@
+"""Release orchestration checks; no Docker builds or AWS requests."""
+import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import threading
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class Releases(unittest.TestCase):
+    def setUp(self):
+        # Snap-packaged curl cannot read the host's /tmp. Keep its inputs under
+        # the repository's ignored build directory, as real builds do.
+        (ROOT / "build").mkdir(exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(prefix="ttrek releases ", dir=ROOT / "build")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        shutil.copytree(ROOT / "bin", self.root / "bin")
+        self.commands = self.root / "commands"
+        self.commands.mkdir()
+        self.log = self.root / "commands.jsonl"
+        for name in ("aws", "docker"):
+            command = self.commands / name
+            command.write_text("#!/usr/bin/env python3\n"
+                "import json, os, sys\n"
+                "with open(os.environ['COMMAND_LOG'], 'a') as log:\n"
+                "    log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "sys.exit(int(os.environ.get('COMMAND_FAILURE', '0')))\n")
+            command.chmod(0o755)
+        self.manifest = self.root / "releases.json"
+        self.env = {**os.environ, "PATH": f"{self.commands}:{os.environ['PATH']}",
+            "PROJECT_HOME": str(self.root), "COMMAND_LOG": str(self.log),
+            "TTREK_CHECKSUMS_FILE": str(self.manifest),
+            "TTREK_LOCAL_S3_DIR": str(self.root / "seed"), "AWS_PROFILE": "test-profile",
+            "AWS_REGION": "eu-central-1"}
+        for key in ("TTREK_S3_BUCKET", "TTREK_S3_PREFIX", "TTREK_LOCAL_S3_ENDPOINT"):
+            self.env.pop(key, None)
+
+    def binary(self, target, data=b"release\x00\xff\n"):
+        binary = self.root / "dist" / target / "ttrek"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_bytes(data)
+        return hashlib.sha256(data).hexdigest()
+
+    def run_script(self, name, *args, success=True):
+        result = subprocess.run([str(self.root / "bin" / name), *args],
+            env=self.env, cwd="/tmp", capture_output=True, text=True)
+        self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+        return result
+
+    def test_linux_aliases_select_platform_image_and_output(self):
+        scripts = json.loads((ROOT / "ttrek.json").read_text())["scripts"]
+        self.env["JOBS"] = "3"
+        for architecture in ("amd64", "arm64"):
+            for libc, image in (("glibc", "ubuntu:22.04"), ("musl", "alpine:3.23")):
+                target = f"linux-{architecture}-{libc}"
+                subprocess.run(["bash", "-c", scripts[f"prepare-{target}"]],
+                    env=self.env, cwd="/tmp", check=True)
+                arguments = json.loads(self.log.read_text().splitlines()[-1])
+                self.assertEqual(arguments[arguments.index("--platform") + 1], f"linux/{architecture}")
+                self.assertIn(f"BASE_IMAGE={image}", arguments)
+                self.assertIn("JOBS=3", arguments)
+                self.assertIn(f"type=local,dest=dist/{target}", arguments)
+
+    def test_invalid_inputs_never_upload(self):
+        for arguments in ((), ("staging", "1.0.0"), ("prod", "latest"),
+                          ("prod", "1.0.0"), ("prod", "1.0.0", "../secret")):
+            self.run_script("upload.sh", *arguments, success=False)
+        self.binary("linux-amd64-glibc")
+        self.run_script("upload.sh", "prod", "1.0.0", "linux-amd64-glibc", "macos-arm64", success=False)
+        self.assertFalse(self.log.exists())
+
+    def test_history_targets_and_environments_survive_merging(self):
+        expected = {"local": {"1.0.0": {"macos-arm64": "b" * 64}},
+                    "prod": {"0.9.0": {"macos-arm64": "c" * 64},
+                             "1.0.0": {"macos-arm64": "a" * 64}}}
+        self.manifest.write_text(json.dumps(expected))
+        checksum = self.binary("linux-amd64-glibc")
+        self.run_script("upload.sh", "prod", "1.0.0")
+        expected["prod"]["1.0.0"]["linux-amd64-glibc"] = checksum
+        self.assertEqual(json.loads(self.manifest.read_text()), expected)
+        self.assertEqual(self.manifest.stat().st_mode & 0o777, 0o644)
+        arguments = json.loads(self.log.read_text())
+        self.assertIn("s3://jerily-ttrek-app/ttrek/1.0.0/linux-amd64-glibc/ttrek", arguments)
+        self.assertIn("test-profile", arguments)
+        self.binary("linux-amd64-glibc", b"next version")
+        self.run_script("upload.sh", "prod", "1.1.0")
+        self.assertEqual(json.loads(self.manifest.read_text())["prod"]["1.0.0"], expected["prod"]["1.0.0"])
+
+    def test_failure_leaves_manifest_unchanged_and_cleans_temporary_file(self):
+        self.manifest.write_text('{"prod": {}}\n')
+        self.binary("macos-arm64")
+        self.env["COMMAND_FAILURE"] = "1"
+        self.run_script("upload.sh", "prod", "1.0.0", success=False)
+        self.assertEqual(self.manifest.read_text(), '{"prod": {}}\n')
+        self.assertEqual(list(self.root.glob("releases.json.*")), [])
+
+    def test_production_cannot_replace_recorded_bytes(self):
+        self.binary("macos-arm64")
+        self.run_script("upload.sh", "prod", "1.0.0")
+        original = self.manifest.read_bytes()
+        self.binary("macos-arm64", b"different")
+        self.run_script("upload.sh", "prod", "1.0.0", success=False)
+        self.assertEqual(self.manifest.read_bytes(), original)
+        self.assertEqual(len(self.log.read_text().splitlines()), 1)
+
+    def test_local_uploads_exact_bytes_and_records_only_selected_target(self):
+        objects = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_PUT(self):
+                objects[self.path] = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join)
+        self.addCleanup(server.shutdown)
+        self.env["TTREK_LOCAL_S3_ENDPOINT"] = f"http://127.0.0.1:{server.server_port}"
+        checksum = self.binary("macos-arm64")
+        self.binary("linux-arm64-musl", b"not selected")
+        self.run_script("upload.sh", "local", "1.0.0", "macos-arm64")
+        self.assertEqual(objects, {"/ttrek-local": b"",
+            "/ttrek-local/ttrek/1.0.0/macos-arm64/ttrek": b"release\x00\xff\n"})
+        self.assertEqual(json.loads(self.manifest.read_text()),
+            {"local": {"1.0.0": {"macos-arm64": checksum}}})
+        self.assertEqual((self.root / "seed/ttrek-local/ttrek/1.0.0/macos-arm64/ttrek").read_bytes(),
+            b"release\x00\xff\n")
+        self.assertFalse(self.log.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
