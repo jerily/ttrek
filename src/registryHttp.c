@@ -1,4 +1,5 @@
 #include <curl/curl.h>
+#include "curlCA.h"
 #include "registry.h"
 
 static size_t receive(void *data, size_t size, size_t count, void *context) {
@@ -15,6 +16,7 @@ static int fail(Tcl_DString *result, const char *message) {
 int ttrek_RegistryReadHTTP(const char *url, Tcl_DString *result) {
     CURL *curl = curl_easy_init();
     if (!curl) { return fail(result, "Could not initialize the registry connection"); }
+    ttrek_CurlConfigureCA(curl);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);

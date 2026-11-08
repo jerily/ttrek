@@ -6,6 +6,7 @@
 
 #include "subCmdDecls.h"
 #include <curl/curl.h>
+#include "curlCA.h"
 
 #define TTREK_DOWNLOAD_DEFAULT_RETRY_COUNT 3
 
@@ -26,6 +27,13 @@ static int ttrek_DownloadFile(Tcl_Interp *interp, Tcl_Obj *url_ptr, Tcl_Obj *fil
     }
 
     CURL *curl_handle = curl_easy_init();
+    if (!curl_handle) {
+        Tcl_Close(NULL, chan);
+        Tcl_FSDeleteFile(file_ptr);
+        SetResult("Could not initialize download");
+        return TCL_ERROR;
+    }
+    ttrek_CurlConfigureCA(curl_handle);
     curl_easy_setopt(curl_handle, CURLOPT_URL, Tcl_GetString(url_ptr));
     // Follow redirects
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);

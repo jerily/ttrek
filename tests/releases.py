@@ -58,13 +58,19 @@ class Releases(unittest.TestCase):
         scripts = json.loads((ROOT / "ttrek.json").read_text())["scripts"]
         self.env["JOBS"] = "3"
         for architecture in ("amd64", "arm64"):
-            for libc, image in (("glibc", "ubuntu:22.04"), ("musl", "alpine:3.23")):
+            for libc in ("glibc", "musl"):
                 target = f"linux-{architecture}-{libc}"
                 subprocess.run(["bash", "-c", scripts[f"prepare-{target}"]],
                     env=self.env, cwd="/tmp", check=True)
                 arguments = json.loads(self.log.read_text().splitlines()[-1])
                 self.assertEqual(arguments[arguments.index("--platform") + 1], f"linux/{architecture}")
-                self.assertIn(f"BASE_IMAGE={image}", arguments)
+                image = next(arg.split("=", 1)[1] for arg in arguments if arg.startswith("BASE_IMAGE="))
+                if libc == "glibc":
+                    suffix = "x86_64" if architecture == "amd64" else "aarch64"
+                    self.assertRegex(image, rf"^quay.io/pypa/manylinux_2_28_{suffix}@sha256:[a-f0-9]{{64}}$")
+                else:
+                    self.assertEqual(image, "alpine:3.23")
+                self.assertIn(f"LIBC={libc}", arguments)
                 self.assertIn("JOBS=3", arguments)
                 self.assertIn(f"type=local,dest=dist/{target}", arguments)
 
@@ -74,6 +80,25 @@ class Releases(unittest.TestCase):
             self.run_script("upload.sh", *arguments, success=False)
         self.binary("linux-amd64-glibc")
         self.run_script("upload.sh", "prod", "1.0.0", "linux-amd64-glibc", "macos-arm64", success=False)
+        self.assertFalse(self.log.exists())
+
+    def test_runtime_matrix_uses_pinned_images_and_reruns_verification(self):
+        for architecture in ("amd64", "arm64"):
+            for libc in ("glibc", "musl"):
+                self.binary(f"linux-{architecture}-{libc}")
+            self.run_script("test-linux-release.sh", architecture)
+            commands = [json.loads(line) for line in self.log.read_text().splitlines()[-3:]]
+            for arguments, image in zip(commands, ("almalinux:8.10", "public.ecr.aws/amazonlinux/amazonlinux:2023", "ubuntu:24.04")):
+                self.assertIn("BASE_IMAGE=" + image + "@sha256:", " ".join(arguments))
+                self.assertEqual(arguments[arguments.index("--platform") + 1], f"linux/{architecture}")
+                self.assertEqual(arguments[arguments.index("--no-cache-filter") + 1], "verify")
+                self.assertIn("type=cacheonly", arguments)
+
+    def test_runtime_matrix_requires_both_binaries_and_valid_arguments(self):
+        for arguments in ((), ("riscv64",), ("amd64", "unknown"), ("amd64", "ubuntu", "extra"), ("amd64",)):
+            self.run_script("test-linux-release.sh", *arguments, success=False)
+        self.binary("linux-amd64-glibc")
+        self.run_script("test-linux-release.sh", "amd64", success=False)
         self.assertFalse(self.log.exists())
 
     def test_history_targets_and_environments_survive_merging(self):

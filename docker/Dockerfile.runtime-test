@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=almalinux:8.10@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
+FROM ${BASE_IMAGE} AS tools
+
+# Only runtime-distribution tools/libraries are installed; no release-builder
+# prefix is copied in. Provisioning uses the network, verification does not.
+RUN set -eu; . /etc/os-release; \
+    case "$ID" in \
+        almalinux) \
+            dnf install -y gcc gcc-c++ make git patch perl pkgconf-pkg-config tar gzip curl \
+                ca-certificates openssl python3.12 python3.12-pip && \
+            ln -s /usr/bin/python3.12 /usr/local/bin/python3 && \
+            python3 -m pip install cmake==4.4.4 ;; \
+        amzn) \
+            dnf install -y --allowerasing gcc gcc-c++ make git patch perl pkgconf-pkg-config tar gzip \
+                curl ca-certificates openssl python3-pip && \
+            python3 -m pip install cmake==4.4.4 ;; \
+        ubuntu) \
+            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                gcc g++ make git patch perl pkg-config tar gzip curl ca-certificates openssl python3 cmake ;; \
+        *) echo "Unsupported runtime distribution: $ID" >&2; exit 1 ;; \
+    esac
+
+FROM tools AS verify
+ARG TARGETARCH
+WORKDIR /test
+COPY dist/linux-${TARGETARCH}-glibc/ttrek /usr/local/bin/ttrek-glibc
+COPY dist/linux-${TARGETARCH}-musl/ttrek /usr/local/bin/ttrek-musl
+COPY ttrek.json ./
+COPY bin/check-linux-release.py bin/check-linux-release.py
+COPY tests/https.py tests/local_registry.py tests/
+RUN --network=none set -eu; \
+    getconf GNU_LIBC_VERSION; \
+    expected=$(python3 -c 'import json; print(json.load(open("ttrek.json"))["version"])'); \
+    for libc in glibc musl; do \
+        binary=/usr/local/bin/ttrek-$libc; \
+        test "$("$binary" self-update -version)" = "$expected"; \
+        python3 bin/check-linux-release.py "$binary" "$TARGETARCH" "$libc"; \
+        python3 tests/https.py "$binary" "$(command -v openssl)" --system-trust; \
+        python3 tests/local_registry.py "$binary" "$(command -v cmake)" "$(command -v curl)"; \
+    done

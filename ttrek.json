@@ -6,6 +6,8 @@
     "prepare-linux-arm64-glibc": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" arm64 glibc \"$@\"",
     "prepare-linux-amd64-musl": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" amd64 musl \"$@\"",
     "prepare-linux-arm64-musl": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" arm64 musl \"$@\"",
+    "test-linux-amd64": "exec \"$PROJECT_HOME/bin/test-linux-release.sh\" amd64 \"$@\"",
+    "test-linux-arm64": "exec \"$PROJECT_HOME/bin/test-linux-release.sh\" arm64 \"$@\"",
     "prepare-macos-arm64": "exec \"$PROJECT_HOME/bin/prepare-macos.sh\" arm64 \"$@\"",
     "prepare-macos-x86_64": "exec \"$PROJECT_HOME/bin/prepare-macos.sh\" x86_64 \"$@\"",
     "prepare-macos-universal2": "exec \"$PROJECT_HOME/bin/prepare-universal2.sh\" \"$@\"",

@@ -237,6 +237,7 @@ if(BUILD_TESTING)
     add_test(NAME package_solver COMMAND test_solver)
 
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME release_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_abi.py)
     add_test(NAME help COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/help.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
@@ -254,6 +255,11 @@ if(BUILD_TESTING)
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
     target_link_libraries(ttrek_fixture PRIVATE ttrie::core ttrigrams::core)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_program(TTREK_TEST_OPENSSL NAMES openssl HINTS "${CMAKE_INSTALL_PREFIX}/bin" REQUIRED)
+        add_test(NAME https COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/https.py
+            $<TARGET_FILE:ttrek> "${TTREK_TEST_OPENSSL}" $<TARGET_FILE:ttrek_fixture>)
+    endif()
     add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py

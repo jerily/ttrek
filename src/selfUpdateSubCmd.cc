@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <curl/curl.h>
+#include "curlCA.h"
 #include <openssl/evp.h>
 #include "subCmdDecls.h"
 #include "semver/semver.h"
@@ -50,6 +51,7 @@ std::string release_root() {
 std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> request(const std::string &url, long timeout_ms) {
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) { throw std::runtime_error("Cannot initialize download"); }
+    ttrek_CurlConfigureCA(curl.get());
     const char *protocols = "https";
     if (ttrek_IsLocalEnvironment() && url.rfind("http://localhost:8080/", 0) == 0) {
         protocols = "http,https";

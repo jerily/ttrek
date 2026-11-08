@@ -31,6 +31,7 @@ COPY src /var/ttrek/src
 COPY cmake /var/ttrek/cmake
 COPY tests /var/ttrek/tests
 COPY CMakeLists.txt /var/ttrek/CMakeLists.txt
+COPY bin/check-linux-release.py /var/ttrek/bin/check-linux-release.py
 COPY build-ttrek.sh /var/ttrek/build-ttrek.sh
 
 ENV LD_LIBRARY_PATH="/var/www/sample-project/local/lib:/var/www/sample-project/local/lib64"
