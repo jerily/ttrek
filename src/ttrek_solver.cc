@@ -700,6 +700,33 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        // A bundle becoming a metapackage must relinquish its files before
+        // dependency installation, so the new owners can track those paths.
+        std::unordered_set<std::string> prepared_metapackages;
+        std::unique_ptr<cJSON, decltype(&cJSON_Delete)> original_manifest(
+            cJSON_Duplicate(state_ptr->manifest_root, 1), cJSON_Delete);
+        auto restore_metapackages = [&]() {
+            cJSON *current = state_ptr->manifest_root;
+            state_ptr->manifest_root = original_manifest.get();
+            for (const auto &name : prepared_metapackages) {
+                (void) ttrek_RestoreTempFiles(interp, state_ptr, name.c_str());
+            }
+            state_ptr->manifest_root = current;
+        };
+        for (const auto &spec : execution_plan) {
+            if (!spec.package_installed_p || spec.install_type == ALREADY_INSTALLED) { continue; }
+            int prepared = 0;
+            int status = ttrek_PrepareMetapackage(interp, state_ptr, spec.package_name.c_str(),
+                spec.package_version.c_str(), sysinfo.sysname, sysinfo.machine, &prepared);
+            if (prepared) { prepared_metapackages.insert(spec.package_name); }
+            if (status != TCL_OK) {
+                restore_metapackages();
+                Tcl_DecrRefCount(use_flags_list_ptr);
+                Tcl_DeleteHashTable(&global_use_flags_ht);
+                return TCL_ERROR;
+            }
+        }
+
         // perform the installation
         std::vector<InstallSpec> previously_installed;
         for (const auto &install_spec: execution_plan) {
@@ -715,7 +742,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, &global_use_flags_ht, package_name.c_str(),
                                                 package_version.c_str(), sysinfo.sysname, sysinfo.machine,
-                                                direct_version_requirement.c_str(), package_installed_p,
+                                                direct_version_requirement.c_str(),
+                                                package_installed_p && !prepared_metapackages.count(package_name),
                                                 ++package_num_current, package_num_total);
 
             ttrek_TelemetryPackageInstallEvent(package_name.c_str(), package_version.c_str(),
@@ -723,6 +751,8 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
                                                (install_spec.install_type == DIRECT_INSTALL ? 1 : 0));
 
             if (TCL_OK != outcome) {
+
+                restore_metapackages();
 
                 for (const auto &spec: previously_installed) {
                     if (spec.package_installed_p) {
@@ -740,7 +770,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
             }
 
-            if (package_installed_p) {
+            if (package_installed_p && !prepared_metapackages.count(package_name)) {
                 previously_installed.push_back(install_spec);
             }
         }
@@ -803,6 +833,9 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
 
         for (const auto &install_spec: previously_installed) {
             ttrek_DeleteTempFiles(interp, state_ptr, install_spec.package_name.c_str());
+        }
+        for (const auto &name : prepared_metapackages) {
+            ttrek_DeleteTempFiles(interp, state_ptr, name.c_str());
         }
 
     }

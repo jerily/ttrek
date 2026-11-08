@@ -491,6 +491,32 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
     return TCL_OK;
 }
 
+/* Retire a former bundle before its new dependencies claim the same paths. */
+int ttrek_PrepareMetapackage(Tcl_Interp *interp, ttrek_state_t *state_ptr,
+    const char *package_name, const char *package_version, const char *os, const char *arch, int *prepared) {
+    *prepared = 0;
+    const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
+    if (!cJSON_GetArraySize(cJSON_GetObjectItem(installed, STRING_FILES))) { return TCL_OK; }
+    char url[256];
+    snprintf(url, sizeof(url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version, os, arch);
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    if (ttrek_RegistryGet(url, &data, NULL) != TCL_OK) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_DStringValue(&data), Tcl_DStringLength(&data)));
+        Tcl_DStringFree(&data);
+        return TCL_ERROR;
+    }
+    cJSON *spec = cJSON_Parse(Tcl_DStringValue(&data));
+    Tcl_DStringFree(&data);
+    const cJSON *steps = cJSON_GetObjectItem(spec, "install_script");
+    int metapackage = cJSON_IsArray(steps) && cJSON_GetArraySize(steps) == 0;
+    cJSON_Delete(spec);
+    if (!metapackage) { return TCL_OK; }
+    if (ttrek_BackupPackageFiles(interp, state_ptr, package_name) != TCL_OK) { return TCL_ERROR; }
+    *prepared = 1;
+    return ttrek_DeletePackageFiles(interp, state_ptr, package_name);
+}
+
 int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name) {
     cJSON *package = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     if (!package) {
