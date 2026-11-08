@@ -2,6 +2,12 @@
 
 set -eo pipefail # exit on error
 
+# Match the SDK to the selected Xcode compiler, rather than its fallback SDK.
+if [ "$(uname -s)" = Darwin ]; then
+    SDKROOT=${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}
+    export SDKROOT
+fi
+
 PACKAGE=%s
 VERSION=%s
 ROOT_BUILD_DIR=%s
