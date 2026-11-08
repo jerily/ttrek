@@ -14,6 +14,10 @@ if [[ $(sysctl -n hw.optional.arm64 2>/dev/null || true) == 1 ]]; then
     "$script_dir/prepare-macos.sh" arm64
     "$script_dir/prepare-macos.sh" x86_64
     "$script_dir/prepare-universal2.sh"
+    # Docker Desktop runs ARM64 Linux natively on Apple Silicon.
+    "$script_dir/prepare-linux.sh" arm64 glibc
+    "$script_dir/prepare-linux.sh" arm64 musl
+    "$script_dir/test-linux-release.sh" arm64
 else
     "$script_dir/prepare-macos.sh" x86_64
 fi

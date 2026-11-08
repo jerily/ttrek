@@ -142,8 +142,9 @@ To build every architecture this Mac can execute with minimum macOS 11.0:
 ```
 
 Apple Silicon builds ARM64 and x86_64 (with Rosetta and both toolsets), then
-combines them into universal2 without rebuilding either input. Intel Macs build
-x86_64. This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
+combines them into universal2 without rebuilding either input. With Docker
+Desktop running, it also builds both ARM64 Linux libc targets and runs their
+runtime matrix natively. Intel Macs build macOS x86_64 only. This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
 
 `bin/prepare-macos.sh` requires macOS and runs the full build and tests in the
 selected architecture, using its Homebrew tools and a matching Python

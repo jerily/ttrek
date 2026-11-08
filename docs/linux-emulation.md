@@ -10,6 +10,10 @@ not the host operating system, determines which compiler and libraries run.
 | x86_64 / Intel | amd64 glibc, amd64 musl | arm64 glibc, arm64 musl |
 | ARM64 / Apple Silicon | arm64 glibc, arm64 musl | amd64 glibc, amd64 musl |
 
+On Apple Silicon, `bin/prepare-macos-target-11.0.sh` also builds and tests both
+ARM64 Linux targets natively after the macOS builds. Prefer that workflow to
+ARM64 emulation on an x86_64 machine when an M-series Mac is available.
+
 Docker Desktop on a Mac supplies emulation. Install Docker Desktop and its
 Buildx plugin, then confirm the desired platform appears in
 `docker buildx inspect --bootstrap`. Apple Silicon's Intel macOS builds use

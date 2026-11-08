@@ -82,7 +82,7 @@ class Releases(unittest.TestCase):
             command = self.commands / name
             command.write_text("#!/bin/sh\n" + body + "\n")
             command.chmod(0o755)
-        for name in ("prepare-macos.sh", "prepare-universal2.sh"):
+        for name in ("prepare-macos.sh", "prepare-universal2.sh", "prepare-linux.sh", "test-linux-release.sh"):
             script = self.root / "bin" / name
             script.write_text('#!/bin/sh\nprintf "%s %s %s\\n" "' + name +
                 '" "$*" "$MACOSX_DEPLOYMENT_TARGET" >> "$COMMAND_LOG"\n')
@@ -91,7 +91,8 @@ class Releases(unittest.TestCase):
         self.run_script("prepare-macos-target-11.0.sh")
         self.assertEqual(self.log.read_text().splitlines(), [
             "prepare-macos.sh arm64 11.0", "prepare-macos.sh x86_64 11.0",
-            "prepare-universal2.sh  11.0"])
+            "prepare-universal2.sh  11.0", "prepare-linux.sh arm64 glibc 11.0",
+            "prepare-linux.sh arm64 musl 11.0", "test-linux-release.sh arm64 11.0"])
         self.log.unlink()
         self.env["TEST_ARM64"] = "0"
         self.run_script("prepare-macos-target-11.0.sh")
