@@ -59,25 +59,33 @@ bash build.sh
 
 `gen-script` defaults to Bash, supports `sh`, and replaces `install -bootstrap`.
 
-Recipes can download and unpack an archive in one step:
+Recipes keep downloading and extraction as separate steps:
 
 ```json
-{"cmd": "fetch", "url": "https://example.com/library-1.0.tar.gz"}
+[
+  {"cmd": "download", "url": "https://example.com/crt-v1.0.tar.gz", "filename": "crt-v1.0.tar.gz"},
+  {"cmd": "unpack", "filename": "crt-v1.0.tar.gz", "destination": "crt/library"}
+]
 ```
 
-For additional source archives, use `destination` relative to `$SOURCE_DIR`
-and optionally `archive`, a filename under `$DOWNLOAD_DIR`:
+`filename` is relative to `$DOWNLOAD_DIR` and defaults to `$ARCHIVE_FILE`.
+`unpack.destination` is relative to `$SOURCE_DIR` and defaults to that directory.
+Paths are literal; absolute paths and `..` components are rejected. Parent
+folders are created as needed, and extraction strips the top-level directory.
+Neither command changes `SOURCE_DIR` or `ARCHIVE_FILE`.
 
-```json
-{"cmd": "fetch", "url": "https://example.com/crt-1.0.tar.gz", "archive": "crt-1.0.tar.gz", "destination": "crt/library"}
-```
+`cmake_config.source` selects another CMake project directory; it defaults to
+`$SOURCE_DIR` and supports build-directory variables, such as
+`"source": "$DOWNLOAD_DIR/service-build"`. This lets a standalone build project
+use unmodified upstream sources and installed dependencies.
 
-`fetch` creates the destination and strips the archive's top-level directory,
-using the same downloader and unpacker as `download`/`unpack`. It leaves
-`SOURCE_DIR` and `ARCHIVE_FILE` unchanged. Paths are literal (no shell variable
-expansion), and absolute paths and `..` components are rejected. Existing
-`download` and `unpack` steps continue to work. Clients without `fetch` support
-reject the command; update/rebuild ttrek before using recipes that require it.
+After upstream download attempts fail, native and generated-script builds try
+`/download/<package>-<version>-<sha256-of-source-url>.archive` on ttrek.sh.
+An explicit `filename` is URL-encoded in the query string for server logging.
+It does not affect the mirror key. The endpoint redirects to a signed S3 URL.
+The URL digest identifies the source; it does not verify the downloaded bytes.
+Direct `ttrek download URL FILE ?RECIPE-VERSION ?FILENAME??` calls use the mirror
+only when a recipe identifier is supplied.
 
 A recipe with `"build": {"default": []}` is a dependency-only metapackage.
 When an installed bundle changes to such a recipe, ttrek backs up and removes

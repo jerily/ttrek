@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-metapackages-") as temporary:
             archive = root / (name + ".tar.gz")
             with tarfile.open(archive, "w:gz") as output:
                 output.add(source, arcname=name)
-            steps = [{"cmd": "fetch", "url": archive.as_uri()}, {"cmd": "cd"},
+            steps = [{"cmd": "download", "url": archive.as_uri()}, {"cmd": "unpack"}, {"cmd": "cd"},
                      {"cmd": "cmake_config"}, {"cmd": "cmake_install"}]
         spec = {"name": name, "version": "1.0.0", "dependencies": dependencies, "build": {"default": steps}}
         (directory / "ttrek.json").write_text(json.dumps(spec))

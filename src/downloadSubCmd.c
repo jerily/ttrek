@@ -79,15 +79,41 @@ error:
 
 }
 
+Tcl_Obj *ttrek_DownloadFallbackUrl(Tcl_Obj *url, const char *recipe, const char *filename) {
+    const char *root = DOWNLOAD_URL;
+#ifdef TTREK_TEST_RELEASES
+    const char *test_root = getenv("TTREK_TEST_DOWNLOAD_ROOT");
+    if (test_root && *test_root) { root = test_root; }
+#endif
+    Tcl_Obj *hash = ttrek_GetHashSHA256(url);
+    Tcl_Obj *fallback = Tcl_ObjPrintf("%s/%s-%s.archive", root, recipe, Tcl_GetString(hash));
+    Tcl_BounceRefCount(hash);
+    if (filename) {
+        char *encoded = curl_easy_escape(NULL, filename, 0);
+        if (!encoded) { Tcl_BounceRefCount(fallback); return NULL; }
+        Tcl_AppendToObj(fallback, "?filename=", -1);
+        Tcl_AppendToObj(fallback, encoded, -1);
+        curl_free(encoded);
+    }
+    return fallback;
+}
+
 int ttrek_DownloadSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
-    if (objc != 3) {
-        SetResult("not enough arguments");
+    if (objc < 3 || objc > 5) {
+        SetResult("usage: ttrek download URL FILE ?RECIPE-VERSION ?FILENAME??");
         return TCL_ERROR;
     }
 
     Tcl_Obj *url_ptr = objv[1];
     Tcl_Obj *file_ptr = objv[2];
+    const char *recipe = objc >= 4 ? Tcl_GetString(objv[3]) : NULL;
+    if (recipe && (!*recipe || strlen(recipe) > 200 ||
+        strspn(recipe, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") != strlen(recipe) ||
+        !strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", *recipe))) {
+        SetResult("recipe identifier must start with a letter or digit and contain only letters, digits, '.', '_', '+', '-'");
+        return TCL_ERROR;
+    }
 
     int retry_current = 0;
     // Maximum number of retries
@@ -123,13 +149,16 @@ int ttrek_DownloadSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[
 
     };
 
-    // Try using a fallback URL
-    Tcl_Obj *url_hash_ptr = ttrek_GetHashSHA256(url_ptr);
+    // A direct download without recipe context has no registry mirror key.
+    if (!recipe) { return rc; }
 
-    Tcl_Obj *url_fallback_ptr = Tcl_ObjPrintf("%s/%s.archive", DOWNLOAD_URL,
-        Tcl_GetString(url_hash_ptr));
-
-    Tcl_BounceRefCount(url_hash_ptr);
+    // Identify the source URL independently of its chosen local filename.
+    Tcl_Obj *url_fallback_ptr = ttrek_DownloadFallbackUrl(url_ptr, recipe,
+        objc == 5 ? Tcl_GetString(objv[4]) : NULL);
+    if (!url_fallback_ptr) {
+        SetResult("could not encode fallback download URL");
+        return TCL_ERROR;
+    }
 
     fprintf(stdout, "Attempt to use a fallback URL to download the file ...\n");
     fflush(stdout);

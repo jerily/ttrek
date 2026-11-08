@@ -81,6 +81,9 @@ through the local registry fixture. A temporary test CA is installed and
 removed inside each disposable container to verify the runtime's default
 trust store. Do not run `tests/https.py --system-trust` on a host machine.
 
+See [Linux builds through emulation](linux-emulation.md) for host/target
+combinations and the complete build/test workflow.
+
 Foreign architectures require a native builder or emulation. On a Linux
 AMD64 host, register ARM64 with the kernel before starting the builder.
 BuildKit's bundled emulator alone can fail when package scripts execute
@@ -130,6 +133,17 @@ ttrek run -script prepare-macos-x86_64
 # Without an installed ttrek (defaults to the current architecture):
 ./bin/prepare-macos.sh
 ```
+
+To build every architecture this Mac can execute with minimum macOS 11.0:
+
+```sh
+./bin/prepare-macos-target-11.0.sh
+# Or: ttrek run -script prepare-macos-target-11.0
+```
+
+Apple Silicon builds ARM64 and x86_64 (with Rosetta and both toolsets), then
+combines them into universal2 without rebuilding either input. Intel Macs build
+x86_64. This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
 
 `bin/prepare-macos.sh` requires macOS and runs the full build and tests in the
 selected architecture, using its Homebrew tools and a matching Python

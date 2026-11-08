@@ -266,7 +266,9 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
-    add_test(NAME fetch COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fetch.py
+    add_test(NAME download_fallback COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/download_fallback.py
+        $<TARGET_FILE:ttrek_fixture>)
+    add_test(NAME download COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/download.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME metapackages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/metapackages.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")

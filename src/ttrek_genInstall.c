@@ -398,31 +398,70 @@ DEFINE_COMMAND(EnvVariable) {
 
 }
 
+/* Archive names and extraction destinations are literal relative paths. */
+static int ttrek_RelativePathValid(const char *path) {
+    if (!path || !*path || *path == '/' || strchr(path, '\\') || strchr(path, ':')) {
+        return 0;
+    }
+    const char *part = path;
+    do {
+        const char *end = strchr(part, '/');
+        size_t length = end ? (size_t)(end - part) : strlen(part);
+        if (!length || (length == 2 && strncmp(part, "..", 2) == 0)) { return 0; }
+        if (!end) { break; }
+        part = end + 1;
+    } while (1);
+    return 1;
+}
+
+static Tcl_Obj *ttrek_ArchivePath(Tcl_Interp *interp, const cJSON *opts) {
+    const cJSON *filename = cJSON_GetObjectItem(opts, "filename");
+    if (!filename) { return dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"); }
+    if (!cJSON_IsString(filename) || !ttrek_RelativePathValid(filename->valuestring) ||
+        strcmp(filename->valuestring, ".") == 0) {
+        SetResult("archive filename must be a relative path without '..'");
+        return NULL;
+    }
+    return ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2,
+                                 dq("$DOWNLOAD_DIR"), sq(filename->valuestring));
+}
+
 DEFINE_COMMAND(Download) {
-
     UNUSED(use_flags_ht_ptr);
-
-    Tcl_Obj *cmd;
-
-    Tcl_Obj *url = ttrek_cJSONStringToObject(opts, "url");
-    if (url == NULL) {
-        SetResult("error while parsing \"download\" cmd: no url or url is not a string");
+    const cJSON *url = cJSON_GetObjectItem(opts, "url");
+    if (!cJSON_IsString(url) || !*url->valuestring) {
+        SetResult("download requires a nonempty URL string");
         return TCL_ERROR;
     }
-
+    const cJSON *filename = cJSON_GetObjectItem(opts, "filename");
+    Tcl_Obj *path = ttrek_ArchivePath(interp, opts);
+    if (!path) { return TCL_ERROR; }
+    Tcl_IncrRefCount(path);
+    Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd mkdir -p \"$(dirname %s)\"", 1, path);
+    APPEND_CMD(cmd, NULL);
     if (state_ptr->mode == MODE_SCRIPT) {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd curl -fLsS --retry 3 -o %s %s",
-                                      2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), osq(url));
+        Tcl_Obj *url_obj = Tcl_NewStringObj(url->valuestring, -1);
+        Tcl_Obj *fallback = ttrek_DownloadFallbackUrl(url_obj, "$PACKAGE-$VERSION",
+            filename ? filename->valuestring : NULL);
+        Tcl_BounceRefCount(url_obj);
+        if (!fallback) {
+            Tcl_DecrRefCount(path);
+            SetResult("could not encode fallback download URL");
+            return TCL_ERROR;
+        }
+        cmd = ttrek_AppendFormatToObj(interp, NULL,
+            "{ cmd curl -fLsS --retry 3 -o %s %s || cmd curl -fLsS --retry 3 -o %s %s; }",
+            4, path, sq(url->valuestring), path, odq(fallback));
     } else {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s",
-                                      3, osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)), osq(url),
-                                      dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"));
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s %s", 4,
+                                      sq(Tcl_GetNameOfExecutable()), sq(url->valuestring), path, dq("$PACKAGE-$VERSION"));
+        if (filename) {
+            ttrek_AppendFormatToObj(interp, cmd, " %s", 1, sq(filename->valuestring));
+        }
     }
-
     APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/download.log"));
-
+    Tcl_DecrRefCount(path);
     return TCL_OK;
-
 }
 
 DEFINE_COMMAND(Patch) {
@@ -510,86 +549,30 @@ DEFINE_COMMAND(Git) {
 }
 
 DEFINE_COMMAND(Unpack) {
-
     UNUSED(use_flags_ht_ptr);
-    UNUSED(opts);
-
-    Tcl_Obj *cmd;
-
-    if (state_ptr->mode == MODE_SCRIPT) {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd unpack %s %s", 2, dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"),
-                                      dq("$SOURCE_DIR"));
-    } else {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s unpack %s %s", 3,
-                                      osq(Tcl_NewStringObj(Tcl_GetNameOfExecutable(), -1)),
-                                      dq("$DOWNLOAD_DIR/$ARCHIVE_FILE"), dq("$SOURCE_DIR"));
-    }
-
-    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
-
-    return TCL_OK;
-
-}
-
-/* Fetch paths are literal and relative to the package's own directories. */
-static int ttrek_FetchPathValid(const char *path, int filename) {
-    if (!path || !*path || *path == '/' || strchr(path, '\\') || strchr(path, ':')) {
-        return 0;
-    }
-    const char *part = path;
-    do {
-        const char *end = strchr(part, '/');
-        size_t length = end ? (size_t)(end - part) : strlen(part);
-        if (!length || (length == 2 && strncmp(part, "..", 2) == 0) ||
-            (filename && (end || (length == 1 && *part == '.')))) {
-            return 0;
-        }
-        if (!end) { break; }
-        part = end + 1;
-    } while (1);
-    return 1;
-}
-
-DEFINE_COMMAND(Fetch) {
-    UNUSED(use_flags_ht_ptr);
-    const cJSON *url = cJSON_GetObjectItem(opts, "url");
-    const cJSON *archive = cJSON_GetObjectItem(opts, "archive");
     const cJSON *destination = cJSON_GetObjectItem(opts, "destination");
-    if (!cJSON_IsString(url) || !*url->valuestring ||
-        (archive && (!cJSON_IsString(archive) || !ttrek_FetchPathValid(archive->valuestring, 1))) ||
-        (destination && (!cJSON_IsString(destination) || !ttrek_FetchPathValid(destination->valuestring, 0)))) {
-        SetResult("fetch requires a URL string, an optional archive filename, and an optional relative destination without '..'");
+    if (destination && (!cJSON_IsString(destination) || !ttrek_RelativePathValid(destination->valuestring))) {
+        SetResult("unpack destination must be a relative path without '..'");
         return TCL_ERROR;
     }
-
-    Tcl_Obj *archive_path = archive
-        ? ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2, dq("$DOWNLOAD_DIR"), sq(archive->valuestring))
-        : dq("$DOWNLOAD_DIR/$ARCHIVE_FILE");
-    Tcl_Obj *destination_path = destination
+    Tcl_Obj *archive = ttrek_ArchivePath(interp, opts);
+    if (!archive) { return TCL_ERROR; }
+    Tcl_Obj *path = destination
         ? ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2, dq("$SOURCE_DIR"), sq(destination->valuestring))
         : dq("$SOURCE_DIR");
-    Tcl_IncrRefCount(archive_path);
-    Tcl_IncrRefCount(destination_path);
-
-    Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd mkdir -p %s", 1, destination_path);
+    Tcl_IncrRefCount(archive);
+    Tcl_IncrRefCount(path);
+    Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd mkdir -p %s", 1, path);
     APPEND_CMD(cmd, NULL);
     if (state_ptr->mode == MODE_SCRIPT) {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd curl -fLsS --retry 3 -o %s %s",
-                                      2, archive_path, sq(url->valuestring));
-    } else {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s", 3,
-                                      sq(Tcl_GetNameOfExecutable()), sq(url->valuestring), archive_path);
-    }
-    APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/download.log"));
-    if (state_ptr->mode == MODE_SCRIPT) {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd unpack %s %s", 2, archive_path, destination_path);
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd unpack %s %s", 2, archive, path);
     } else {
         cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s unpack %s %s", 3,
-                                      sq(Tcl_GetNameOfExecutable()), archive_path, destination_path);
+                                      sq(Tcl_GetNameOfExecutable()), archive, path);
     }
     APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
-    Tcl_DecrRefCount(archive_path);
-    Tcl_DecrRefCount(destination_path);
+    Tcl_DecrRefCount(archive);
+    Tcl_DecrRefCount(path);
     return TCL_OK;
 }
 
@@ -779,7 +762,9 @@ DEFINE_COMMAND(CmakeConfig) {
                                 odq(ld_library_path));
     }
 
-    ttrek_AppendFormatToObj(interp, cmd, "cmd cmake %s", 1, dq("$SOURCE_DIR"));
+    Tcl_Obj *source = ttrek_cJSONStringToObject(opts, "source");
+    ttrek_AppendFormatToObj(interp, cmd, "cmd cmake %s", 1,
+                            source ? odq(source) : dq("$SOURCE_DIR"));
 
     ttrek_AppendFormatToObj(interp, cmd, " -DCMAKE_INSTALL_PREFIX=%s", 1,
                             dq("$INSTALL_DIR"));
@@ -994,10 +979,8 @@ DEFINE_COMMAND(CmakeInstall) {
     UNUSED(use_flags_ht_ptr);
     UNUSED(state_ptr);
 
-    Tcl_Obj *cmd;
-
-    cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cmake --install %s", 1,
-                                  dq("$BUILD_DIR"));
+    Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cmake --install %s", 1,
+                                         dq("$BUILD_DIR"));
 
     Tcl_Obj *config = ttrek_cJSONStringToObject(opts, "config");
     if (config != NULL) {
@@ -1024,7 +1007,6 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
                        Tcl_Obj *resultList);
     } commands[] = {
             {"download",      "1", 0, ttrek_SpecToObj_Download},
-            {"fetch",         "1", 0, ttrek_SpecToObj_Fetch},
             {"git",           "1", 0, ttrek_SpecToObj_Git},
             {"unpack",        "1", 0, ttrek_SpecToObj_Unpack},
             {"patch",         "1", 0, ttrek_SpecToObj_Patch},
