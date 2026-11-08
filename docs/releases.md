@@ -81,15 +81,34 @@ through the local registry fixture. A temporary test CA is installed and
 removed inside each disposable container to verify the runtime's default
 trust store. Do not run `tests/https.py --system-trust` on a host machine.
 
-Foreign architectures require a native builder or emulation. An isolated
-BuildKit builder with bundled emulation can be selected without changing the
-default builder:
+Foreign architectures require a native builder or emulation. On a Linux
+AMD64 host, register ARM64 with the kernel before starting the builder.
+BuildKit's bundled emulator alone can fail when package scripts execute
+through their shebang or the shell's fallback. Docker Desktop already
+provides this registration. Following [Docker's QEMU setup](https://docs.docker.com/build/building/multi-platform/#qemu),
+check the existing registrations and install ARM64 only if it is missing:
 
 ```sh
+binfmt_image=tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+docker run --privileged --rm "$binfmt_image"
+# Only when linux/arm64 is not already supported:
+docker run --privileged --rm "$binfmt_image" --install arm64
+
 docker buildx create --name ttrek-release-tests --driver docker-container
+docker buildx inspect ttrek-release-tests --bootstrap
+# Its Platforms list should include linux/arm64.
+BUILDX_BUILDER=ttrek-release-tests ./bin/prepare-linux.sh arm64 glibc
+BUILDX_BUILDER=ttrek-release-tests ./bin/prepare-linux.sh arm64 musl
 BUILDX_BUILDER=ttrek-release-tests ./bin/test-linux-release.sh arm64
 docker buildx rm ttrek-release-tests
+# Only if this session added qemu-aarch64:
+docker run --privileged --rm "$binfmt_image" --uninstall qemu-aarch64
 ```
+
+This selects an isolated builder without changing the default builder. If
+registration was added after a builder started, stop it with
+`docker buildx stop <name>` and bootstrap it again before retrying; its build
+cache is retained.
 
 The ABI check complements these runtime tests; it does not replace them.
 

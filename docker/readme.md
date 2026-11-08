@@ -20,7 +20,9 @@ See the [build documentation](../readme.md#linux-release-binaries) for all four
 Linux variants, macOS builds, architecture isolation, universal2 packaging,
 and local/production uploads with versioned checksums.
 Foreign architectures require a native builder or emulation; Docker Desktop
-provides emulation.
+provides emulation. On Linux, register the foreign architecture with kernel
+binfmt before starting the builder so package scripts execute correctly;
+see the [ARM64 setup](../docs/releases.md#linux-release-binaries).
 
 After preparing both libc variants, run `./bin/test-linux-release.sh amd64`
 or `arm64` to test them in AlmaLinux 8, AL2023, and Ubuntu 24.04. The optional
