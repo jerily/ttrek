@@ -21,9 +21,9 @@ mkdir -p "$DOWNLOAD_DIR" "$PATCH_DIR" "$INSTALL_DIR"
 unpack() (
     archive=$1
     destination=$2
-    if tar -tzf "$archive" >/dev/null 2>&1; then
-        tar -xzf "$archive" --strip-components=1 -C "$destination"
-    else
+    # gzip can decode a small ZIP member into a stream tar mistakes for an
+    # empty archive. Check ZIP explicitly before handing tar.gz files to tar.
+    if unzip -tq "$archive" >/dev/null 2>&1; then
         unzip -q "$archive" -d "$destination" || exit $?
         # Source archives contain one top-level directory.
         for directory in "$destination"/*; do
@@ -32,5 +32,7 @@ unpack() (
             rm -rf "$directory" || exit $?
             break
         done
+    else
+        tar -xzf "$archive" --strip-components=1 -C "$destination"
     fi
 )

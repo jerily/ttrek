@@ -58,6 +58,33 @@ bash build.sh
 ```
 
 `gen-script` defaults to Bash, supports `sh`, and replaces `install -bootstrap`.
+
+Recipes can download and unpack an archive in one step:
+
+```json
+{"cmd": "fetch", "url": "https://example.com/library-1.0.tar.gz"}
+```
+
+For additional source archives, use `destination` relative to `$SOURCE_DIR`
+and optionally `archive`, a filename under `$DOWNLOAD_DIR`:
+
+```json
+{"cmd": "fetch", "url": "https://example.com/crt-1.0.tar.gz", "archive": "crt-1.0.tar.gz", "destination": "crt/library"}
+```
+
+`fetch` creates the destination and strips the archive's top-level directory,
+using the same downloader and unpacker as `download`/`unpack`. It leaves
+`SOURCE_DIR` and `ARCHIVE_FILE` unchanged. Paths are literal (no shell variable
+expansion), and absolute paths and `..` components are rejected. Existing
+`download` and `unpack` steps continue to work. Clients without `fetch` support
+reject the command; update/rebuild ttrek before using recipes that require it.
+
+A recipe with `"build": {"default": []}` is a dependency-only metapackage.
+When an installed bundle changes to such a recipe, ttrek backs up and removes
+the bundle's files before building its new dependencies. This lets those
+dependencies own the files they install, so removing the umbrella later does
+not remove their libraries. Failed migrations restore the original bundle's
+files and retain the normal interrupted-install recovery behavior.
 It resolves dependencies, embeds patches, and writes only the completed script to
 stdout. Generation is read-only; hooks and builds run when you execute the script.
 The script installs into `build/install` beside itself and needs no ttrek binary.
