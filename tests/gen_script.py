@@ -46,13 +46,19 @@ with tempfile.TemporaryDirectory(prefix="ttrek gen-script ' ") as temporary:
         source = root / name
         source.mkdir()
         (source / "value.c").write_text("int value(void) { return 41; }\n")
+        # Exercise C++ standard headers too: a compiler/SDK mismatch on macOS
+        # can compile C successfully while failing on libc++ headers.
+        (source / "sdk_probe.cpp").write_text(
+            "#include <algorithm>\n#include <string>\n"
+            "std::string sdk_probe() { std::string s = \"sdk\"; "
+            "std::sort(s.begin(), s.end()); return s; }\n")
         (source / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 3.22)\nproject(" + name + " C)\n"
+            "cmake_minimum_required(VERSION 3.22)\nproject(" + name + " C CXX)\n"
             "option(BUILD_SHARED_LIBS \"Shared library\" ON)\n"
             + ("if(DEFINED ENV{DEPENDENCY_ONLY})\nmessage(FATAL_ERROR \"Environment leaked\")\nendif()\n"
                "if(NOT EXISTS \"${CMAKE_INSTALL_PREFIX}/include/base.h\")\n"
                "message(FATAL_ERROR \"Dependency not installed first\")\nendif()\n" if name == "app" else "")
-            + "add_library(" + name + " value.c)\n"
+            + "add_library(" + name + " value.c sdk_probe.cpp)\n"
             "install(TARGETS " + name + " LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)\n"
             "install(FILES value.c DESTINATION include RENAME " + name + ".h)\n")
         archive = root / (name + ".tar.gz")
