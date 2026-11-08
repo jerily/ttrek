@@ -5,6 +5,7 @@
  */
 
 #include <curl/curl.h>
+#include "curlCA.h"
 #include "common.h"
 #include "registry.h"
 #include "ttrek_telemetry.h"
@@ -47,6 +48,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
         registry_error(dsPtr, "Could not initialize the registry connection");
         return TCL_ERROR;
     }
+    ttrek_CurlConfigureCA(curl_handle);
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);

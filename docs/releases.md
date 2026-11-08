@@ -10,8 +10,10 @@ relative paths refer to that directory.
 
 `bin/prepare-linux.sh` uses Docker Buildx and the existing build/tests in
 `docker/Dockerfile.release`. Run each target on a native builder or one with
-emulation for the requested architecture. Ubuntu 22.04 selects glibc; Alpine
-3.23 selects musl. Each script exports `dist/<target>/ttrek`:
+emulation for the requested architecture. Glibc builds use the architecture's
+digest-pinned [manylinux_2_28 image](https://github.com/pypa/manylinux#manylinux_2_28-almalinux-8-based)
+(AlmaLinux 8 with GCC 14); Alpine 3.23 selects musl. Each script exports
+`dist/<target>/ttrek`:
 
 ```sh
 ttrek run -script prepare-linux-amd64-glibc
@@ -26,10 +28,76 @@ ttrek run -script prepare-linux-arm64-musl
 local exporter copies only the executable; build/install directories remain
 isolated by image and architecture. Foreign architectures need a suitable
 builder or emulation (included in Docker Desktop), which can be slow.
-Musl builds are fully static. Glibc builds use the host's libc (glibc 2.35 or
-newer, matching the Ubuntu 22.04 build baseline), with static third-party and
-C++ runtime libraries. This keeps hostname lookups compatible with the host's
-NSS modules.
+Musl builds are fully static. New glibc builds target glibc 2.28 or newer,
+with static third-party and C++ runtime libraries. Previously built Ubuntu
+22.04 artifacts require glibc 2.35 and must be rebuilt. Dynamic glibc keeps
+hostname lookups compatible with the host's NSS modules. The installer retains libc-aware selection:
+glibc on glibc systems, musl on musl systems. Self-update retains the binary's
+libc target.
+
+The entire dependency build runs inside the pinned image, using its modern
+compiler, CMake (at least 3.22.1), and Python 3. No host build/install cache is
+copied in, and no `-march=native` flags are used. When updating the image pins
+in `bin/prepare-linux.sh`, update the AMD64 default in `Dockerfile.release`
+too and repeat runtime validation on both architectures.
+
+Before export, `bin/check-linux-release.py` checks the ELF architecture,
+loader, symbol versions, and dynamic dependencies. It rejects glibc symbols
+newer than 2.28, non-system shared libraries (including dynamic libstdc++),
+and embedded library search paths. Musl outputs must have no dynamic loader
+or shared-library dependencies. The checker can also inspect collected files:
+
+```sh
+python3 bin/check-linux-release.py dist/linux-amd64-glibc/ttrek amd64 glibc
+python3 bin/check-linux-release.py dist/linux-arm64-glibc/ttrek arm64 glibc
+python3 tests/release_abi.py
+```
+
+Before publishing, run the checked-in runtime matrix on AlmaLinux 8,
+Amazon Linux 2023, and Ubuntu 24.04. Prepare both libc binaries for the
+selected architecture first:
+
+```sh
+./bin/test-linux-release.sh amd64
+./bin/test-linux-release.sh arm64
+# Run one distribution while investigating a failure:
+./bin/test-linux-release.sh amd64 al2023
+# Equivalent ttrek aliases:
+ttrek run -script test-linux-amd64
+ttrek run -script test-linux-arm64 -- ubuntu
+```
+
+`docker/Dockerfile.runtime-test` uses digest-pinned runtime images, their own
+compilers and certificate stores, and a pinned CMake package on the RPM-based
+images. Provisioning needs network access to distribution repositories/PyPI;
+the verification stage runs with networking disabled and is rerun on every
+invocation. OS packages still come from the distributions' current repositories.
+No AWS account, public registry, or running website is required.
+
+Each run tests both glibc and musl artifacts: version/startup, ELF ABI,
+hostname lookup, HTTPS downloads and registry access, CA overrides, rejection
+of untrusted certificates and hostname mismatches, and package builds/updates
+through the local registry fixture. A temporary test CA is installed and
+removed inside each disposable container to verify the runtime's default
+trust store. Do not run `tests/https.py --system-trust` on a host machine.
+
+Foreign architectures require a native builder or emulation. An isolated
+BuildKit builder with bundled emulation can be selected without changing the
+default builder:
+
+```sh
+docker buildx create --name ttrek-release-tests --driver docker-container
+BUILDX_BUILDER=ttrek-release-tests ./bin/test-linux-release.sh arm64
+docker buildx rm ttrek-release-tests
+```
+
+The ABI check complements these runtime tests; it does not replace them.
+
+Linux binaries select the runtime distribution's CA bundle for HTTPS instead
+of relying on the builder's certificate path. `CURL_CA_BUNDLE` or
+`SSL_CERT_FILE` can select an explicit bundle, with `CURL_CA_BUNDLE` taking
+precedence. An invalid explicit path fails verification rather than falling
+back to a different trust store.
 
 ## macOS release binaries
 
@@ -122,6 +190,14 @@ and `AWS_REGION`. Relative paths resolve from this repository. Set
 Update the website's `releases.version` and `releases.prefix` together, deploy
 the JSON with its configuration, and restart the website/local stack after
 uploading. Object uploads do not deploy the website or change its configuration.
+
+The baseline rebuild keeps version 1.0.0. After resetting the website's
+checksum manifest, repopulate it by uploading the tested artifacts for all
+advertised targets before deploying the manifest. Once the rebuilt AMD64
+glibc object is uploaded and tested on AL2023, CodeBuild can switch to
+`s3://jerily-ttrek-app/ttrek/1.0.0/linux-amd64-glibc/ttrek` in
+`ttrek.sh/devops/build-lambda.sh`. Its existing `ttrek/*` read permission
+already covers that object.
 
 Run `python3 tests/releases.py` to check orchestration and checksum history with
 mocked Docker/AWS commands and a temporary local HTTP server.

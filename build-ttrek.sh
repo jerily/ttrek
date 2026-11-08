@@ -175,6 +175,11 @@ cmake_configure -S "$TTRIGRAMS_SOURCE_DIR" -B "$TRIGRAM_BUILD_DIR" \
 "$CTEST" --test-dir "$TRIGRAM_BUILD_DIR" --output-on-failure
 "$CMAKE" --install "$TRIGRAM_BUILD_DIR"
 
+# The release image caches this layer separately from CLI sources and tests.
+if [[ ${TTREK_DEPS_ONLY:-0} == 1 ]]; then
+    exit 0
+fi
+
 # Clear old dependency paths (including Tcl 8.6 and lib64 OpenSSL) on reruns.
 cmake_configure -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
