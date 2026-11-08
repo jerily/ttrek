@@ -74,6 +74,30 @@ class Releases(unittest.TestCase):
                 self.assertIn("JOBS=3", arguments)
                 self.assertIn(f"type=local,dest=dist/{target}", arguments)
 
+    def test_macos_11_builds_supported_architectures_and_combines_once(self):
+        for name, body in {
+            "uname": 'echo Darwin',
+            "sysctl": 'echo "$TEST_ARM64"',
+        }.items():
+            command = self.commands / name
+            command.write_text("#!/bin/sh\n" + body + "\n")
+            command.chmod(0o755)
+        for name in ("prepare-macos.sh", "prepare-universal2.sh", "prepare-linux.sh", "test-linux-release.sh"):
+            script = self.root / "bin" / name
+            script.write_text('#!/bin/sh\nprintf "%s %s %s\\n" "' + name +
+                '" "$*" "$MACOSX_DEPLOYMENT_TARGET" >> "$COMMAND_LOG"\n')
+        self.env["MACOSX_DEPLOYMENT_TARGET"] = "15.0"
+        self.env["TEST_ARM64"] = "1"
+        self.run_script("prepare-macos-target-11.0.sh")
+        self.assertEqual(self.log.read_text().splitlines(), [
+            "prepare-macos.sh arm64 11.0", "prepare-macos.sh x86_64 11.0",
+            "prepare-universal2.sh  11.0", "prepare-linux.sh arm64 glibc 11.0",
+            "prepare-linux.sh arm64 musl 11.0", "test-linux-release.sh arm64 11.0"])
+        self.log.unlink()
+        self.env["TEST_ARM64"] = "0"
+        self.run_script("prepare-macos-target-11.0.sh")
+        self.assertEqual(self.log.read_text(), "prepare-macos.sh x86_64 11.0\n")
+
     def test_invalid_inputs_never_upload(self):
         for arguments in ((), ("staging", "1.0.0"), ("prod", "latest"),
                           ("prod", "1.0.0"), ("prod", "1.0.0", "../secret")):

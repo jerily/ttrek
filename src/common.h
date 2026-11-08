@@ -174,6 +174,7 @@ Tcl_Obj *ttrek_GetFilePath(Tcl_Interp *interp, Tcl_Obj *directory, const char *f
 int ttrek_InitLockFile(Tcl_Interp *interp, Tcl_Obj *path_to_lock_ptr, int save_registries);
 
 Tcl_Obj *ttrek_GetHashSHA256(Tcl_Obj *data_ptr);
+Tcl_Obj *ttrek_DownloadFallbackUrl(Tcl_Obj *url, const char *recipe, const char *filename);
 
 void ttrek_EnvironmentStateFree(void);
 void ttrek_EnvironmentStateSetVenv(ttrek_state_t *state_ptr);
