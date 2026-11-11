@@ -2,18 +2,76 @@
   "name": "ttrek",
   "version": "1.1.0",
   "scripts": {
-    "prepare-linux-amd64-glibc": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" amd64 glibc \"$@\"",
-    "prepare-linux-arm64-glibc": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" arm64 glibc \"$@\"",
-    "prepare-linux-amd64-musl": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" amd64 musl \"$@\"",
-    "prepare-linux-arm64-musl": "exec \"$PROJECT_HOME/bin/prepare-linux.sh\" arm64 musl \"$@\"",
-    "test-linux-amd64": "exec \"$PROJECT_HOME/bin/test-linux-release.sh\" amd64 \"$@\"",
-    "test-linux-arm64": "exec \"$PROJECT_HOME/bin/test-linux-release.sh\" arm64 \"$@\"",
-    "prepare-macos-target-11.0": "exec \"$PROJECT_HOME/bin/prepare-macos-target-11.0.sh\" \"$@\"",
-    "prepare-macos-arm64": "exec \"$PROJECT_HOME/bin/prepare-macos.sh\" arm64 \"$@\"",
-    "prepare-macos-x86_64": "exec \"$PROJECT_HOME/bin/prepare-macos.sh\" x86_64 \"$@\"",
-    "prepare-macos-universal2": "exec \"$PROJECT_HOME/bin/prepare-universal2.sh\" \"$@\"",
-    "upload-local": "exec \"$PROJECT_HOME/bin/upload.sh\" local \"$@\"",
-    "upload-prod": "exec \"$PROJECT_HOME/bin/upload.sh\" prod \"$@\""
+    "prepare-linux-amd64-glibc": {
+      "file": "bin/prepare-linux.sh",
+      "args": [
+        "amd64",
+        "glibc"
+      ]
+    },
+    "prepare-linux-arm64-glibc": {
+      "file": "bin/prepare-linux.sh",
+      "args": [
+        "arm64",
+        "glibc"
+      ]
+    },
+    "prepare-linux-amd64-musl": {
+      "file": "bin/prepare-linux.sh",
+      "args": [
+        "amd64",
+        "musl"
+      ]
+    },
+    "prepare-linux-arm64-musl": {
+      "file": "bin/prepare-linux.sh",
+      "args": [
+        "arm64",
+        "musl"
+      ]
+    },
+    "test-linux-amd64": {
+      "file": "bin/test-linux-release.sh",
+      "args": [
+        "amd64"
+      ]
+    },
+    "test-linux-arm64": {
+      "file": "bin/test-linux-release.sh",
+      "args": [
+        "arm64"
+      ]
+    },
+    "prepare-macos-target-11.0": {
+      "file": "bin/prepare-macos-target-11.0.sh"
+    },
+    "prepare-macos-arm64": {
+      "file": "bin/prepare-macos.sh",
+      "args": [
+        "arm64"
+      ]
+    },
+    "prepare-macos-x86_64": {
+      "file": "bin/prepare-macos.sh",
+      "args": [
+        "x86_64"
+      ]
+    },
+    "prepare-macos-universal2": {
+      "file": "bin/prepare-universal2.sh"
+    },
+    "upload-local": {
+      "file": "bin/upload.sh",
+      "args": [
+        "local"
+      ]
+    },
+    "upload-prod": {
+      "file": "bin/upload.sh",
+      "args": [
+        "prod"
+      ]
+    }
   },
   "useFlags": [
     "+static"

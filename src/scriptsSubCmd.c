@@ -91,7 +91,9 @@ static int ttrek_ScriptsSubCmdDescribe(Tcl_Interp *interp, ttrek_state_t *state_
     }
 
     Tcl_Obj *script_body = NULL;
-    ttrek_ScriptsDescribe(interp, source, objv[0], &script_body);
+    if (ttrek_ScriptsDescribe(interp, state_ptr, source, Tcl_GetString(objv[0]), &script_body) != TCL_OK) {
+        return TCL_ERROR;
+    }
 
     if (script_body == NULL && source != state_ptr->spec_root) {
         Tcl_SetObjResult(interp, Tcl_ObjPrintf("there is no named script \"%s\" in the installed package", Tcl_GetString(objv[0])));
@@ -99,7 +101,7 @@ static int ttrek_ScriptsSubCmdDescribe(Tcl_Interp *interp, ttrek_state_t *state_
     }
     if (script_body != NULL) {
         printf("%s\n", Tcl_GetString(script_body));
-        Tcl_BounceRefCount(script_body);
+        Tcl_DecrRefCount(script_body);
     }
 
     return TCL_OK;

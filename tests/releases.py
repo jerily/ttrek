@@ -60,7 +60,8 @@ class Releases(unittest.TestCase):
         for architecture in ("amd64", "arm64"):
             for libc in ("glibc", "musl"):
                 target = f"linux-{architecture}-{libc}"
-                subprocess.run(["bash", "-c", scripts[f"prepare-{target}"]],
+                script = scripts[f"prepare-{target}"]
+                subprocess.run([str(self.root / script["file"]), *script.get("args", [])],
                     env=self.env, cwd="/tmp", check=True)
                 arguments = json.loads(self.log.read_text().splitlines()[-1])
                 self.assertEqual(arguments[arguments.index("--platform") + 1], f"linux/{architecture}")

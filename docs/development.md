@@ -65,6 +65,8 @@ source archive extraction, output directories, failure cleanup and mirror
 fallback without installing dependencies or running build commands.
 `install_options` also verifies concise environment messages and `TTREK_DEBUG`
 diagnostics during initialization, installation and interrupted-install recovery.
+`project_scripts` checks project file references, preset and runtime arguments,
+hooks, source-file preservation and the release aliases with stub executables.
 
 With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,

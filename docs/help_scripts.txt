@@ -8,6 +8,11 @@ List, inspect, add or remove named project scripts in ttrek.json.
 version. Package scripts support only ls and describe and are read-only.
 These commands do not fetch recipes or execute scripts.
 
+Project scripts may be shell strings or {"file":"bin/task.sh","args":["preset"]}.
+describe reads a referenced file relative to the project root. File args must
+be an array of strings and are passed before any arguments supplied after --.
+add stores an inline body; edits to other scripts preserve file references.
+
 Run a package script with 'ttrek run -package PACKAGE -script NAME'.
 Reinstall older packages with 'ttrek install -force PACKAGE' to cache their
 recipe scripts. Use the same -u or -g mode for installation and execution.

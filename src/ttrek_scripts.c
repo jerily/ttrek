@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h> /* for getpid() */
 #include <stdlib.h> /* for getenv() */
+#include <sys/stat.h>
 
 int ttrek_ScriptsValidate(Tcl_Interp *interp, const cJSON *scripts) {
     if (!cJSON_IsObject(scripts)) {
@@ -111,42 +112,119 @@ int ttrek_ScriptsDel(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr) {
 
 }
 
-const char *ttrek_ScriptsGet(cJSON *spec_root, const char *name_str) {
-
-    cJSON *scripts_node = cJSON_GetObjectItem(spec_root, "scripts");
-    if (scripts_node != NULL) {
-
-        cJSON *body_node = cJSON_GetObjectItem(scripts_node, name_str);
-        if (body_node != NULL) {
-            return cJSON_GetStringValue(body_node);
-        }
-
+int ttrek_ScriptsDescribe(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *source,
+                          const char *name, Tcl_Obj **body_ptr_ptr) {
+    *body_ptr_ptr = NULL;
+    cJSON *scripts = cJSON_GetObjectItem(source, "scripts");
+    if (!scripts) { return TCL_OK; }
+    if (!cJSON_IsObject(scripts)) {
+        SetResult("scripts must be an object");
+        return TCL_ERROR;
+    }
+    cJSON *script = cJSON_GetObjectItem(scripts, name);
+    if (!script) { return TCL_OK; }
+    if (cJSON_IsString(script)) {
+        *body_ptr_ptr = Tcl_NewStringObj(script->valuestring, -1);
+        Tcl_IncrRefCount(*body_ptr_ptr);
+        return TCL_OK;
     }
 
-    return NULL;
+    cJSON *file = cJSON_GetObjectItemCaseSensitive(script, "file");
+    cJSON *args = cJSON_GetObjectItemCaseSensitive(script, "args");
+    if (source != state_ptr->spec_root || !cJSON_IsObject(script) || cJSON_GetArraySize(script) != (args ? 2 : 1) ||
+        !cJSON_IsString(file) || !file->valuestring[0]) {
+        SetResult("project scripts must be strings or objects containing a nonempty file path and optional args");
+        return TCL_ERROR;
+    }
+    if (args && !cJSON_IsArray(args)) {
+        SetResult("script args must be an array of strings");
+        return TCL_ERROR;
+    }
+    const cJSON *arg;
+    cJSON_ArrayForEach(arg, args) {
+        if (!cJSON_IsString(arg)) {
+            SetResult("script args must be an array of strings");
+            return TCL_ERROR;
+        }
+    }
+    Tcl_Obj *relative = Tcl_NewStringObj(file->valuestring, -1);
+    Tcl_IncrRefCount(relative);
+    int valid = Tcl_FSGetPathType(relative) == TCL_PATH_RELATIVE;
+    Tcl_Size count;
+    Tcl_Obj *parts = Tcl_FSSplitPath(relative, &count);
+    Tcl_IncrRefCount(parts);
+    for (Tcl_Size i = 0; i < count; ++i) {
+        Tcl_Obj *part;
+        Tcl_ListObjIndex(NULL, parts, i, &part);
+        if (strcmp(Tcl_GetString(part), "..") == 0) { valid = 0; }
+    }
+    Tcl_DecrRefCount(parts);
+    Tcl_DecrRefCount(relative);
+    if (!valid) {
+        SetResult("script file must be a relative path without '..'");
+        return TCL_ERROR;
+    }
 
-}
-
-int ttrek_ScriptsDescribe(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *name_ptr, Tcl_Obj **body_ptr_ptr) {
-
-    UNUSED(interp);
-
-    const char *body_str = ttrek_ScriptsGet(spec_root, Tcl_GetString(name_ptr));
-    *body_ptr_ptr = (body_str == NULL ? NULL : Tcl_NewStringObj(body_str, -1));
-
+    Tcl_Obj *path = ttrek_GetFilePath(interp, state_ptr->project_home_dir_ptr, file->valuestring);
+    if (!path) { return TCL_ERROR; }
+    Tcl_StatBuf statbuf;
+    if (Tcl_FSLstat(path, &statbuf) != 0 || !S_ISREG(statbuf.st_mode)) {
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("script file must be an existing regular file: %s", Tcl_GetString(path)));
+        Tcl_DecrRefCount(path);
+        return TCL_ERROR;
+    }
+    Tcl_Channel channel = Tcl_FSOpenFileChannel(interp, path, "r", 0);
+    Tcl_DecrRefCount(path);
+    if (!channel) { return TCL_ERROR; }
+    Tcl_Obj *body = Tcl_NewObj();
+    Tcl_IncrRefCount(body);
+    if (Tcl_SetChannelOption(interp, channel, "-encoding", "utf-8") != TCL_OK ||
+        Tcl_ReadChars(channel, body, -1, 0) < 0) {
+        Tcl_Close(NULL, channel);
+        Tcl_DecrRefCount(body);
+        return TCL_ERROR;
+    }
+    if (Tcl_Close(interp, channel) != TCL_OK) {
+        Tcl_DecrRefCount(body);
+        return TCL_ERROR;
+    }
+    const Tcl_UniChar *characters = Tcl_GetUnicodeFromObj(body, &count);
+    for (Tcl_Size i = 0; i < count; ++i) {
+        if (characters[i] == 0) {
+            SetResult("script file must not contain NUL bytes");
+            Tcl_DecrRefCount(body);
+            return TCL_ERROR;
+        }
+    }
+    *body_ptr_ptr = body;
     return TCL_OK;
-
 }
 
-int ttrek_ScriptsMakeTempFile(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *source, const char *name_str, Tcl_Obj **file_ptr_ptr) {
+int ttrek_ScriptsPrepareRun(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *source,
+                           const char *name, ttrek_script_t *script) {
 
-    const char *body_str = ttrek_ScriptsGet(source, name_str);
-    if (body_str == NULL) {
-        *file_ptr_ptr = NULL;
+    memset(script, 0, sizeof(*script));
+    Tcl_Obj *body = NULL;
+    if (ttrek_ScriptsDescribe(interp, state_ptr, source, name, &body) != TCL_OK) { return TCL_ERROR; }
+    if (!body) { return TCL_OK; }
+    cJSON *definition = cJSON_GetObjectItem(cJSON_GetObjectItem(source, "scripts"), name);
+    if (cJSON_IsObject(definition)) {
+        // Execute the original file so $0 and BASH_SOURCE still locate its siblings.
+        const cJSON *file = cJSON_GetObjectItemCaseSensitive(definition, "file");
+        script->path = ttrek_GetFilePath(interp, state_ptr->project_home_dir_ptr, file->valuestring);
+        script->args = cJSON_GetObjectItemCaseSensitive(definition, "args");
+        Tcl_DecrRefCount(body);
+        if (!script->path) { return TCL_ERROR; }
+        if (Tcl_FSAccess(script->path, X_OK) != 0) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("script file is not executable: %s", Tcl_GetString(script->path)));
+            ttrek_ScriptsRelease(script);
+            return TCL_ERROR;
+        }
         return TCL_OK;
     }
     // Recovery from a failed install may have removed the untracked temp directory.
     if (ttrek_EnsureDirectoryExists(interp, state_ptr->project_temp_dir_ptr) != TCL_OK) {
+        Tcl_DecrRefCount(body);
         return TCL_ERROR;
     }
 
@@ -159,35 +237,31 @@ int ttrek_ScriptsMakeTempFile(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSO
         now.usec);
     Tcl_IncrRefCount(temp_file);
 
-    Tcl_Channel chan = Tcl_OpenFileChannel(interp, Tcl_GetString(temp_file), "w", 0744);
-    if (chan == NULL) {
-        // We have an error message from Tcl_OpenFileChannel() in Tcl interp
-        Tcl_DecrRefCount(temp_file);
-        return TCL_ERROR;
-    }
-
-    int body_len = strlen(body_str);
-    if (Tcl_WriteChars(chan, body_str, body_len) != body_len) {
-        SetResult("could not write script to the file");
-        Tcl_Close(NULL, chan);
+    int status = ttrek_WriteChars(interp, temp_file, body, 0744);
+    Tcl_DecrRefCount(body);
+    if (status != TCL_OK) {
         Tcl_FSDeleteFile(temp_file);
         Tcl_DecrRefCount(temp_file);
         return TCL_ERROR;
     }
 
-    if (Tcl_Close(interp, chan) != TCL_OK) {
-        Tcl_FSDeleteFile(temp_file);
-        Tcl_DecrRefCount(temp_file);
-        return TCL_ERROR;
-    }
-
-    *file_ptr_ptr = temp_file;
+    script->path = temp_file;
+    script->temporary = 1;
 
     return TCL_OK;
 
 }
 
-int ttrek_ScriptsDefineRunArgs(Tcl_Interp *interp, Tcl_Obj *file_ptr, Tcl_Size *argc_ptr, const char ***argv_ptr) {
+void ttrek_ScriptsRelease(ttrek_script_t *script) {
+    if (script->path) {
+        if (script->temporary) { Tcl_FSDeleteFile(script->path); }
+        Tcl_DecrRefCount(script->path);
+    }
+    memset(script, 0, sizeof(*script));
+}
+
+int ttrek_ScriptsDefineRunArgs(Tcl_Interp *interp, const ttrek_script_t *script,
+                              Tcl_Size *argc_ptr, const char ***argv_ptr) {
 
     const char *shell = getenv("SHELL");
     if (shell == NULL || strlen(shell) == 0) {
@@ -198,15 +272,18 @@ int ttrek_ScriptsDefineRunArgs(Tcl_Interp *interp, Tcl_Obj *file_ptr, Tcl_Size *
     // Pass the path as an argument so spaces and shell metacharacters are literal.
     // Executing the file preserves its shebang, or the shell's script fallback.
 
-    Tcl_Size argc = 5;
+    Tcl_Size argc = 5 + cJSON_GetArraySize(script->args);
     const char **argv = ckalloc(sizeof(char *) * (argc + 1));
 
     argv[0] = shell;
     argv[1] = "-c";
     argv[2] = "exec \"$@\"";
     argv[3] = "ttrek-script";
-    argv[4] = Tcl_GetString(file_ptr);
-    argv[5] = NULL;
+    argv[4] = Tcl_GetString(script->path);
+    Tcl_Size index = 5;
+    const cJSON *arg;
+    cJSON_ArrayForEach(arg, script->args) { argv[index++] = arg->valuestring; }
+    argv[argc] = NULL;
 
     *argc_ptr = argc;
     *argv_ptr = argv;
