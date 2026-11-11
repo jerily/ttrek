@@ -25,6 +25,7 @@ RUN JOBS="$JOBS" TTREK_MAKE_THREADS="$JOBS" TTREK_DEPS_ONLY=1 \
         bash ./build-ttrek.sh
 
 COPY CMakeLists.txt ./
+COPY ttrek.json ./
 COPY cmake/ cmake/
 COPY docs/ docs/
 COPY src/ src/
