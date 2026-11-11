@@ -22,7 +22,7 @@ int ttrek_RegistryReadHTTP(const char *url, Tcl_DString *result) {
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(curl, CURLOPT_NETRC, (long)CURL_NETRC_IGNORED);
     curl_easy_setopt(curl, CURLOPT_HEADEROPT, (long)CURLHEADER_SEPARATE);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ttrek/1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ttrek/" XSTR(PROJECT_VERSION));
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive);

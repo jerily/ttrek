@@ -44,6 +44,15 @@ static char *machineIdBaseFile = "machine-id";
 // This variable will be used in the function ttrek_TelemetryCollectEnvironmentInfo().
 static Tcl_Interp *collect_info_interp = NULL;
 
+int ttrek_TelemetryEnabled(void) {
+    const char *setting = getenv("TTREK_TELEMETRY");
+    int enabled = 1;
+    if (setting && Tcl_GetBoolean(NULL, setting, &enabled) != TCL_OK) {
+        return 0;
+    }
+    return enabled && !ttrek_RegistryHasSources();
+}
+
 static Tcl_Obj *ttrek_TelemetryReadFile(Tcl_Interp *interp, const char *path) {
    Tcl_Obj *rc = NULL;
 
@@ -202,7 +211,7 @@ done:
 }
 
 void ttrek_TelemetrySaveMachineId(Tcl_Interp *interp) {
-    if (machineIdObj == NULL) {
+    if (!ttrek_TelemetryEnabled() || machineIdObj == NULL) {
         return;
     }
 
@@ -243,6 +252,7 @@ done:
 }
 
 void ttrek_TelemetryLoadMachineId(Tcl_Interp *interp) {
+    if (!ttrek_TelemetryEnabled()) { return; }
 
     collect_info_interp = interp;
 
@@ -403,7 +413,7 @@ static cJSON *ttrek_TelemetryCollectEnvironmentInfo() {
 }
 
 void ttrek_TelemetryRegisterEnvironment() {
-    if (isEnvironmentRegistered) {
+    if (!ttrek_TelemetryEnabled() || isEnvironmentRegistered) {
         return;
     }
     isEnvironmentRegistered = 1;
@@ -422,13 +432,14 @@ void ttrek_TelemetryRegisterEnvironment() {
 }
 
 Tcl_Obj *ttrek_TelemetryGetMachineId() {
-    return machineIdObj;
+    return ttrek_TelemetryEnabled() ? machineIdObj : NULL;
 }
 
 void ttrek_TelemetryPackageInstallEvent(const char *package_name,
     const char *package_version, const char *os, const char *arch,
     int outcome, int is_toplevel)
 {
+    if (!ttrek_TelemetryEnabled()) { return; }
 
     cJSON *root = cJSON_CreateObject();
 

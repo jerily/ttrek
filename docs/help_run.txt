@@ -5,6 +5,12 @@ Run a named shell script from the project's ttrek.json, or a command in its
 installed environment. -package selects the scripts saved with that installed
 package's recipe. It requires -script and does not contact a registry.
 
+Project scripts also accept {"file":"bin/task.sh","args":["preset"]}.
+The file must be a regular executable, relative to the project root, without
+'..' components or a symbolic link. It runs at its original path so its
+shebang and script-relative paths keep working. args is an optional array of
+strings, passed before arguments supplied after --, without shell expansion.
+
 Pass script arguments after --. They are forwarded literally as $1, $2, ...;
 shell scripts should use "$@" to forward them to their program. For example:
   ttrek run -package my-app -script start -- --port 3015 --data-dir "my data"

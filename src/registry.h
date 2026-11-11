@@ -28,6 +28,10 @@ int ttrek_RegistryHasSources(void);
 int ttrek_RegistryIsLocal(void);
 int ttrek_RegistrySourceCount(void);
 const char *ttrek_RegistryLocalDirectory(int index);
+const char *ttrek_RegistryHTTPUrl(int index);
+// Select explicit, nearest-project, or default sources without creating state.
+int ttrek_RegistrySelectForRead(Tcl_Interp *interp);
+int ttrek_RegistrySearchIsOwner(Tcl_Interp *interp, int source, const char *name, int *owns);
 void ttrek_RegistrySaveConfiguration(cJSON *lock);
 int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, const cJSON *lock);
 const char *ttrek_RegistryDefaultDirectory(void);
@@ -37,7 +41,7 @@ int ttrek_RegistryUseDefault(Tcl_Interp *interp);
 int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result);
 int ttrek_RegistryReadLocal(const char *directory, const char *url, Tcl_DString *result);
 int ttrek_RegistryReadHTTP(const char *url, Tcl_DString *result);
-int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, Tcl_Obj *matches);
+int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_Obj *matches);
 
 #ifdef __cplusplus
 }

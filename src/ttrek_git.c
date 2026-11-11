@@ -105,7 +105,11 @@ int ttrek_GitInit(ttrek_state_t *state_ptr) {
         goto cleanup;
     }
 
-    printf("Created initial commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    if (ttrek_DebugEnabled()) {
+        printf("Created initial commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    } else {
+        printf("Initialized package environment.\n");
+    }
 
     // Clean up
     git_signature_free(sig);
@@ -182,7 +186,9 @@ int ttrek_GitClean(ttrek_state_t *state_ptr, git_repository *repo) {
         ttrek_ResolvePath(NULL, state_ptr->project_venv_dir_ptr, file_ptr, &path_ptr);
 
         if (directory_p) {
-            fprintf(stderr, "deleting directory: %s\n", Tcl_GetString(path_ptr));
+            if (ttrek_DebugEnabled()) {
+                fprintf(stderr, "deleting directory: %s\n", Tcl_GetString(path_ptr));
+            }
             Tcl_Obj *error;
             if (TCL_OK != Tcl_FSRemoveDirectory(path_ptr, 1, &error)) {
                 Tcl_DecrRefCount(untracked_files);
@@ -190,7 +196,9 @@ int ttrek_GitClean(ttrek_state_t *state_ptr, git_repository *repo) {
                 return TCL_ERROR;
             }
         } else {
-            fprintf(stderr, "deleting file: %s\n", Tcl_GetString(path_ptr));
+            if (ttrek_DebugEnabled()) {
+                fprintf(stderr, "deleting file: %s\n", Tcl_GetString(path_ptr));
+            }
             if (TCL_OK != Tcl_FSDeleteFile(path_ptr)) {
                 Tcl_DecrRefCount(untracked_files);
                 return TCL_ERROR;
@@ -234,7 +242,11 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
     if (error < 0) {
         const git_error *e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s\n", error, e->klass, e->message);
-    } else {
+        git_commit_free(commit);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        return TCL_ERROR;
+    } else if (ttrek_DebugEnabled()) {
         printf("Hard reset to %s successful.\n", commit_sha);
     }
 
@@ -245,6 +257,10 @@ int ttrek_GitResetHard(ttrek_state_t *state_ptr) {
         git_repository_free(repo);
         git_libgit2_shutdown();
         return TCL_ERROR;
+    }
+
+    if (!ttrek_DebugEnabled()) {
+        printf("Restored package environment to its last working state.\n");
     }
 
     // Clean up
@@ -375,7 +391,11 @@ int ttrek_GitCommit(ttrek_state_t *state_ptr, const char *message) {
         return TCL_ERROR;
     }
 
-    printf("Created commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    if (ttrek_DebugEnabled()) {
+        printf("Created commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    } else {
+        printf("Saved package environment.\n");
+    }
 
     // Clean up
     git_signature_free(sig);
@@ -501,7 +521,11 @@ int ttrek_GitAmend(ttrek_state_t *state_ptr) {
         return TCL_ERROR;
     }
 
-    printf("Amended commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    if (ttrek_DebugEnabled()) {
+        printf("Amended commit with OID: %s\n", git_oid_tostr_s(&commit_oid));
+    } else {
+        printf("Saved package environment.\n");
+    }
 
     // Clean up
     git_commit_free(parent);

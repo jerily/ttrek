@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.0.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.1.0 LANGUAGES C CXX)
 
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
 
@@ -154,6 +154,7 @@ add_executable(${TARGET}
         src/registryLocal.cc
         src/syncSubCmd.cc
         src/selfUpdateSubCmd.cc
+        src/versionSubCmd.c
         src/initSubCmd.c
         src/installSubCmd.c
         src/genScriptSubCmd.cc
@@ -170,6 +171,7 @@ add_executable(${TARGET}
         src/fsmonitor/fsmonitor.c
         src/listSubCmd.c
         src/searchSubCmd.c
+        src/cloneSubCmd.cc
         src/useSubCmd.c
         src/uninstallSubCmd.c
         src/downloadSubCmd.c
@@ -240,6 +242,8 @@ if(BUILD_TESTING)
     add_test(NAME release_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_abi.py)
     add_test(NAME help COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/help.py
         $<TARGET_FILE:ttrek>)
+    add_test(NAME project_scripts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/project_scripts.py
+        $<TARGET_FILE:ttrek>)
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
         $<TARGET_FILE:ttrek>)
     # The dependency build installs curl here. Prefer it over a host curl that
@@ -255,6 +259,10 @@ if(BUILD_TESTING)
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
     target_link_libraries(ttrek_fixture PRIVATE ttrie::core ttrigrams::core)
+    add_test(NAME version COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/version.py
+        $<TARGET_FILE:ttrek> $<TARGET_FILE:ttrek_fixture> $<CONFIG>)
+    add_test(NAME telemetry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/telemetry.py
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_program(TTREK_TEST_OPENSSL NAMES openssl HINTS "${CMAKE_INSTALL_PREFIX}/bin" REQUIRED)
         add_test(NAME https COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/https.py
@@ -262,6 +270,10 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
         $<TARGET_FILE:ttrek>)
+    add_test(NAME search_http COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search_http.py
+        $<TARGET_FILE:ttrek>)
+    add_test(NAME clone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clone.py
+        $<TARGET_FILE:ttrek_fixture>)
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py

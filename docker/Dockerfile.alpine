@@ -31,6 +31,7 @@ COPY src /var/ttrek/src
 COPY cmake /var/ttrek/cmake
 COPY tests /var/ttrek/tests
 COPY CMakeLists.txt /var/ttrek/CMakeLists.txt
+COPY ttrek.json /var/ttrek/ttrek.json
 COPY bin/check-linux-release.py /var/ttrek/bin/check-linux-release.py
 COPY build-ttrek.sh /var/ttrek/build-ttrek.sh
 

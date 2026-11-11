@@ -14,7 +14,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     int rc = TCL_OK;
     ttrek_state_t *state_ptr = NULL;
     const char **argv = NULL;
-    Tcl_Obj *temp_file = NULL;
+    ttrek_script_t script = {0};
 
     int option_user = 0;
     int option_global = 0;
@@ -78,11 +78,11 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         if (option_package && ttrek_ScriptsPackageSource(interp, state_ptr, option_package, &source) != TCL_OK) {
             goto error;
         }
-        if (ttrek_ScriptsMakeTempFile(interp, state_ptr, source, option_script, &temp_file) != TCL_OK) {
+        if (ttrek_ScriptsPrepareRun(interp, state_ptr, source, option_script, &script) != TCL_OK) {
             goto error;
         }
 
-        if (temp_file == NULL) {
+        if (script.path == NULL) {
             if (option_package) {
                 Tcl_SetObjResult(interp, Tcl_ObjPrintf("there is no named script \"%s\" in installed package \"%s\"",
                     option_script, option_package));
@@ -92,7 +92,7 @@ int ttrek_RunSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
             goto error;
         }
 
-        if (ttrek_ScriptsDefineRunArgs(interp, temp_file, &objc, &argv) != TCL_OK) {
+        if (ttrek_ScriptsDefineRunArgs(interp, &script, &objc, &argv) != TCL_OK) {
             goto error;
         }
 
@@ -145,10 +145,7 @@ done:
     if (argv != NULL) {
         ckfree(argv);
     }
-    if (temp_file != NULL) {
-        Tcl_FSDeleteFile(temp_file);
-        Tcl_DecrRefCount(temp_file);
-    }
+    ttrek_ScriptsRelease(&script);
     return rc;
 
 }

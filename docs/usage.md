@@ -28,6 +28,19 @@ ttrek run tclsh9.1
 At the Tcl prompt, try `package require tjson`. To install an existing project's
 declared packages, run `ttrek install -y` from its directory.
 
+## Clone package sources
+
+```sh
+ttrek clone tsession
+ttrek clone tsession@1.1.0 -outdir ./my-session
+```
+
+`clone` downloads and unpacks the newest matching source archive into `./PACKAGE`
+or the directory specified by `-outdir`. The destination must be new or empty.
+It works outside projects and supports the usual version constraints and registry
+options. Dependencies, patches, hooks and build commands are not run. Recipes
+without a source archive report an error. See `ttrek help clone` for details.
+
 ## Install, preview and update
 
 From the same project directory, preview changes before installing them:
@@ -84,6 +97,9 @@ Existing internal `.git` directories are renamed on the next install/update,
 preserving history. No `.git` pointer remains for ordinary Git/editor discovery.
 An editor that already registered the old repository may need a reload.
 
+Environment initialization, saving and recovery print short status messages.
+Set `TTREK_DEBUG` to see internal commit IDs, reset details and deleted paths.
+
 For registries managed by `ttrek sync`, commands warn when the checkout is behind
 its fetched `origin/main` or was last synced over 24 hours ago. The warning
 suggests `ttrek sync` for the default registry, or `ttrek sync .` from a custom
@@ -91,8 +107,8 @@ registry directory. This uses local metadata; it does not fetch during resolutio
 
 ## Search recipes
 
-Search uses a local copy of the registry. Run `ttrek sync` to download or refresh
-the public catalog, then search it:
+Search uses the synced public registry when available and the ttrek.sh search
+endpoint otherwise. Run `ttrek sync` to enable offline search:
 
 ```sh
 ttrek search tcl
@@ -109,17 +125,19 @@ Matching ignores ASCII case. Queries accept 1–255 ASCII letters, digits, space
 `.`, `_`, `+` or `-`, excluding empty queries, `.` and `..`.
 
 Search uses `-registry`, the nearest project's saved registry, or an existing
-`~/.local/ttrek-registry`, in that order. It works outside a project and indexes
+existing `~/.local/ttrek-registry`, then the website, in that order. It works outside a project and indexes
 names and descriptions from every `version/ttrek.json`, once per package in the
 results. Missing descriptions are allowed; description matches display the
 matching text, otherwise the first nonempty description in alphabetical order.
-Both indexes are built only when `search` runs. No network requests, telemetry, update checks or project
-writes occur. If the local registry is missing, run `ttrek sync` first.
+Both local indexes are built only when `search` runs. HTTP registries supply
+matches through `GET BASE/search?q=QUERY`. Results are ranked together, with
+earlier registries taking precedence for duplicate packages. No telemetry,
+update checks or project writes occur.
 Description suggestions require a shared trigram and pass a Levenshtein substring
 check; queries below three characters match descriptions literally.
 
 ## More commands
 
-Run `ttrek help` for the command list, or `ttrek help install` for a command's
+Run `ttrek` or `ttrek help` for the command list, or `ttrek help install` for a command's
 options. See [registries](registries.md) to choose where packages come from,
 and [scripts](scripts.md) to run package commands or generate standalone builds.

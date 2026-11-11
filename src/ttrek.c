@@ -31,6 +31,8 @@ static const char *subcommands[] = {
         "sync",
         "self-update",
         "search",
+        "clone",
+        "version",
         NULL
 };
 
@@ -51,6 +53,8 @@ enum subcommand {
     SUBCMD_SYNC,
     SUBCMD_SELF_UPDATE,
     SUBCMD_SEARCH,
+    SUBCMD_CLONE,
+    SUBCMD_VERSION,
 };
 
 int main(int argc, char *argv[]) {
@@ -60,10 +64,6 @@ int main(int argc, char *argv[]) {
     Tcl_Size objc = 0;
     Tcl_Obj **objv;
     CURLcode isCurlInitialized = CURLE_FAILED_INIT;
-
-    if (argc <= 1) {
-        goto usage;
-    }
 
     cJSON_Hooks hooks = {
             .malloc_fn = Tcl_Alloc,
@@ -102,7 +102,10 @@ int main(int argc, char *argv[]) {
         }
         first_command += 2;
     }
-    if (first_command >= argc) { goto usage; }
+    if (first_command >= argc) {
+        ttrek_HelpSubCmd(interp, 0, NULL);
+        goto done;
+    }
 
     objc = argc - first_command + 1;
     objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * objc);
@@ -120,12 +123,27 @@ int main(int argc, char *argv[]) {
     // Init/install/update load telemetry after selecting their registry.
     if (!ttrek_RegistryHasSources() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
         sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
-        sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH) {
+        sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH &&
+        sub_cmd_index != SUBCMD_CLONE && sub_cmd_index != SUBCMD_HELP && sub_cmd_index != SUBCMD_VERSION) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
     switch ((enum subcommand) sub_cmd_index) {
+        case SUBCMD_VERSION:
+            if (ttrek_VersionSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_CLONE:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
+            if (ttrek_CloneSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
         case SUBCMD_SEARCH:
+            isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (ttrek_SearchSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
                 fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;

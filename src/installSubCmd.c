@@ -24,20 +24,20 @@ static int ttrek_InstallRunHook(Tcl_Interp *interp, ttrek_state_t *state_ptr, co
     int rc = TCL_OK;
     const char **argv = NULL;
     Tcl_Size argc;
-    Tcl_Obj *temp_file = NULL;
+    ttrek_script_t script = {0};
 
     DBG2(fprintf(stderr, "want to run hook [%s]", hook_str));
 
-    if (ttrek_ScriptsMakeTempFile(interp, state_ptr, state_ptr->spec_root, hook_str, &temp_file) != TCL_OK) {
+    if (ttrek_ScriptsPrepareRun(interp, state_ptr, state_ptr->spec_root, hook_str, &script) != TCL_OK) {
         goto error;
     }
 
-    if (temp_file == NULL) {
+    if (script.path == NULL) {
         DBG2(fprintf(stderr, "no hook [%s] defined", hook_str));
         goto done;
     }
 
-    if (ttrek_ScriptsDefineRunArgs(interp, temp_file, &argc, &argv) != TCL_OK) {
+    if (ttrek_ScriptsDefineRunArgs(interp, &script, &argc, &argv) != TCL_OK) {
         goto error;
     }
 
@@ -53,10 +53,7 @@ error:
 
 done:
 
-    if (temp_file != NULL) {
-        Tcl_FSDeleteFile(temp_file);
-        Tcl_DecrRefCount(temp_file);
-    }
+    ttrek_ScriptsRelease(&script);
     if (argv != NULL) {
         ckfree(argv);
     }

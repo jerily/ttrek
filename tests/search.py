@@ -15,7 +15,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     home.mkdir()
     cwd = root / "work"
     cwd.mkdir()
-    env = dict(os.environ, HOME=str(home), ENV="LOCAL")
+    env = dict(os.environ, HOME=str(home), ENV="LOCAL", http_proxy="http://127.0.0.1:9",
+               no_proxy="", NO_PROXY="")
 
     def run(*args, ok=True, directory=cwd):
         result = subprocess.run([BINARY, *args], cwd=directory, env=env,
@@ -31,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
 
     assert "search" in run("help").stdout
     assert "Levenshtein" in run("help", "search").stdout
-    assert "ttrek sync" in run("search", "tcl", ok=False).stderr
+    assert "Could not read registry" in run("search", "tcl", ok=False).stderr
     assert not list(home.iterdir()) and not list(cwd.iterdir())
     for args in (("search",), ("search", "a", "b"), ("search", ""),
                  ("search", "../x"), ("search", "a" * 256), ("search", "   "),

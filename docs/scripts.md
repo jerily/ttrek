@@ -5,6 +5,33 @@
 Use named scripts to run commands supplied by a project or an installed package.
 You can also generate a build script that runs without ttrek.
 
+## Run project scripts
+
+Project scripts can contain inline shell text or reference an existing executable
+file, with optional preset arguments:
+
+```json
+"scripts": {
+  "prepare-linux-amd64-glibc": {
+    "file": "bin/prepare-linux.sh",
+    "args": ["amd64", "glibc"]
+  }
+}
+```
+
+Paths are relative to the directory containing `ttrek.json`, including when
+invoked from a project subdirectory. Files must be regular and executable;
+absolute paths, `..` components and symbolic links are rejected. The original
+file runs in place, preserving its shebang, `$0` and `BASH_SOURCE` location.
+The working directory remains the installation directory.
+
+`args` must be an array of strings. Preset arguments precede any arguments
+passed after `--`; both are passed literally without shell expansion.
+For example, `ttrek run -script upload-prod -- 1.1.0` supplies the configured
+`prod` argument followed by `1.1.0`. File references also work for project
+`preInstall` and `postInstall` hooks. `scripts describe` reads the referenced
+file, and editing other scripts preserves the reference in `ttrek.json`.
+
 ## Run installed package scripts
 
 Recipes can define a `scripts` object mapping names to shell script strings or

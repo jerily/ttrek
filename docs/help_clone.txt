@@ -1,0 +1,29 @@
+Usage: ttrek clone [-outdir DIRECTORY] [-registry SOURCE]... [-add-pubreg] PACKAGE[@VERSION]
+
+Download and unpack a package's source archive into a local directory.
+Exactly one package is required. VERSION is optional and accepts the same
+semantic version constraints as install. The newest matching version is used.
+
+The destination defaults to ./PACKAGE. Use -outdir to choose a different
+directory, including '.' for the current directory. The destination must be
+new or empty; existing files and symlinks are never overwritten. Parent
+directories are created if needed. A failed download or extraction leaves
+the destination untouched and removes temporary files.
+
+Registry selection uses explicit options, the nearest project's saved registry,
+the synced public registry, then https://ttrek.sh/registry. Works outside projects.
+
+Clone retrieves the primary download/unpack pair from the current platform's
+recipe, strips the archive's enclosing directory, and preserves file modes
+and timestamps. Packages without a source archive, including metapackages
+and Git-only recipes, report an error. Conditional source archives require
+USE flag selection and are not supported by clone.
+
+Dependencies, patches, additional archives, hooks and build steps are not run.
+No project state, lockfile, environment or Git history is created by ttrek.
+Files already present in the source archive are kept.
+
+Examples:
+    ttrek clone tsession
+    ttrek clone tsession@1.1.0 -outdir ./my-session
+    ttrek clone -outdir . 'tcl@>=8.6.0,<9.0.0'

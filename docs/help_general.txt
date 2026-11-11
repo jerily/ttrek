@@ -5,7 +5,7 @@ search sources in order. Directories contain package/version/ttrek.json and
 adjacent .diff patches. The first source containing a package supplies all its
 versions and recipes; only an absent package advances to another source.
 Source downloads still use recipe URLs. Options also work after init, install,
-update, pretend or gen-script. init saves the ordered list in ttrek-lock.json;
+update, pretend, gen-script, clone or search. init saves the ordered list in ttrek-lock.json;
 other commands use it for that invocation. Explicit options replace saved or
 default sources. Relative saved paths use the project directory.
 -add-pubreg appends the public default after the explicit or saved sources,
@@ -17,12 +17,14 @@ create or clone this directory.
 
 Available commands:
     init
+    clone
     install
     pretend
     gen-script
     update
     sync
     self-update
+    version
     uninstall
     ls
     search
@@ -30,3 +32,8 @@ Available commands:
     scripts
 
 Run 'ttrek help COMMAND' for more information on a command.
+
+Running ttrek without a command shows this help. Set TTREK_DEBUG to show
+internal commit IDs, reset details and individual file operations.
+Set TTREK_TELEMETRY=0 to disable telemetry. Run 'ttrek version' to see the
+version, self-update platform, and telemetry/debug status.

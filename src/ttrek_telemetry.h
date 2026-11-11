@@ -14,6 +14,8 @@ extern "C" {
 #endif
 
 void ttrek_TelemetryFree(void);
+// Effective policy after registry selection; does not load or collect anything.
+int ttrek_TelemetryEnabled(void);
 
 void ttrek_TelemetryRegisterEnvironment();
 void ttrek_TelemetryPackageInstallEvent(const char *package_name,

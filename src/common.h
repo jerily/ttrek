@@ -30,6 +30,10 @@ typedef int Tcl_Size;
 
 #define UNUSED(expr) do { (void)(expr); } while (0)
 
+static inline int ttrek_DebugEnabled(void) {
+    return getenv("TTREK_DEBUG") != NULL;
+}
+
 #ifdef DEBUG
 # define DBG(x) x
 #ifndef __FUNCTION_NAME__

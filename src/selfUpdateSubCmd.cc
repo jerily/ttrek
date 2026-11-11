@@ -18,11 +18,7 @@
 #include "subCmdDecls.h"
 #include "semver/semver.h"
 
-namespace {
-namespace fs = std::filesystem;
-using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
-
-const char *target() {
+extern "C" const char *ttrek_ReleaseTarget(void) {
 #if defined(__APPLE__) && defined(__aarch64__)
     return "macos-arm64";
 #elif defined(__APPLE__) && defined(__x86_64__)
@@ -39,6 +35,10 @@ const char *target() {
     return nullptr;
 #endif
 }
+
+namespace {
+namespace fs = std::filesystem;
+using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 
 std::string release_root() {
 #ifdef TTREK_TEST_RELEASES
@@ -86,8 +86,9 @@ struct Release {
 };
 
 Release latest(long timeout_ms) {
-    if (!target()) { throw std::runtime_error("No release distribution for this platform"); }
-    const auto url = release_root() + "/releases/latest/" + target();
+    const char *target = ttrek_ReleaseTarget();
+    if (!target) { throw std::runtime_error("No release distribution for this platform"); }
+    const auto url = release_root() + "/releases/latest/" + target;
     auto curl = request(url, timeout_ms);
     std::string body;
     curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, metadata_bytes);
@@ -100,7 +101,7 @@ Release latest(long timeout_ms) {
         return item->valuestring;
     };
     Release release{field("version"), field("url"), field("sha256")};
-    if (field("target") != target() ||
+    if (field("target") != target ||
         !std::regex_match(release.version, std::regex("[0-9]{1,9}\\.[0-9]{1,9}\\.[0-9]{1,9}")) ||
         !std::regex_match(release.sha256, std::regex("[0-9a-f]{64}"))) {
         throw std::runtime_error("Invalid release version, platform or checksum");

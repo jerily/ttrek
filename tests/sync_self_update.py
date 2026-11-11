@@ -149,6 +149,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
 
     machine = "arm64" if platform.machine() in ("arm64", "aarch64") else "amd64"
     target = ("macos-" + ("arm64" if machine == "arm64" else "x86_64")) if sys.platform == "darwin" else f"linux-{machine}-" + ("glibc" if platform.libc_ver()[0] == "glibc" else "musl")
+    for executable in (BINARY, PRODUCTION):
+        assert f"Platform: {target}\n" in run("version", binary=executable).stdout
     # A tiny executable implements the release version probe without another compiler target.
     payload = b'#!/bin/sh\nprintf "2.0.0\\n"\n'
     metadata = {"version": "2.0.0", "target": target, "sha256": hashlib.sha256(payload).hexdigest()}
@@ -194,7 +196,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             assert len(failed.stderr.splitlines()) == 1, failed.stderr
             assert requests[-1].startswith("http://localhost:8080/registry/")
             stamp.write_bytes(stamp_content)
-            assert run("self-update", "-version").stdout.strip() == "1.0.0"
+            current_version = run("self-update", "-version").stdout.strip()
+            assert current_version == run("self-update", "-version", binary=PRODUCTION).stdout.strip()
             assert "2.0.0 is available" in run("self-update", "-check").stdout
             assert "/binary" not in requests
             candidate = root / "installed ttrek"
@@ -209,7 +212,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             run("self-update", binary=candidate, ok=False)
             assert candidate.read_bytes() == original
             metadata["target"] = target
-            metadata["version"] = "1.0.0"
+            metadata["version"] = current_version
             assert "up to date" in run("self-update", binary=candidate).stdout
             assert candidate.read_bytes() == original
             metadata["version"] = "3.0.0"

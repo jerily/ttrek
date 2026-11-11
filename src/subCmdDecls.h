@@ -21,6 +21,7 @@ SubCmdProc(ttrek_RunSubCmd);
 SubCmdProc(ttrek_UpdateSubCmd);
 SubCmdProc(ttrek_ListSubCmd);
 SubCmdProc(ttrek_SearchSubCmd);
+SubCmdProc(ttrek_CloneSubCmd);
 SubCmdProc(ttrek_UninstallSubCmd);
 SubCmdProc(ttrek_DownloadSubCmd);
 SubCmdProc(ttrek_UnpackSubCmd);
@@ -29,6 +30,8 @@ SubCmdProc(ttrek_UseSubCmd);
 SubCmdProc(ttrek_ScriptsSubCmd);
 SubCmdProc(ttrek_SyncSubCmd);
 SubCmdProc(ttrek_SelfUpdateSubCmd);
+SubCmdProc(ttrek_VersionSubCmd);
+const char *ttrek_ReleaseTarget(void);
 void ttrek_CheckForUpdate(void);
 
 #ifdef __cplusplus

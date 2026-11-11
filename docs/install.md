@@ -11,7 +11,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://ttrek.sh/init | sh
 ```
 
 Open a new terminal after installation so your shell picks up the executable.
-Check that it is available with `ttrek self-update -version`.
+Check that it is available with `ttrek version`, which also reports the
+self-update platform and telemetry/debug status without network access.
 To compile ttrek yourself, see [Build from source](build.md).
 
 ## Install build tools
@@ -62,7 +63,8 @@ require additional tools or minimum tool versions.
 ## Update the ttrek executable
 
 ```sh
-ttrek self-update -version         # current version; no network access
+ttrek version                      # version, platform and telemetry/debug status
+ttrek self-update -version         # version number only; no network access
 ttrek self-update -check           # check without installing
 ttrek self-update                  # download, verify and replace this executable
 ```
