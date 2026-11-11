@@ -25,11 +25,15 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
                PATH=str(tools) + os.pathsep + os.environ["PATH"], SHELL="/bin/sh",
                TTREK_NO_UPDATE_CHECK="1", TTREK_FAIL_VERBOSE="1",
                http_proxy="http://127.0.0.1:9", https_proxy="http://127.0.0.1:9")
+    env.pop("TTREK_DEBUG", None)
 
-    def run(*args, cwd=project, ok=True):
-        result = subprocess.run([BINARY, *args], cwd=cwd, env=env, text=True,
+    def run(*args, cwd=project, ok=True, process_env=env):
+        result = subprocess.run([BINARY, *args], cwd=cwd, env=process_env, text=True,
                                 capture_output=True, timeout=60)
         assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
+        if "TTREK_DEBUG" not in process_env:
+            for detail in ("commit with OID:", "Hard reset to", "deleting file:", "deleting directory:"):
+                assert detail not in result.stdout + result.stderr, result
         return result
 
     def recipe(name, dependencies, version="1.0.0", dev_dependencies=None):
@@ -59,7 +63,14 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     for name, dependencies in graph.items():
         recipe(name, dependencies)
 
-    run("init", "-y", "-registry", str(registry))
+    assert "Initialized package environment." in run("init", "-y", "-registry", str(registry)).stdout
+    debug_env = dict(env, TTREK_DEBUG="")  # Presence, including an empty value, enables details.
+    debug_project = root / "debug-project"
+    debug_project.mkdir()
+    assert "Created initial commit with OID:" in run(
+        "init", "-y", "-registry", str(registry), cwd=debug_project, process_env=debug_env).stdout
+    assert "Amended commit with OID:" in run(
+        "install", "-y", "base", cwd=debug_project, process_env=debug_env).stdout
     spec_path = project / "ttrek.json"
     build_log = project / "ttrek-venv/build-order.log"
 
@@ -172,10 +183,23 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     # Recovery from an interrupted install still uses the renamed history.
     (venv / "local/share/base.txt").write_text("broken")
     manifest_path.write_text("{}")
+    (venv / "orphan.txt").write_text("partial install")
+    (venv / "orphan-dir").mkdir()
+    (venv / "orphan-dir/file").write_text("partial install")
     (venv / ".dirty").touch()
-    assert built("install", "-y", "top") == []
+    recovered = run("install", "-y", "top")
+    assert "Restored package environment to its last working state." in recovered.stdout
+    assert "Saved package environment." in recovered.stdout
+    assert not (venv / "orphan.txt").exists() and not (venv / "orphan-dir").exists()
     assert (venv / "local/share/base.txt").read_text() == "1.0.0"
     assert gitdir.is_dir()
+    (venv / "debug-orphan.txt").touch()
+    (venv / "debug-orphan-dir").mkdir()
+    (venv / "debug-orphan-dir/file").touch()
+    (venv / ".dirty").touch()
+    recovered = run("install", "-y", "top", process_env=debug_env)
+    assert "Hard reset to HEAD successful." in recovered.stdout
+    assert "deleting file:" in recovered.stderr and "deleting directory:" in recovered.stderr
 
     recipe("base", graph["base"], "1.1.0")
     recipe("unrelated", graph["unrelated"], "1.1.0")

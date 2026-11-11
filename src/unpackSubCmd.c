@@ -8,6 +8,17 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+static int archive_path_valid(const char *path) {
+    if (!path || !*path || path[0] == '/') { return 0; }
+    for (const char *part = path; *part;) {
+        size_t length = strcspn(part, "/");
+        if (length == 2 && part[0] == '.' && part[1] == '.') { return 0; }
+        part += length;
+        if (*part) { ++part; }
+    }
+    return 1;
+}
+
 static int ttrek_UnpackCopyData(Tcl_Interp *interp, struct archive *ar,
     struct archive *aw)
 {
@@ -144,12 +155,29 @@ int ttrek_UnpackSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         }
 
         const char *entryPath = archive_entry_pathname(entry);
+        const char *hardlink = archive_entry_hardlink(entry);
+        if (!archive_path_valid(entryPath) || (hardlink && !archive_path_valid(hardlink))) {
+            SetResult("archive contains an unsafe entry path or hard link");
+            goto error;
+        }
+        // The archive's wrapping directory is stripped, just like its files.
+        const char *slash = strchr(entryPath, '/');
+        if (archive_entry_filetype(entry) == AE_IFDIR && (!slash || !slash[1])) { continue; }
+
+        if (hardlink) {
+            Tcl_Obj *target = ttrek_UnpackGetOutputName(objv[2], hardlink);
+            Tcl_IncrRefCount(target);
+            archive_entry_set_hardlink(entry, Tcl_GetString(target));
+            Tcl_DecrRefCount(target);
+        }
 
         outputFileName = ttrek_UnpackGetOutputName(objv[2], entryPath);
         Tcl_IncrRefCount(outputFileName);
 
-        printf("Extracting entry: '%s' -> '%s'\n",
-            archive_entry_pathname(entry), Tcl_GetString(outputFileName));
+        if (ttrek_DebugEnabled()) {
+            printf("Extracting entry: '%s' -> '%s'\n",
+                archive_entry_pathname(entry), Tcl_GetString(outputFileName));
+        }
 
         archive_entry_set_pathname(entry, Tcl_GetString(outputFileName));
 
@@ -158,7 +186,10 @@ int ttrek_UnpackSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
 
         r = archive_write_header(ext, entry);
 
-        if (r < ARCHIVE_OK) {
+        if (r < ARCHIVE_WARN) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("unable to extract entry: %s", archive_error_string(ext)));
+            goto error;
+        } else if (r < ARCHIVE_OK) {
             fprintf(stderr, "WARNING WRITER: %s\n", archive_error_string(ext));
         } else if (archive_entry_size(entry) > 0) {
             if (ttrek_UnpackCopyData(interp, a, ext) != TCL_OK) {

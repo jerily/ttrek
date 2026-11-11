@@ -184,7 +184,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             corrupt = recipe(earlier, "local-only")
             corrupt.write_text("invalid JSON")
             assert "Invalid JSON" in run("pretend", *local_options, ok=False).stderr
-            assert "local registries" in run("search", "app", ok=False).stderr
+            assert "search endpoint" in run("search", "app", ok=False).stderr
 
             # The shortcut always appends the public default, regardless of option placement.
             public = home / ".local/ttrek-registry"
@@ -243,7 +243,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             assert requests and all(path.startswith("http://localhost:8080/registry/") for _, path, _ in requests)
             assert all(method == "GET" and "Authorization" not in headers and
                        "TTrek-Environment-Id" not in headers for method, _, headers in requests)
-            assert "local registries" in run("search", "public-only", ok=False).stderr
+            assert "search endpoint" in run("search", "public-only", process_env=public_env, ok=False).stderr
             stamp.write_text("synced")
 
             # Bad configuration does not become an implicit public fallback.

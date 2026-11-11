@@ -53,7 +53,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
     curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_cb);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, dsPtr);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "ttrek/1.0");
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "ttrek/" XSTR(PROJECT_VERSION));
     // curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
 
     if (machineId != NULL) {

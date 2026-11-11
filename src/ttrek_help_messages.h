@@ -40,6 +40,9 @@ static const struct {
     {"ls",
 #include "help_ls.txt.h"
     },
+    {"clone",
+#include "help_clone.txt.h"
+    },
     {"search",
 #include "help_search.txt.h"
     },

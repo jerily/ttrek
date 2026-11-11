@@ -169,6 +169,34 @@ extern "C" int ttrek_RegistrySourceCount(void) { return static_cast<int>(sources
 extern "C" const char *ttrek_RegistryLocalDirectory(int index) {
     return sources.at(index).http ? nullptr : sources.at(index).location.c_str();
 }
+extern "C" const char *ttrek_RegistryHTTPUrl(int index) {
+    return sources.at(index).http ? sources.at(index).location.c_str() : nullptr;
+}
+
+extern "C" int ttrek_RegistrySearchIsOwner(Tcl_Interp *interp, int source, const char *name, int *owns) try {
+    *owns = 1;
+    // Search responses contain matches only. A nonmatching package in an earlier
+    // registry must still hide the same package in a later registry.
+    for (int i = 0; i < source; ++i) {
+        if (!sources[i].http) {
+            if (!fs::exists(sources[i].location / fs::path(name))) { continue; }
+        } else {
+            Tcl_DString data;
+            Tcl_DStringInit(&data);
+            int status = read_source(sources[i], name, &data);
+            std::string error = Tcl_DStringValue(&data);
+            Tcl_DStringFree(&data);
+            if (status == TTREK_REGISTRY_NOT_FOUND) { continue; }
+            require(status == TCL_OK, error);
+        }
+        *owns = 0;
+        break;
+    }
+    return TCL_OK;
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    return TCL_ERROR;
+}
 
 extern "C" const char *ttrek_RegistryDefaultDirectory(void) {
     const char *home = std::getenv("HOME");

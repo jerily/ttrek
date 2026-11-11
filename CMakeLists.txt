@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.0.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.1.0 LANGUAGES C CXX)
 
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
 
@@ -170,6 +170,7 @@ add_executable(${TARGET}
         src/fsmonitor/fsmonitor.c
         src/listSubCmd.c
         src/searchSubCmd.c
+        src/cloneSubCmd.cc
         src/useSubCmd.c
         src/uninstallSubCmd.c
         src/downloadSubCmd.c
@@ -262,6 +263,10 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
         $<TARGET_FILE:ttrek>)
+    add_test(NAME search_http COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search_http.py
+        $<TARGET_FILE:ttrek>)
+    add_test(NAME clone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clone.py
+        $<TARGET_FILE:ttrek_fixture>)
     add_test(NAME gen_script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gen_script.py
         $<TARGET_FILE:ttrek_fixture> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME local_registry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/local_registry.py

@@ -1,4 +1,4 @@
-Usage: ttrek search [-registry DIRECTORY]... [-add-pubreg] QUERY
+Usage: ttrek search [-registry SOURCE]... [-add-pubreg] QUERY
 
 Print package names and descriptions, separated by a tab. Ranking:
 exact name, name prefix, name substring, literal description, name typo,
@@ -15,13 +15,15 @@ Description suggestions require a shared trigram; queries below 3 characters
 match descriptions literally. Distances are Levenshtein (insert/delete/substitute).
 
 Search uses an explicit registry, the nearest project's saved registry, or an
-existing ~/.local/ttrek-registry, in that order. It works outside a project.
--add-pubreg appends the public default after explicit or saved sources. Search
-requires a local copy created by 'ttrek sync'; HTTP registry search is unsupported.
+existing ~/.local/ttrek-registry, in that order. When no local public registry is
+available, it queries https://ttrek.sh/registry/search?q=QUERY. It works outside
+a project. -registry accepts directories or HTTP(S) registry API base URLs.
+-add-pubreg appends the public default after explicit or saved sources.
+HTTP registries must provide GET BASE/search?q=QUERY. Results from ordered
+sources are ranked together; an earlier source's package hides later copies.
 Descriptions from all versions are indexed; each package appears once. Missing
 descriptions are allowed. A description hit displays its matching text; name
 hits display the first nonempty description in alphabetical order.
-The indexes are built only for this command. Search never clones, downloads,
-creates project state, sends telemetry or checks for updates.
-
-If no local registry exists, run 'ttrek sync' or pass -registry DIRECTORY.
+Local indexes are built only for this command. Search never downloads source
+archives, creates project state, sends telemetry or checks for updates.
+Use 'ttrek sync' to make the public registry available for offline search.

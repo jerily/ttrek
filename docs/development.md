@@ -59,6 +59,13 @@ to select another executable. Build failures include their logs in CTest output.
 `registry_sources` checks ordered local/HTTP lookup, source precedence, saved
 lists, error handling and installation against an isolated HTTP server.
 
+`search_http` checks website fallback, HTTP response validation, mixed registry
+ranking and precedence, and read-only behavior. `clone` checks semantic versions,
+source archive extraction, output directories, failure cleanup and mirror
+fallback without installing dependencies or running build commands.
+`install_options` also verifies concise environment messages and `TTREK_DEBUG`
+diagnostics during initialization, installation and interrupted-install recovery.
+
 With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,
 and that preview leaves the project untouched:

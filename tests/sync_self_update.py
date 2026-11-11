@@ -194,7 +194,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             assert len(failed.stderr.splitlines()) == 1, failed.stderr
             assert requests[-1].startswith("http://localhost:8080/registry/")
             stamp.write_bytes(stamp_content)
-            assert run("self-update", "-version").stdout.strip() == "1.0.0"
+            current_version = run("self-update", "-version").stdout.strip()
+            assert current_version == run("self-update", "-version", binary=PRODUCTION).stdout.strip()
             assert "2.0.0 is available" in run("self-update", "-check").stdout
             assert "/binary" not in requests
             candidate = root / "installed ttrek"
@@ -209,7 +210,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
             run("self-update", binary=candidate, ok=False)
             assert candidate.read_bytes() == original
             metadata["target"] = target
-            metadata["version"] = "1.0.0"
+            metadata["version"] = current_version
             assert "up to date" in run("self-update", binary=candidate).stdout
             assert candidate.read_bytes() == original
             metadata["version"] = "3.0.0"

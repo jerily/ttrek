@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <curl/curl.h>
 #include "registry.h"
 #include "base64.h"
 #include <ttrie.h>
@@ -55,9 +57,9 @@ std::vector<fs::path> entries(const fs::path &directory) {
     return paths;
 }
 
-int select_search_registry(Tcl_Interp *interp) {
+int select_read_registry(Tcl_Interp *interp) {
     if (ttrek_RegistryHasSources()) { return ttrek_RegistryUseDefault(interp); }
-    // Search works outside projects and never creates project state or directories.
+    // Read-only commands work outside projects without creating state.
     auto project = fs::current_path();
     while (true) {
         if (fs::is_regular_file(project / SPEC_JSON_FILE)) {
@@ -79,12 +81,7 @@ int select_search_registry(Tcl_Interp *interp) {
         if (project == project.root_path()) { break; }
         project = project.parent_path();
     }
-    int status = ttrek_RegistryUseDefault(interp);
-    if (status != TCL_OK || ttrek_RegistryHasSources()) { return status; }
-    const char *directory = ttrek_RegistryDefaultDirectory();
-    require(directory && fs::is_directory(directory),
-            "No local registry; run 'ttrek sync' or use 'ttrek search -registry DIRECTORY NAME'");
-    return ttrek_RegistryAddSource(interp, directory);
+    return ttrek_RegistryUseDefault(interp);
 }
 
 std::string search_text(std::string text) {
@@ -98,8 +95,10 @@ struct SearchEntry {
     std::string description;
     int tier = 6;
     int distance = 0;
-    size_t shared = 0;
+    double coverage = 0;
     size_t unmatched = 0;
+    int source = 0;
+    bool remote = false;
 };
 
 struct SearchDescriptions {
@@ -112,14 +111,14 @@ struct SearchDescriptions {
 bool search_order(const SearchEntry &a, const SearchEntry &b) {
     if (a.tier != b.tier) { return a.tier < b.tier; }
     if (a.distance != b.distance) { return a.distance < b.distance; }
-    if (a.shared != b.shared) { return a.shared > b.shared; }
+    if (a.coverage != b.coverage) { return a.coverage > b.coverage; }
     if (a.unmatched != b.unmatched) { return a.unmatched < b.unmatched; }
     return a.name < b.name;
 }
 
 int collect_name_match(const char *key, int distance, void *context) {
     for (auto &entry : *static_cast<std::vector<SearchEntry> *>(context)) {
-        if (entry.tier > 4 && entry.normalized == key) {
+        if (!entry.remote && entry.tier > 4 && entry.normalized == key) {
             entry.tier = 4;
             entry.distance = distance;
         }
@@ -131,15 +130,66 @@ int collect_description_match(const ttrigrams_match *match, void *context) noexc
     auto &descriptions = *static_cast<SearchDescriptions *>(context);
     auto &entry = descriptions.entries[descriptions.owners[match->document]];
     int tier = match->distance == 0 ? 3 : 5;
+    double coverage = match->query_trigrams ? double(match->shared_trigrams) / match->query_trigrams : 0;
     if (tier < entry.tier || (tier == entry.tier &&
-        (match->distance < entry.distance || (match->distance == entry.distance && match->shared_trigrams > entry.shared)))) {
+        (match->distance < entry.distance || (match->distance == entry.distance && coverage > entry.coverage)))) {
         try { entry.description = descriptions.original[match->document]; }
         catch (...) { return -1; }
         entry.tier = tier;
         entry.distance = match->distance;
-        entry.shared = match->shared_trigrams;
+        entry.coverage = coverage;
     }
     return 0;
+}
+
+void collect_remote_matches(const char *base, int source, const std::string &query,
+                            std::vector<SearchEntry> &found, std::set<std::string> &claimed) {
+    std::unique_ptr<char, decltype(&curl_free)> encoded(curl_easy_escape(nullptr, query.c_str(), 0), curl_free);
+    require(encoded != nullptr, "Cannot encode search query");
+    const auto url = std::string(base) + "/search?q=" + encoded.get();
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    int status = ttrek_RegistryReadHTTP(url.c_str(), &data);
+    std::string body = Tcl_DStringValue(&data);
+    Tcl_DStringFree(&data);
+    require(status != TTREK_REGISTRY_NOT_FOUND, "Registry does not provide a search endpoint: " + std::string(base));
+    require(status == TCL_OK, body);
+    Json result(cJSON_ParseWithLengthOpts(body.c_str(), body.size() + 1, nullptr, 1), cJSON_Delete);
+    require(cJSON_IsArray(result.get()), "Invalid registry search response");
+    const std::vector<std::string> kinds{"exact", "prefix", "substring", "description", "fuzzy", "description-fuzzy"};
+    const cJSON *row;
+    cJSON_ArrayForEach(row, result.get()) {
+        auto *name = cJSON_GetObjectItemCaseSensitive(row, "name");
+        auto *description = cJSON_GetObjectItemCaseSensitive(row, "description");
+        auto *kind = cJSON_GetObjectItemCaseSensitive(row, "match");
+        auto *distance = cJSON_GetObjectItemCaseSensitive(row, "distance");
+        auto *coverage = cJSON_GetObjectItemCaseSensitive(row, "coverage");
+        require(cJSON_IsString(name) && valid_component(name->valuestring) &&
+                cJSON_IsString(description) && cJSON_IsString(kind), "Invalid registry search result");
+        std::string text = description->valuestring;
+        require(text.size() <= TTRIGRAMS_MAX_TEXT_LENGTH &&
+                std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
+                "Invalid registry search description");
+        auto tier = std::find(kinds.begin(), kinds.end(), kind->valuestring);
+        require(tier != kinds.end(), "Invalid registry search match type");
+        require(!distance || (cJSON_IsNumber(distance) && distance->valuedouble >= 0 &&
+                distance->valuedouble <= 2 && distance->valuedouble == distance->valueint),
+                "Invalid registry search distance");
+        require(!coverage || (cJSON_IsNumber(coverage) && std::isfinite(coverage->valuedouble) &&
+                coverage->valuedouble >= 0 && coverage->valuedouble <= 1), "Invalid registry search coverage");
+        if (!claimed.insert(name->valuestring).second) { continue; }
+        SearchEntry entry{name->valuestring, search_text(name->valuestring), text};
+        entry.tier = tier - kinds.begin();
+        entry.distance = distance ? distance->valueint : 0;
+        entry.coverage = coverage ? coverage->valuedouble : 0;
+        if (entry.tier == 1 || entry.tier == 2) {
+            require(entry.name.size() >= query.size(), "Invalid registry search name match");
+            entry.unmatched = entry.name.size() - query.size();
+        }
+        entry.source = source;
+        entry.remote = true;
+        found.push_back(std::move(entry));
+    }
 }
 
 std::string read_search_description(const fs::path &path) {
@@ -246,7 +296,14 @@ Json recipe(const fs::path &registry_directory, const std::vector<std::string> &
 }
 } // namespace
 
-extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, Tcl_Obj *matches) try {
+extern "C" int ttrek_RegistrySelectForRead(Tcl_Interp *interp) try {
+    return select_read_registry(interp);
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+    return TCL_ERROR;
+}
+
+extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_Obj *matches) try {
     std::string normalized = search_text(query);
     require(normalized.size() <= TTRIE_MAX_LENGTH && normalized.find_first_not_of(
         "abcdefghijklmnopqrstuvwxyz0123456789._+- ") == std::string::npos,
@@ -255,14 +312,27 @@ extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, 
     require(first != std::string::npos, "Search query must not be empty");
     normalized = normalized.substr(first, normalized.find_last_not_of(' ') - first + 1);
     require(normalized != "." && normalized != "..", "Invalid search query");
-    if (select_search_registry(interp) != TCL_OK) { return TCL_ERROR; }
-    require(ttrek_RegistryIsLocal(), "Search currently requires local registries; use -registry DIRECTORY");
+    if (ttrek_RegistrySelectForRead(interp) != TCL_OK) { return TCL_ERROR; }
+    // Search has historically accepted an existing public checkout even when
+    // it was created manually rather than through ttrek sync.
+    if (!ttrek_RegistryHasSources()) {
+        const char *directory = ttrek_RegistryDefaultDirectory();
+        if (directory && fs::is_directory(directory) &&
+            ttrek_RegistryAddSource(interp, directory) != TCL_OK) { return TCL_ERROR; }
+    }
     std::unique_ptr<ttrie, decltype(&ttrie_destroy)> trie(ttrie_create(), ttrie_destroy);
     require(trie != nullptr, "Cannot allocate recipe search trie");
     std::vector<SearchEntry> found;
     SearchDescriptions descriptions{found, {}, {}, {}};
     std::set<std::string> claimed;
+    if (!ttrek_RegistryHasSources()) {
+        collect_remote_matches(REGISTRY_URL, 0, normalized, found, claimed);
+    }
     for (int source = 0; source < ttrek_RegistrySourceCount(); ++source) {
+        if (const char *url = ttrek_RegistryHTTPUrl(source)) {
+            collect_remote_matches(url, source, normalized, found, claimed);
+            continue;
+        }
         for (const auto &path : entries(ttrek_RegistryLocalDirectory(source))) {
             auto name = path.filename().string();
             if (!fs::is_directory(path) || !valid_component(name)) { continue; }
@@ -279,6 +349,7 @@ extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, 
             }
             if (!has_recipe) { continue; }
             SearchEntry entry{name, search_text(name), texts.empty() ? "" : *texts.begin()};
+            entry.source = source;
             require(ttrie_insert(trie.get(), entry.normalized.c_str()) == 0, "Cannot index recipe: " + name);
             if (entry.normalized == normalized) { entry.tier = 0; }
             else if (entry.normalized.find(normalized) == 0) { entry.tier = 1; }
@@ -305,6 +376,9 @@ extern "C" int ttrek_RegistrySearchLocal(Tcl_Interp *interp, const char *query, 
     std::sort(found.begin(), found.end(), search_order);
     for (const auto &entry : found) {
         if (entry.tier == 6) { continue; }
+        int owns;
+        if (ttrek_RegistrySearchIsOwner(interp, entry.source, entry.name.c_str(), &owns) != TCL_OK) { return TCL_ERROR; }
+        if (!owns) { continue; }
         Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1)};
         if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(2, fields)) != TCL_OK) { return TCL_ERROR; }
     }
