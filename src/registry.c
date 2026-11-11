@@ -30,6 +30,7 @@ static void registry_error(Tcl_DString *result, const char *message) {
 }
 
 int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
+    if (postData && !ttrek_TelemetryEnabled()) { return TCL_OK; }
     if (ttrek_RegistryHasSources()) {
         // Explicit registries never receive telemetry or share credentials.
         return postData ? TCL_OK : ttrek_RegistryGetConfigured(url, dsPtr);

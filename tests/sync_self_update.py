@@ -149,6 +149,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
 
     machine = "arm64" if platform.machine() in ("arm64", "aarch64") else "amd64"
     target = ("macos-" + ("arm64" if machine == "arm64" else "x86_64")) if sys.platform == "darwin" else f"linux-{machine}-" + ("glibc" if platform.libc_ver()[0] == "glibc" else "musl")
+    for executable in (BINARY, PRODUCTION):
+        assert f"Platform: {target}\n" in run("version", binary=executable).stdout
     # A tiny executable implements the release version probe without another compiler target.
     payload = b'#!/bin/sh\nprintf "2.0.0\\n"\n'
     metadata = {"version": "2.0.0", "target": target, "sha256": hashlib.sha256(payload).hexdigest()}

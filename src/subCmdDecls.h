@@ -30,6 +30,8 @@ SubCmdProc(ttrek_UseSubCmd);
 SubCmdProc(ttrek_ScriptsSubCmd);
 SubCmdProc(ttrek_SyncSubCmd);
 SubCmdProc(ttrek_SelfUpdateSubCmd);
+SubCmdProc(ttrek_VersionSubCmd);
+const char *ttrek_ReleaseTarget(void);
 void ttrek_CheckForUpdate(void);
 
 #ifdef __cplusplus

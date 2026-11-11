@@ -32,6 +32,7 @@ static const char *subcommands[] = {
         "self-update",
         "search",
         "clone",
+        "version",
         NULL
 };
 
@@ -53,6 +54,7 @@ enum subcommand {
     SUBCMD_SELF_UPDATE,
     SUBCMD_SEARCH,
     SUBCMD_CLONE,
+    SUBCMD_VERSION,
 };
 
 int main(int argc, char *argv[]) {
@@ -122,11 +124,17 @@ int main(int argc, char *argv[]) {
     if (!ttrek_RegistryHasSources() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
         sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
         sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH &&
-        sub_cmd_index != SUBCMD_CLONE && sub_cmd_index != SUBCMD_HELP) {
+        sub_cmd_index != SUBCMD_CLONE && sub_cmd_index != SUBCMD_HELP && sub_cmd_index != SUBCMD_VERSION) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
     switch ((enum subcommand) sub_cmd_index) {
+        case SUBCMD_VERSION:
+            if (ttrek_VersionSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
         case SUBCMD_CLONE:
             isCurlInitialized = curl_global_init(CURL_GLOBAL_ALL);
             if (ttrek_CloneSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {

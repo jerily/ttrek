@@ -24,6 +24,7 @@ Available commands:
     update
     sync
     self-update
+    version
     uninstall
     ls
     search
@@ -34,3 +35,5 @@ Run 'ttrek help COMMAND' for more information on a command.
 
 Running ttrek without a command shows this help. Set TTREK_DEBUG to show
 internal commit IDs, reset details and individual file operations.
+Set TTREK_TELEMETRY=0 to disable telemetry. Run 'ttrek version' to see the
+version, self-update platform, and telemetry/debug status.

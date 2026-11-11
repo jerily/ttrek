@@ -18,6 +18,12 @@ C++ resolution exceptions are converted to Tcl errors. Preview skips installatio
 and telemetry; tests use disposable projects. Dependency builds use version-pinned
 HTTPS downloads, and the solver uses a pinned release.
 
+Set `TTREK_TELEMETRY=0` to disable machine ID loading/saving, environment
+collection, telemetry events and the environment ID request header. Unset or
+`1` retains the default policy: telemetry is only enabled for the implicit public
+HTTP registry. `ttrek version` reports the effective status without collecting
+or sending telemetry. Existing machine ID files are left in place.
+
 ## Pending
 
 Registry authentication, signed package manifests, resource limits, and downloaded

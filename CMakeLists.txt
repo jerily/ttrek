@@ -154,6 +154,7 @@ add_executable(${TARGET}
         src/registryLocal.cc
         src/syncSubCmd.cc
         src/selfUpdateSubCmd.cc
+        src/versionSubCmd.c
         src/initSubCmd.c
         src/installSubCmd.c
         src/genScriptSubCmd.cc
@@ -258,6 +259,10 @@ if(BUILD_TESTING)
     target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
         ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
     target_link_libraries(ttrek_fixture PRIVATE ttrie::core ttrigrams::core)
+    add_test(NAME version COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/version.py
+        $<TARGET_FILE:ttrek> $<TARGET_FILE:ttrek_fixture> $<CONFIG>)
+    add_test(NAME telemetry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/telemetry.py
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_program(TTREK_TEST_OPENSSL NAMES openssl HINTS "${CMAKE_INSTALL_PREFIX}/bin" REQUIRED)
         add_test(NAME https COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/https.py

@@ -52,6 +52,9 @@ static const struct {
     {"self-update",
 #include "help_self-update.txt.h"
     },
+    {"version",
+#include "help_version.txt.h"
+    },
     {NULL, NULL}
 };
 
