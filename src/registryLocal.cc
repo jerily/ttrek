@@ -93,7 +93,7 @@ struct SearchEntry {
     std::string name;
     std::string normalized;
     std::string description;
-    int tier = 6;
+    int tier = 8;
     int distance = 0;
     double coverage = 0;
     size_t unmatched = 0;
@@ -101,11 +101,12 @@ struct SearchEntry {
     bool remote = false;
 };
 
-struct SearchDescriptions {
+struct SearchDocuments {
     std::vector<SearchEntry> &entries;
     std::vector<size_t> owners;
     std::vector<std::string> original;
     std::vector<std::string> normalized;
+    std::vector<bool> tags;
 };
 
 bool search_order(const SearchEntry &a, const SearchEntry &b) {
@@ -118,22 +119,22 @@ bool search_order(const SearchEntry &a, const SearchEntry &b) {
 
 int collect_name_match(const char *key, int distance, void *context) {
     for (auto &entry : *static_cast<std::vector<SearchEntry> *>(context)) {
-        if (!entry.remote && entry.tier > 4 && entry.normalized == key) {
-            entry.tier = 4;
+        if (!entry.remote && entry.tier > 5 && entry.normalized == key) {
+            entry.tier = 5;
             entry.distance = distance;
         }
     }
     return 0;
 }
 
-int collect_description_match(const ttrigrams_match *match, void *context) noexcept {
-    auto &descriptions = *static_cast<SearchDescriptions *>(context);
-    auto &entry = descriptions.entries[descriptions.owners[match->document]];
-    int tier = match->distance == 0 ? 3 : 5;
+int collect_document_match(const ttrigrams_match *match, void *context) noexcept {
+    auto &documents = *static_cast<SearchDocuments *>(context);
+    auto &entry = documents.entries[documents.owners[match->document]];
+    int tier = (match->distance == 0 ? 3 : 6) + documents.tags[match->document];
     double coverage = match->query_trigrams ? double(match->shared_trigrams) / match->query_trigrams : 0;
     if (tier < entry.tier || (tier == entry.tier &&
         (match->distance < entry.distance || (match->distance == entry.distance && coverage > entry.coverage)))) {
-        try { entry.description = descriptions.original[match->document]; }
+        try { entry.description = documents.original[match->document]; }
         catch (...) { return -1; }
         entry.tier = tier;
         entry.distance = match->distance;
@@ -180,6 +181,15 @@ void collect_remote_matches(const char *base, int source, const std::string &que
         if (!claimed.insert(name->valuestring).second) { continue; }
         SearchEntry entry{name->valuestring, search_text(name->valuestring), text};
         entry.tier = tier - kinds.begin();
+        if (entry.tier >= 4) { ++entry.tier; }
+        // Keep the HTTP match vocabulary compatible with older clients.
+        // New servers identify tag hits with an optional field discriminator.
+        auto *field = cJSON_GetObjectItemCaseSensitive(row, "field");
+        if (field) {
+            require(cJSON_IsString(field) && std::string(field->valuestring) == "tags" &&
+                    (entry.tier == 3 || entry.tier == 6), "Invalid registry search field");
+            ++entry.tier;
+        }
         entry.distance = distance ? distance->valueint : 0;
         entry.coverage = coverage ? coverage->valuedouble : 0;
         if (entry.tier == 1 || entry.tier == 2) {
@@ -192,18 +202,36 @@ void collect_remote_matches(const char *base, int source, const std::string &que
     }
 }
 
-std::string read_search_description(const fs::path &path) {
+struct SearchMetadata {
+    std::set<std::string> descriptions;
+    std::set<std::string> tags;
+};
+
+void read_search_metadata(const fs::path &path, SearchMetadata &metadata) {
     auto data = read_file(path);
     Json spec(cJSON_ParseWithLengthOpts(data.c_str(), data.size() + 1, nullptr, 1), cJSON_Delete);
     require(cJSON_IsObject(spec.get()), "Invalid JSON object in " + path.string());
     auto *description = cJSON_GetObjectItemCaseSensitive(spec.get(), "description");
-    if (!description) { return {}; }
-    require(cJSON_IsString(description), "description must be a string in " + path.string());
-    std::string text = description->valuestring;
-    require(text.size() <= TTRIGRAMS_MAX_TEXT_LENGTH &&
-            std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
-            "description must be a single line of at most 4096 bytes in " + path.string());
-    return text;
+    if (description) {
+        require(cJSON_IsString(description), "description must be a string in " + path.string());
+        std::string text = description->valuestring;
+        require(text.size() <= TTRIGRAMS_MAX_TEXT_LENGTH &&
+                std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
+                "description must be a single line of at most 4096 bytes in " + path.string());
+        if (!text.empty()) { metadata.descriptions.insert(std::move(text)); }
+    }
+    auto *tags = cJSON_GetObjectItemCaseSensitive(spec.get(), "tags");
+    if (!tags) { return; }
+    require(cJSON_IsArray(tags), "tags must be an array of strings in " + path.string());
+    const cJSON *tag;
+    cJSON_ArrayForEach(tag, tags) {
+        require(cJSON_IsString(tag), "tags must be an array of strings in " + path.string());
+        std::string text = tag->valuestring;
+        require(!text.empty() && text.size() <= 255 &&
+                std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
+                "tags must contain nonempty single-line strings of at most 255 bytes in " + path.string());
+        metadata.tags.insert(std::move(text));
+    }
 }
 
 Json versions(const fs::path &registry_directory, const std::string &package) {
@@ -246,14 +274,37 @@ Json resolve_scripts(const cJSON *scripts, const fs::path &directory) {
             continue;
         }
         auto *file = cJSON_GetObjectItemCaseSensitive(script, "file");
-        require(cJSON_IsObject(script) && cJSON_GetArraySize(script) == 1 && cJSON_IsString(file),
-                "recipe scripts must have string bodies or a single file reference");
+        auto *args = cJSON_GetObjectItemCaseSensitive(script, "args");
+        require(cJSON_IsObject(script) && cJSON_GetArraySize(script) == (args ? 2 : 1) && cJSON_IsString(file),
+                "recipe scripts must have string bodies or a file reference with optional args");
+        require(!args || cJSON_IsArray(args), "recipe script args must be an array of strings");
+        std::string presets;
+        const cJSON *arg;
+        cJSON_ArrayForEach(arg, args) {
+            require(cJSON_IsString(arg), "recipe script args must be an array of strings");
+            presets += " '";
+            for (const char ch : std::string(arg->valuestring)) {
+                presets += ch == '\'' ? "'\"'\"'" : std::string(1, ch);
+            }
+            presets += "'";
+        }
         require(valid_component(file->valuestring), "Invalid recipe script filename");
         auto path = directory / file->valuestring;
         require(!fs::is_symlink(path) && fs::is_regular_file(path),
                 "Recipe script must be a regular file in its recipe directory: " + path.string());
         auto body = read_file(path);
         require(body.find('\0') == std::string::npos, "Recipe script must not contain NUL bytes");
+        if (!presets.empty()) {
+            // Cache a self-contained shell body, preserving its interpreter and
+            // placing literal presets before arguments supplied to `ttrek run`.
+            size_t position = 0;
+            if (body.rfind("#!", 0) == 0) {
+                position = body.find('\n');
+                if (position == std::string::npos) { position = body.size(); body += '\n'; }
+                ++position;
+            }
+            body.insert(position, "set --" + presets + " \"$@\"\n");
+        }
         cJSON_AddStringToObject(result.get(), script->string, body.c_str());
     }
     return result;
@@ -323,7 +374,7 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
     std::unique_ptr<ttrie, decltype(&ttrie_destroy)> trie(ttrie_create(), ttrie_destroy);
     require(trie != nullptr, "Cannot allocate recipe search trie");
     std::vector<SearchEntry> found;
-    SearchDescriptions descriptions{found, {}, {}, {}};
+    SearchDocuments documents{found, {}, {}, {}, {}};
     std::set<std::string> claimed;
     if (!ttrek_RegistryHasSources()) {
         collect_remote_matches(REGISTRY_URL, 0, normalized, found, claimed);
@@ -338,44 +389,50 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
             if (!fs::is_directory(path) || !valid_component(name)) { continue; }
             if (!claimed.insert(name).second) { continue; }
             bool has_recipe = false;
-            std::set<std::string> texts;
+            SearchMetadata metadata;
             for (const auto &version : entries(path)) {
                 if (fs::is_directory(version) && valid_component(version.filename().string()) &&
                     fs::is_regular_file(version / SPEC_JSON_FILE)) {
                     has_recipe = true;
-                    auto text = read_search_description(version / SPEC_JSON_FILE);
-                    if (!text.empty()) { texts.insert(std::move(text)); }
+                    read_search_metadata(version / SPEC_JSON_FILE, metadata);
                 }
             }
             if (!has_recipe) { continue; }
-            SearchEntry entry{name, search_text(name), texts.empty() ? "" : *texts.begin()};
+            SearchEntry entry{name, search_text(name), metadata.descriptions.empty() ? "" : *metadata.descriptions.begin()};
             entry.source = source;
             require(ttrie_insert(trie.get(), entry.normalized.c_str()) == 0, "Cannot index recipe: " + name);
             if (entry.normalized == normalized) { entry.tier = 0; }
             else if (entry.normalized.find(normalized) == 0) { entry.tier = 1; }
             else if (entry.normalized.find(normalized) != std::string::npos) { entry.tier = 2; }
             if (entry.tier == 1 || entry.tier == 2) { entry.unmatched = name.size() - normalized.size(); }
-            for (const auto &text : texts) {
-                descriptions.owners.push_back(found.size());
-                descriptions.original.push_back(text);
-                descriptions.normalized.push_back(search_text(text));
+            for (const auto &text : metadata.descriptions) {
+                documents.owners.push_back(found.size());
+                documents.original.push_back(text);
+                documents.normalized.push_back(search_text(text));
+                documents.tags.push_back(false);
+            }
+            for (const auto &tag : metadata.tags) {
+                documents.owners.push_back(found.size());
+                documents.original.push_back(entry.description);
+                documents.normalized.push_back(search_text(tag));
+                documents.tags.push_back(true);
             }
             found.push_back(std::move(entry));
         }
     }
     std::vector<const char *> texts;
-    for (const auto &text : descriptions.normalized) { texts.push_back(text.c_str()); }
+    for (const auto &text : documents.normalized) { texts.push_back(text.c_str()); }
     std::unique_ptr<ttrigrams, decltype(&ttrigrams_destroy)> index(
         ttrigrams_create(texts.data(), texts.size()), ttrigrams_destroy);
-    require(index != nullptr, "Cannot allocate description search index");
+    require(index != nullptr, "Cannot allocate metadata search index");
     int limit = normalized.size() <= 3 ? 1 : 2;
     require(ttrie_search(trie.get(), normalized.c_str(), limit, collect_name_match, &found) == 0,
             "Recipe name search failed");
-    require(ttrigrams_search(index.get(), normalized.c_str(), limit, collect_description_match, &descriptions) == 0,
-            "Recipe description search failed");
+    require(ttrigrams_search(index.get(), normalized.c_str(), limit, collect_document_match, &documents) == 0,
+            "Recipe metadata search failed");
     std::sort(found.begin(), found.end(), search_order);
     for (const auto &entry : found) {
-        if (entry.tier == 6) { continue; }
+        if (entry.tier == 8) { continue; }
         int owns;
         if (ttrek_RegistrySearchIsOwner(interp, entry.source, entry.name.c_str(), &owns) != TCL_OK) { return TCL_ERROR; }
         if (!owns) { continue; }

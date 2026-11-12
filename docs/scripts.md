@@ -35,7 +35,17 @@ file, and editing other scripts preserves the reference in `ttrek.json`.
 ## Run installed package scripts
 
 Recipes can define a `scripts` object mapping names to shell script strings or
-file references, for example `"scripts": {"demo": {"file": "demo.sh"}}`.
+file references with optional preset arguments, for example:
+
+```json
+"scripts": {
+  "demo-csv": {"file": "run-demo.sh", "args": ["csv"]},
+  "demo-json": {"file": "run-demo.sh", "args": ["json"]}
+}
+```
+
+As with project scripts, `args` must be an array of strings; presets precede
+runtime arguments and are passed literally. The script's shebang is preserved.
 Referenced UTF-8 files must be regular files directly in the version's recipe
 directory; paths and symbolic links are rejected. Local and hosted registries
 resolve references to script bodies before installation, so installed scripts

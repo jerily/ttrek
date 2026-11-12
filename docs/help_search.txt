@@ -1,18 +1,18 @@
 Usage: ttrek search [-registry SOURCE]... [-add-pubreg] QUERY
 
 Print package names and descriptions, separated by a tab. Ranking:
-exact name, name prefix, name substring, literal description, name typo,
-description typo. Ties prefer fewer edits, greater query-trigram coverage,
+exact name, name prefix, name substring, literal description, literal tag,
+name typo, description typo, tag typo. Ties prefer fewer edits, greater query-trigram coverage,
 less unmatched name text, then alphabetical name.
 
 Matching ignores ASCII case and preserves punctuation. Queries accept 1-255
 ASCII letters, digits, spaces, '.', '_', '+' or '-'; quote phrases such as
 'web server'. No matches prints nothing and succeeds.
 
-Name typos use a trie; descriptions use ttrigrams with substring verification.
+Name typos use a trie; descriptions and tags use ttrigrams with substring verification.
 Queries of at most 3 characters allow one edit; longer queries allow two.
-Description suggestions require a shared trigram; queries below 3 characters
-match descriptions literally. Distances are Levenshtein (insert/delete/substitute).
+Description and tag suggestions require a shared trigram; queries below 3 characters
+match them literally. Distances are Levenshtein (insert/delete/substitute).
 
 Search uses an explicit registry, the nearest project's saved registry, or an
 existing ~/.local/ttrek-registry, in that order. When no local public registry is
@@ -21,9 +21,10 @@ a project. -registry accepts directories or HTTP(S) registry API base URLs.
 -add-pubreg appends the public default after explicit or saved sources.
 HTTP registries must provide GET BASE/search?q=QUERY. Results from ordered
 sources are ranked together; an earlier source's package hides later copies.
-Descriptions from all versions are indexed; each package appears once. Missing
-descriptions are allowed. A description hit displays its matching text; name
-hits display the first nonempty description in alphabetical order.
+Descriptions and tags from all versions are indexed; each package appears once.
+Missing descriptions and tags are allowed. Tags are searched individually.
+A description hit displays its matching text; name and tag hits display the
+first nonempty description in alphabetical order.
 Local indexes are built only for this command. Search never downloads source
 archives, creates project state, sends telemetry or checks for updates.
 Use 'ttrek sync' to make the public registry available for offline search.
