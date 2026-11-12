@@ -42,6 +42,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
         return result
 
     recipes = {}
+    presets = ["", "two words", "café 世界", "one\ntwo", "'quoted'", '"double"',
+               "$(touch preset-injected)", "`touch preset-injected`", "; touch preset-injected", "*", "--"]
     for name, dependencies in (("base", {}), ("app", {"base": "^1.0.0"})):
         source = root / name
         source.mkdir()
@@ -84,6 +86,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
         if name == "base":
             (directory / "hello.sh").write_text(spec_recipe["scripts"]["hello"])
             spec_recipe["scripts"]["hello"] = {"file": "hello.sh"}
+        else:
+            (directory / "args.sh").write_text('#!/bin/sh\nset -eu\nfor arg do printf "%s\\n" "$arg"; done\n')
+            spec_recipe["scripts"]["preset"] = {"file": "args.sh", "args": presets}
+            spec_recipe["scripts"]["empty-preset"] = {"file": "args.sh", "args": []}
+            (directory / "plain.sh").write_text('for arg do printf "%s\\n" "$arg"; done\n')
+            spec_recipe["scripts"]["plain-preset"] = {"file": "plain.sh", "args": ["plain"]}
         (directory / "ttrek.json").write_text(json.dumps(spec_recipe))
 
     # Bad options fail before init creates anything; both placements are accepted.
@@ -141,7 +149,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     registry.rename(hidden_registry)
     try:
         for package in ("base", "app"):
-            assert set(run("scripts", "-package", package, "ls").stdout.splitlines()) == {"hello", "preInstall", "fail"}
+            expected_scripts = {"hello", "preInstall", "fail"}
+            if package == "app":
+                expected_scripts |= {"preset", "empty-preset", "plain-preset"}
+            assert set(run("scripts", "-package", package, "ls").stdout.splitlines()) == expected_scripts
             assert run("scripts", "-package", package, "describe", "hello").stdout == recipes[package]["scripts"]["hello"] + "\n"
             output = run("run", "-package", package, "-script", "hello", cwd=nested).stdout.splitlines()
             prefix = str(project / "ttrek-venv/local")
@@ -153,6 +164,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
             assert forwarded == "\n".join(output + arguments) + "\n", repr(forwarded)
             assert not (project / "ttrek-venv/local/injected").exists()
             assert run("run", "-package", package, "-script", "hello", "--").stdout.splitlines() == output
+        runtime = ["runtime", "", "two words"]
+        assert run("run", "-package", "app", "-script", "preset", "--", *runtime).stdout == "\n".join(presets + runtime) + "\n"
+        assert run("run", "-package", "app", "-script", "empty-preset", "--", *runtime).stdout == "\n".join(runtime) + "\n"
+        assert run("run", "-package", "app", "-script", "plain-preset", "--", "tail").stdout == "plain\ntail\n"
+        assert run("scripts", "-package", "app", "describe", "preset").stdout.startswith("#!/bin/sh\n")
+        assert not (project / "ttrek-venv/local/preset-injected").exists()
         assert run("run", "-script", "hello").stdout == "project-script"
         assert run("run", "-script", "HELLO").stdout == "project-script"
         assert run("run", "sh", "-c", "printf direct-command").stdout == "direct-command"
@@ -271,6 +288,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     for reference in ({"file": "missing.sh"}, {"file": "../outside.sh"},
                       {"file": str(root / "outside.sh")}, {"file": "linked.sh"},
                       {"file": "folder.sh"}, {"file": "nul.sh"},
+                      {"file": "args.sh", "args": "bad"}, {"file": "args.sh", "args": None},
+                      {"file": "args.sh", "args": [1]}, {"file": "args.sh", "args": [], "extra": True},
                       {"file": 42}, {"file": "hello.sh", "extra": True}, {}):
         bad["scripts"] = {"hello": reference}
         manifest.write_text(json.dumps(bad))

@@ -246,14 +246,37 @@ Json resolve_scripts(const cJSON *scripts, const fs::path &directory) {
             continue;
         }
         auto *file = cJSON_GetObjectItemCaseSensitive(script, "file");
-        require(cJSON_IsObject(script) && cJSON_GetArraySize(script) == 1 && cJSON_IsString(file),
-                "recipe scripts must have string bodies or a single file reference");
+        auto *args = cJSON_GetObjectItemCaseSensitive(script, "args");
+        require(cJSON_IsObject(script) && cJSON_GetArraySize(script) == (args ? 2 : 1) && cJSON_IsString(file),
+                "recipe scripts must have string bodies or a file reference with optional args");
+        require(!args || cJSON_IsArray(args), "recipe script args must be an array of strings");
+        std::string presets;
+        const cJSON *arg;
+        cJSON_ArrayForEach(arg, args) {
+            require(cJSON_IsString(arg), "recipe script args must be an array of strings");
+            presets += " '";
+            for (const char ch : std::string(arg->valuestring)) {
+                presets += ch == '\'' ? "'\"'\"'" : std::string(1, ch);
+            }
+            presets += "'";
+        }
         require(valid_component(file->valuestring), "Invalid recipe script filename");
         auto path = directory / file->valuestring;
         require(!fs::is_symlink(path) && fs::is_regular_file(path),
                 "Recipe script must be a regular file in its recipe directory: " + path.string());
         auto body = read_file(path);
         require(body.find('\0') == std::string::npos, "Recipe script must not contain NUL bytes");
+        if (!presets.empty()) {
+            // Cache a self-contained shell body, preserving its interpreter and
+            // placing literal presets before arguments supplied to `ttrek run`.
+            size_t position = 0;
+            if (body.rfind("#!", 0) == 0) {
+                position = body.find('\n');
+                if (position == std::string::npos) { position = body.size(); body += '\n'; }
+                ++position;
+            }
+            body.insert(position, "set --" + presets + " \"$@\"\n");
+        }
         cJSON_AddStringToObject(result.get(), script->string, body.c_str());
     }
     return result;
