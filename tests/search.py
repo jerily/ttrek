@@ -24,10 +24,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
         assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
         return result
 
-    def recipe(registry, name, version="1.0.0", description=None):
+    def recipe(registry, name, version="1.0.0", description=None, tags=None):
         path = registry / name / version
         path.mkdir(parents=True, exist_ok=True)
         data = {} if description is None else {"description": description}
+        if tags is not None:
+            data["tags"] = tags
         (path / "ttrek.json").write_text(json.dumps(data))
 
     assert "search" in run("help").stdout
@@ -73,11 +75,31 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     assert "twebserver\tA Tcl web server.\n" in run("search", "web").stdout
     assert names("b")[0] == "b"
 
+    for name in ("json", "json-tools", "zzjsonzz", "jsox"):
+        recipe(registry, name)
+    recipe(registry, "described", description="JSON data formats.")
+    recipe(registry, "tdom", description="DOM processing.", tags=["JSON", "xml", "JSON"])
+    recipe(registry, "tdom", "2.0.0", tags=["sqlite"])
+    recipe(registry, "desc-suggestion", description="A jsom parser.")
+    recipe(registry, "tag-suggestion", tags=["jsom"])
+    recipe(registry, "split-tags", tags=["relational", "storage"])
+    recipe(registry, "one-tag", tags=["relational storage"])
+    assert names("json") == ["json", "json-tools", "zzjsonzz", "described", "tdom",
+                             "jsox", "desc-suggestion", "tag-suggestion"]
+    assert names(" JSON ") == names("json")
+    assert names("sqlite")[0] == "tdom"  # Union of tags across versions, ahead of typo suggestions.
+    assert names("relational storage") == ["one-tag"]
+    assert run("search", "xml").stdout == "tdom\tDOM processing.\n"
+    assert "tdom" in names("sq")  # Short queries match tags literally.
+
     bad = registry / "bad/1.0.0/ttrek.json"
     for description in (42, None, {}, "bad\nline", "a" * 4097):
         bad.parent.mkdir(parents=True, exist_ok=True)
         bad.write_text(json.dumps({"description": description}))
         assert "description must be" in run("search", "web", ok=False).stderr
+    for tags in (None, "json", {}, [42], [""], ["bad\nline"], ["x" * 256]):
+        bad.write_text(json.dumps({"tags": tags}))
+        assert "tags must" in run("search", "json", ok=False).stderr
     bad.write_text('{')
     assert "Invalid JSON" in run("search", "web", ok=False).stderr
     bad.unlink()
@@ -105,4 +127,4 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     empty.mkdir()
     assert run("search", "-registry", str(empty), "tcl").stdout == ""
 
-print("Name/description ranking, trigram suggestions, metadata, registry selection and no-write checks passed")
+print("Name/description/tag ranking, trigram suggestions, metadata, registry selection and no-write checks passed")

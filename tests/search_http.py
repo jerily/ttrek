@@ -81,6 +81,20 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
         response = []
         assert run("search", "nothing").stdout == ""
 
+        response = [
+            {"name": "tag-suggestion", "description": "", "match": "description-fuzzy", "field": "tags", "distance": 1},
+            {"name": "desc-suggestion", "description": "jsom parser", "match": "description-fuzzy", "distance": 1},
+            {"name": "jsox", "description": "", "match": "fuzzy", "distance": 1},
+            {"name": "tdom", "description": "DOM processing", "tags": ["json"], "match": "description", "field": "tags", "distance": 0},
+            {"name": "described", "description": "JSON data", "match": "description", "distance": 0},
+            {"name": "json", "description": "", "match": "exact", "distance": 0},
+        ]
+        assert [line.split("\t")[0] for line in run("search", "json").stdout.splitlines()] == [
+            "json", "described", "tdom", "jsox", "desc-suggestion", "tag-suggestion"]
+        for match, field in (("exact", "tags"), ("description", 42), ("description", "unknown")):
+            response = [{"name": "tdom", "description": "", "match": match, "field": field}]
+            assert "Invalid registry search field" in run("search", "json", ok=False).stderr
+
         local = root / "local"
         for name, description in (("shadow", "Tcl hidden locally"), ("tcl-local", "Local package"),
                                   ("local-owner", "No matching description")):
