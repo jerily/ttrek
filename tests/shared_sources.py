@@ -296,10 +296,18 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
     count = root / 'extractions'
     # Exercise the macOS fallback tools on Linux too: hide flock and sha256sum.
     fallback_bin = root / 'fallback-bin'
-    fallback_bin.mkdir()
-    for command in ('perl', 'shasum', 'mkdir', 'cp', 'find', 'chmod', 'rm', 'touch', 'mv'):
-        (fallback_bin / command).symlink_to(shutil.which(command))
-    for fallback in (False, True):
+    fallback_tools = {command: shutil.which(command) for command in
+                      ('perl', 'shasum', 'mkdir', 'cp', 'find', 'chmod', 'rm', 'touch', 'mv')}
+    missing = [command for command, path in fallback_tools.items() if path is None]
+    fallback_modes = [False]
+    if missing:
+        print('shared sources: skipping Perl/shasum fallback checks; missing: ' + ', '.join(missing))
+    else:
+        fallback_bin.mkdir()
+        for command, path in fallback_tools.items():
+            (fallback_bin / command).symlink_to(path)
+        fallback_modes.append(True)
+    for fallback in fallback_modes:
         preparation_env = dict(helper_env)
         if fallback:
             preparation_env['PATH'] = str(fallback_bin)
@@ -357,4 +365,4 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
             assert (Path(changed.stdout.strip()) / 'value.txt').read_text() == 'changed source\n'
             assert (shared / 'value.txt').read_text() == 'original source\n'
             assert len(list(cache_root.rglob('.complete'))) == 2
-print('shared sources: native/Bash/sh, named sources, multiple unpacks, reuse, isolation, validation, failures, SIGKILL, concurrency and fallbacks passed')
+print('shared sources: native/Bash/sh, named sources, multiple unpacks, reuse, isolation, validation, failures, SIGKILL, concurrency and available fallbacks passed')
