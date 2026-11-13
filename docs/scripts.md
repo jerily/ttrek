@@ -106,24 +106,59 @@ Recipes keep downloading and extraction as separate steps:
 ```
 
 `filename` is relative to `$DOWNLOAD_DIR` and defaults to `$ARCHIVE_FILE`.
-`unpack.destination` is relative to `$SOURCE_DIR` and defaults to that directory.
+`unpack.destination` is relative to `$SOURCE_DIR` and defaults to that directory
+for recipes without named sources.
 Paths are literal; absolute paths and `..` components are rejected. Parent
 folders are created as needed, and extraction strips the top-level directory.
 These default forms do not change `SOURCE_DIR` or `ARCHIVE_FILE`.
 
-Packages that build out of tree can explicitly share a pristine source archive:
+Packages can name independent source trees and explicitly select one for building:
 
 ```json
-{"cmd": "unpack", "filename": "aws-sdk-cpp-1.11.924.tar.gz", "shared": "aws-sdk-cpp-1.11.924"}
+[
+  {"cmd": "unpack", "filename": "aws-sdk-cpp-1.11.924.tar.gz", "as": "sdk", "shared": "aws-sdk-cpp-1.11.924", "select": true},
+  {"cmd": "unpack", "filename": "tools.tar.gz", "as": "tools"},
+  {"cmd": "unpack", "filename": "extras.tar.gz", "into": "tools", "destination": "vendor"}
+]
 ```
 
-Every participating recipe must use the same `shared` key and archive contents.
-The key has 1–128 letters, digits, `.`, `_`, `+`, or `-`, starting with a letter
-or digit. `SOURCE_DIR` becomes
-`$ROOT_BUILD_DIR/shared-source/<key>/<archive-sha256>/source`; normal installs
-keep this inside `ttrek-venv/build`, and standalone scripts inside their `build`
-directory. Build and log directories remain private to each package. Ordinary
-package source cleanup never removes shared trees.
+`as` declares a recipe-local source name. Names are case-sensitive, have 1–64
+letters, digits or underscores, and start with a letter or underscore. A name
+can be declared only once among enabled steps. `into` refers to an already
+prepared **private** named tree; `destination` is relative to that tree. `as`
+cannot be combined with `into` or `destination`.
+
+`select` is a boolean, defaults to `false`, and requires `as` or `into`.
+Only `select: true` changes `SOURCE_DIR`, after successful extraction, to the
+named tree's root (not its `destination` subdirectory). Preparing another tree,
+adding an archive, or downloading a file otherwise leaves the selection alone.
+There is no special source name or separate selection command.
+
+In recipes using named sources, unpacks without `as` or `into` always target
+the original package source directory, even after selecting another tree.
+Recipes without these new fields retain their existing behavior, including
+explicit `SOURCE_DIR` assignments. Local project builds skip source retrieval
+and selection, continuing to use the project's own sources.
+
+Private named trees live under
+`$ROOT_BUILD_DIR/named-source/<package>-<version>/<name>` and are cleared when
+their `as` declaration runs again. Multiple archives can be assembled there:
+
+```json
+[
+  {"cmd": "unpack", "filename": "sdk.tar.gz", "as": "core", "select": true},
+  {"cmd": "unpack", "filename": "crt.tar.gz", "into": "core", "destination": "crt/aws-crt-cpp"}
+]
+```
+
+`shared` requires `as`. Every participating recipe must use the same `shared`
+key and archive contents; their local names may differ. The key has 1–128
+letters, digits, `.`, `_`, `+`, or `-`, starting with a letter or digit. The
+resolved tree is `$ROOT_BUILD_DIR/shared-source/<key>/<archive-sha256>/source`.
+Normal installs keep both source locations inside `ttrek-venv/build`, and
+standalone scripts inside their `build` directory. Build and log directories
+remain private to each package. Ordinary package source cleanup never removes
+shared trees.
 
 Preparation is locked, extracts into a temporary directory, and publishes a
 completion marker and read-only source tree together. Failed or interrupted
@@ -132,14 +167,20 @@ downloads are published atomically so concurrent packages cannot read a partial
 download. Shared preparation requires `sha256sum` or `shasum`, and `flock` or
 Perl (the fallback on macOS), in both install modes.
 
-A shared recipe must have exactly one enabled unpack, with no `destination`,
-`patch`, `git`, `autogen`, or `SOURCE_DIR` override. Other build commands must
-respect the read-only source tree and write generated files into `BUILD_DIR`.
+Shared trees cannot be targets of `into`. `patch`, `git`, and `autogen` are
+rejected while the selected source is shared; they remain available on private
+trees in the same recipe. Named-source recipes cannot override `SOURCE_DIR`
+or the internal source variables through `env_variable`. Other build commands
+must respect read-only sources and put generated files into `BUILD_DIR`.
 Permissions catch accidental writes; this is not a sandbox for untrusted recipes.
-Keep recipes that add dependencies or generate files inside the sources private
-(AWS core, for example, unpacks its CRT dependencies there). Old hash entries
-remain available to other builds; remove the shared cache only when no builds
-are using it. Read-only directories need write permission restored before removal.
+Old hash entries remain available to other builds; remove the shared cache only
+when no builds are using it. Read-only directories need write permission restored
+before removal.
+
+Older ttrek binaries ignore the new unpack fields. The AWS service recipes,
+which unpack one SDK archive and pass `SOURCE_DIR` to CMake, therefore continue
+to build with private sources on older binaries. Recipes that need independent
+named trees or `into` assembly require the new implementation for that layout.
 
 `cmake_config.source` selects another CMake project directory; it defaults to
 `$SOURCE_DIR` and supports build-directory variables, such as

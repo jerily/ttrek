@@ -47,6 +47,17 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
     (source / 'CMakeLists.txt').write_text(
         'cmake_minimum_required(VERSION 3.22)\nproject(shared NONE)\n'
         'file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/source-path.txt" "${CMAKE_CURRENT_SOURCE_DIR}")\n'
+        'if(SERVICE STREQUAL "multi")\n'
+        '  if(NOT "$ENV{INITIAL_SOURCE}" STREQUAL "$ENV{AFTER_SHARED}" OR\n'
+        '     NOT "$ENV{SDK_SOURCE}" STREQUAL "$ENV{AFTER_UNPACKS}" OR\n'
+        '     NOT "$ENV{SDK_SOURCE}" STREQUAL "$ENV{ALIAS_SOURCE}")\n'
+        '    message(FATAL_ERROR "Unpack changed the selected source or alias resolved incorrectly")\n'
+        '  endif()\n'
+        '  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/extra.txt" OR\n'
+        '     NOT EXISTS "$ENV{INITIAL_SOURCE}/scratch/extra.txt")\n'
+        '    message(FATAL_ERROR "Unpack targeted the wrong source root")\n'
+        '  endif()\n'
+        'endif()\n'
         'configure_file(value.txt "${SERVICE}.txt" COPYONLY)\n'
         'install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${SERVICE}.txt" DESTINATION share)\n')
     archives = {}
@@ -62,16 +73,53 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
         archives[extension] = archive
     registry = root / 'registry'
     recipes = {}
-    for name in ('one', 'two', 'private'):
+    for name in ('one', 'two', 'private', 'legacy', 'named'):
         steps = [
             {'cmd': 'download', 'url': archives['tar.gz'].as_uri(), 'filename': 'sdk.tar.gz'},
             {'cmd': 'unpack', 'filename': 'sdk.tar.gz'}, {'cmd': 'cd'},
             {'cmd': 'cmake_config', 'options': [{'name': 'SERVICE', 'value': name}]},
             {'cmd': 'cmake_install'},
         ]
-        if name != 'private':
-            steps[1]['shared'] = 'sdk-1.0'
+        if name in ('one', 'two'):
+            # AWS-compatible selection: no new command for older binaries.
+            steps[1].update({'as': 'sdk', 'shared': 'sdk-1.0', 'select': True})
+        elif name == 'named':
+            steps[1].update({'as': 'work', 'select': True})
+        elif name == 'legacy':
+            steps.insert(1, {'cmd': 'env_variable', 'op': 'set', 'name': 'SOURCE_DIR',
+                             'value': '$SOURCE_DIR/nested'})
         recipes[name] = {'name': name, 'version': '1.0.0', 'dependencies': {}, 'build': {'default': steps}}
+
+    extra = root / 'extra.zip'
+    with zipfile.ZipFile(extra, 'w') as output:
+        output.writestr('extra/extra.txt', 'extra source')
+    recipes['multi'] = {
+        'name': 'multi', 'version': '1.0.0', 'dependencies': {}, 'build': {'default': [
+            {'cmd': 'download', 'url': archives['tar.gz'].as_uri(), 'filename': 'sdk.tar.gz'},
+            {'cmd': 'env_variable', 'op': 'set', 'name': 'INITIAL_SOURCE', 'value': '$SOURCE_DIR'},
+            {'cmd': 'unpack', 'filename': 'sdk.tar.gz', 'as': 'prepared', 'shared': 'sdk-1.0'},
+            {'cmd': 'env_variable', 'op': 'set', 'name': 'AFTER_SHARED', 'value': '$SOURCE_DIR'},
+            {'cmd': 'unpack', 'filename': 'sdk.tar.gz', 'as': 'sdk', 'shared': 'sdk-1.0', 'select': True},
+            {'cmd': 'env_variable', 'op': 'set', 'name': 'SDK_SOURCE', 'value': '$SOURCE_DIR'},
+            {'cmd': 'download', 'url': extra.as_uri(), 'filename': 'extra.zip'},
+            {'cmd': 'unpack', 'filename': 'extra.zip', 'as': 'extras', 'shared': 'extras-1.0', 'select': False},
+            {'cmd': 'unpack', 'filename': 'sdk.tar.gz', 'as': 'alias', 'shared': 'sdk-1.0'},
+            {'cmd': 'unpack', 'filename': 'sdk.tar.gz', 'as': 'work'},
+            {'cmd': 'unpack', 'filename': 'extra.zip', 'into': 'work', 'destination': 'vendor'},
+            {'cmd': 'unpack', 'filename': 'extra.zip', 'destination': 'scratch'},
+            {'cmd': 'env_variable', 'op': 'set', 'name': 'AFTER_UNPACKS', 'value': '$SOURCE_DIR'},
+            {'cmd': 'unpack', 'filename': 'sdk.tar.gz', 'as': 'selected_alias', 'shared': 'sdk-1.0', 'select': True},
+            {'cmd': 'env_variable', 'op': 'set', 'name': 'ALIAS_SOURCE', 'value': '$SOURCE_DIR'},
+            {'cmd': 'unpack', 'filename': 'extra.zip', 'into': 'work', 'destination': 'final', 'select': True},
+            {'cmd': 'patch', 'filename': 'value.diff', 'p_num': '1'},
+            {'cmd': 'cd'},
+            {'cmd': 'cmake_config', 'options': [{'name': 'SERVICE', 'value': 'multi'}]},
+            {'cmd': 'cmake_install'},
+        ]}}
+    patches = registry / 'multi/1.0.0'
+    patches.mkdir(parents=True)
+    (patches / 'value.diff').write_text(
+        '--- a/value.txt\n+++ b/value.txt\n@@ -1 +1 @@\n-original source\n+patched private source\n')
 
     def save_recipes():
         for name, recipe in recipes.items():
@@ -97,11 +145,19 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
                 script.write_text(cli('gen-script', '-shell', mode, name + '@1.0.0').stdout)
                 run([mode, script], env=env)
             scripts[name] = script
-            assert (prefix / 'share' / (name + '.txt')).read_text() == 'original source\n'
+            expected = 'patched private source\n' if name == 'multi' else 'original source\n'
+            assert (prefix / 'share' / (name + '.txt')).read_text() == expected
         shared = Path((build / 'build/one-1.0.0/source-path.txt').read_text())
         assert shared == Path((build / 'build/two-1.0.0/source-path.txt').read_text())
         assert shared.is_relative_to(build / 'shared-source/sdk-1.0')
-        assert list((build / 'shared-source').rglob('.complete')) == [shared.parent / '.complete']
+        assert list((build / 'shared-source/sdk-1.0').rglob('.complete')) == [shared.parent / '.complete']
+        assert len(list((build / 'shared-source').rglob('.complete'))) == 2
+        work = Path((build / 'build/multi-1.0.0/source-path.txt').read_text())
+        assert work == build / 'named-source/multi-1.0.0/work'
+        assert Path((build / 'build/named-1.0.0/source-path.txt').read_text()) == build / 'named-source/named-1.0.0/work'
+        assert (work / 'vendor/extra.txt').read_text() == 'extra source'
+        assert not (shared / 'vendor').exists() and not (shared / 'scratch').exists()
+        assert Path((build / 'build/legacy-1.0.0/source-path.txt').read_text()) == build / 'source/legacy-1.0.0/nested'
         original_inode = (shared / 'value.txt').stat().st_ino
         for path in [shared, *shared.rglob('*')]:
             assert path.stat().st_mode & 0o222 == 0, path
@@ -130,6 +186,16 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
             assert process.returncode == 0, output
         assert (shared / 'value.txt').stat().st_ino == original_inode
         assert not list((build / 'download').glob('sdk.tar.gz.??????'))
+        # Private named sources are freshly extracted on rebuild; package aliases
+        # are isolated even inside one standalone script.
+        (work / 'stale.txt').touch()
+        if mode == 'native':
+            run(['bash', scripts['multi']], env=env)
+        else:
+            combined = project / 'combined.sh'
+            combined.write_text(cli('gen-script', '-shell', mode, 'one', 'two', 'multi').stdout)
+            run([mode, combined], env=env)
+        assert not (work / 'stale.txt').exists()
 
     # Invalid combinations fail in the shared generator used by both paths.
     valid = copy.deepcopy(recipes['one'])
@@ -138,9 +204,30 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
         recipe = copy.deepcopy(valid)
         recipe['build']['default'][1]['shared'] = key
         invalid.append(recipe)
+    for field in ('as', 'into'):
+        for name in (None, True, '', '.', '../sdk', 'two words', 'bad-name', '$(bad)', 'a' * 65):
+            recipe = copy.deepcopy(valid)
+            step = {'cmd': 'unpack', 'filename': 'sdk.tar.gz', field: name}
+            recipe['build']['default'].append(step)
+            invalid.append(recipe)
     for command in ({'cmd': 'patch', 'filename': 'unused.diff'}, {'cmd': 'git', 'url': 'unused'},
-                    {'cmd': 'autogen'}, {'cmd': 'unpack'},
+                    {'cmd': 'autogen'}, {'cmd': 'unpack', 'into': 'sdk'},
+                    {'cmd': 'unpack', 'into': 'sdk', 'destination': 'nested'},
+                    {'cmd': 'unpack', 'as': 'sdk'},
+                    {'cmd': 'unpack', 'as': 'sdk', 'shared': 'sdk-1.0'},
                     {'cmd': 'unpack', 'shared': 'another-key'},
+                    {'cmd': 'unpack', 'as': 'extra', 'into': 'sdk'},
+                    {'cmd': 'unpack', 'as': 'extra', 'destination': 'nested'},
+                    {'cmd': 'unpack', 'into': 'missing'},
+                    {'cmd': 'unpack', 'select': True},
+                    {'cmd': 'unpack', 'into': 'sdk', 'select': True},
+                    {'cmd': 'env_variable', 'op': 'set', 'name': 'SOURCE_DIR', 'value': '/tmp'},
+                    {'cmd': 'env_variable', 'op': 'unset', 'name': '_TTREK_SOURCE_sdk'},
+                    {'cmd': 'env_variable', 'op': 'set', 'name': '_TTREK_UNPACK_ROOT', 'value': '/tmp'}):
+        recipe = copy.deepcopy(valid)
+        recipe['build']['default'].append(command)
+        invalid.append(recipe)
+    for command in ({'cmd': 'unpack', 'into': 'sdk'},
                     {'cmd': 'env_variable', 'op': 'set', 'name': 'SOURCE_DIR', 'value': '/tmp'}):
         recipe = copy.deepcopy(valid)
         recipe['build']['default'].insert(0, command)
@@ -152,19 +239,36 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
     recipe['build']['default'][1]['cmd'] = 'unpac'
     recipe['build']['default'].append({'cmd': 'pat', 'filename': 'unused.diff'})
     invalid.append(recipe)
-    for recipe in invalid:
+    recipe = copy.deepcopy(valid)
+    recipe['build']['default'][1]['if'] = '+unused'
+    recipe['build']['default'].append({'cmd': 'unpack', 'into': 'sdk'})
+    invalid.append(recipe)
+    for select in (None, '', 'true', 0, 1, [], {}):
+        recipe = copy.deepcopy(valid)
+        recipe['build']['default'][1]['select'] = select
+        invalid.append(recipe)
+    for index, recipe in enumerate(invalid):
         recipes['one'] = recipe
         save_recipes()
         result = cli('gen-script', 'one@1.0.0', ok=False)
-        assert 'shared' in result.stderr.lower(), result.stderr
+        assert any(word in result.stderr.lower() for word in ('source', 'shared', 'unpack')), result.stderr
         assert not result.stdout
+        # Native install must reject the same invalid recipes before executing.
+        bad_project = root / ('invalid-' + str(index))
+        bad_project.mkdir()
+        run([BINARY, 'init', '-y', '-registry', registry], cwd=bad_project, env=env)
+        result = run([BINARY, 'install', '-y', 'one@1.0.0'], cwd=bad_project, env=env, ok=False)
+        assert not list((bad_project / 'ttrek-venv/build').rglob('.complete'))
+        assert not (bad_project / 'ttrek-venv/local/share/one.txt').exists()
     # Disabled mutations are permitted, and local project unpack is skipped.
     recipes['one'] = copy.deepcopy(valid)
     recipes['one']['build']['default'].insert(0, {'cmd': 'autogen', 'if': '+unused'})
     save_recipes()
     cli('gen-script', 'one@1.0.0')
     local = json.loads((project / 'ttrek.json').read_text())
-    local['build'] = {'default': [{'cmd': 'unpack', 'shared': None}, {'cmd': 'autogen', 'if': '+unused'}]}
+    local['build'] = {'default': [{'cmd': 'unpack', 'shared': None},
+                                  {'cmd': 'unpack', 'into': 'not-prepared-in-local-build', 'select': True},
+                                  {'cmd': 'autogen', 'if': '+unused'}]}
     (project / 'ttrek.json').write_text(json.dumps(local))
     cli('gen-script')
 
@@ -253,4 +357,4 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
             assert (Path(changed.stdout.strip()) / 'value.txt').read_text() == 'changed source\n'
             assert (shared / 'value.txt').read_text() == 'original source\n'
             assert len(list(cache_root.rglob('.complete'))) == 2
-print('shared sources: native/Bash/sh, reuse, isolation, validation, failures, SIGKILL, concurrency and fallbacks passed')
+print('shared sources: native/Bash/sh, named sources, multiple unpacks, reuse, isolation, validation, failures, SIGKILL, concurrency and fallbacks passed')

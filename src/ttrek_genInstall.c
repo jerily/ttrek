@@ -557,6 +557,14 @@ DEFINE_COMMAND(Git) {
 
 }
 
+static Tcl_Obj *ttrek_SourceVariable(const char *name) {
+    return Tcl_ObjPrintf("_TTREK_SOURCE_%s", name);
+}
+
+static Tcl_Obj *ttrek_SourcePath(const char *name) {
+    return odq(Tcl_ObjPrintf("${_TTREK_SOURCE_%s}", name));
+}
+
 DEFINE_COMMAND(Unpack) {
     UNUSED(use_flags_ht_ptr);
     const cJSON *destination = cJSON_GetObjectItem(opts, "destination");
@@ -566,20 +574,44 @@ DEFINE_COMMAND(Unpack) {
     }
     Tcl_Obj *archive = ttrek_ArchivePath(interp, opts);
     if (!archive) { return TCL_ERROR; }
+    const cJSON *alias = cJSON_GetObjectItem(opts, "as");
+    const cJSON *into = cJSON_GetObjectItem(opts, "into");
     const cJSON *shared = cJSON_GetObjectItem(opts, "shared");
+    const cJSON *select = cJSON_GetObjectItem(opts, "select");
     if (shared) {
-        // Shared declarations are validated together before emitting any steps.
         Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL,
-            "SOURCE_DIR=$(cmd shared_unpack %s %s %s unpack)", 3,
-            archive, sq(shared->valuestring),
+            "%s=$(cmd shared_unpack %s %s %s unpack)", 4,
+            ttrek_SourceVariable(alias->valuestring), archive, sq(shared->valuestring),
             state_ptr->mode == MODE_SCRIPT ? Tcl_NewObj() : sq(Tcl_GetNameOfExecutable()));
         APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "readonly %s", 1,
+                                    ttrek_SourceVariable(alias->valuestring));
+        APPEND_CMD(cmd, NULL);
+        if (cJSON_IsTrue(select)) {
+            cmd = ttrek_AppendFormatToObj(interp, NULL, "SOURCE_DIR=%s", 1,
+                                        ttrek_SourcePath(alias->valuestring));
+            APPEND_CMD(cmd, NULL);
+        }
         return TCL_OK;
     }
-    Tcl_Obj *path = destination
-        ? ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2, dq("$SOURCE_DIR"), sq(destination->valuestring))
-        : dq("$SOURCE_DIR");
     Tcl_IncrRefCount(archive);
+    if (alias) {
+        Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL,
+            "%s=%s/%s", 3, ttrek_SourceVariable(alias->valuestring),
+            dq("$ROOT_BUILD_DIR/named-source/${PACKAGE}-${VERSION}"), sq(alias->valuestring));
+        APPEND_CMD(cmd, NULL);
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd rm -rf %s", 1,
+                                    ttrek_SourcePath(alias->valuestring));
+        APPEND_CMD(cmd, NULL);
+    }
+    // In named-source recipes, unnamed unpacks retain the original package
+    // root even after selecting a named tree. Legacy recipes use SOURCE_DIR.
+    Tcl_Obj *root = alias ? ttrek_SourcePath(alias->valuestring)
+        : into ? ttrek_SourcePath(into->valuestring)
+        : dq("${_TTREK_UNPACK_ROOT:-$SOURCE_DIR}");
+    Tcl_Obj *path = destination
+        ? ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2, root, sq(destination->valuestring))
+        : root;
     Tcl_IncrRefCount(path);
     Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd mkdir -p %s", 1, path);
     APPEND_CMD(cmd, NULL);
@@ -590,6 +622,16 @@ DEFINE_COMMAND(Unpack) {
                                       sq(Tcl_GetNameOfExecutable()), archive, path);
     }
     APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
+    if (alias) {
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "readonly %s", 1,
+                                    ttrek_SourceVariable(alias->valuestring));
+        APPEND_CMD(cmd, NULL);
+    }
+    if (cJSON_IsTrue(select)) {
+        cmd = ttrek_AppendFormatToObj(interp, NULL, "SOURCE_DIR=%s", 1,
+                                    ttrek_SourcePath(alias ? alias->valuestring : into->valuestring));
+        APPEND_CMD(cmd, NULL);
+    }
     Tcl_DecrRefCount(archive);
     Tcl_DecrRefCount(path);
     return TCL_OK;
@@ -1020,57 +1062,108 @@ static int ttrek_IsRecipeCommand(const cJSON *cmd, const char *name) {
         strncmp(name, cmd->valuestring, strlen(cmd->valuestring)) == 0;
 }
 
-static int ttrek_ValidateSharedSource(Tcl_Interp *interp, const cJSON *spec,
-                                     Tcl_HashTable *flags) {
-    const cJSON *shared_step = NULL;
+static int ttrek_SourceNameValid(const cJSON *name) {
+    return cJSON_IsString(name) && *name->valuestring && strlen(name->valuestring) <= 64 &&
+        strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", *name->valuestring) &&
+        strspn(name->valuestring, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == strlen(name->valuestring);
+}
+
+static int ttrek_ValidateSources(Tcl_Interp *interp, const cJSON *spec,
+                                Tcl_HashTable *flags, int *named_sources) {
     const cJSON *step;
-    int unpacks = 0;
+    *named_sources = 0;
+    // Detect the mode first, including declarations later in the recipe, so
+    // earlier SOURCE_DIR overrides cannot escape named-source validation.
     cJSON_ArrayForEach(step, spec) {
         int enabled;
         if (ttrek_IsUseFlagEnabled(interp, flags, step, &enabled) != TCL_OK) { return TCL_ERROR; }
         if (!enabled) { continue; }
         const cJSON *cmd = cJSON_GetObjectItem(step, "cmd");
-        if (!ttrek_IsRecipeCommand(cmd, "unpack")) { continue; }
-        ++unpacks;
-        const cJSON *shared = cJSON_GetObjectItem(step, "shared");
-        if (!shared) { continue; }
-        if (!cJSON_IsString(shared) || !*shared->valuestring || strlen(shared->valuestring) > 128 ||
-            strspn(shared->valuestring, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") != strlen(shared->valuestring) ||
-            !strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", *shared->valuestring)) {
-            SetResult("unpack shared must be a key of 1-128 letters, digits, '.', '_', '+', '-', starting with a letter or digit");
-            return TCL_ERROR;
+        if (ttrek_IsRecipeCommand(cmd, "unpack") &&
+            (cJSON_HasObjectItem(step, "as") || cJSON_HasObjectItem(step, "into") ||
+             cJSON_HasObjectItem(step, "shared") || cJSON_HasObjectItem(step, "select"))) {
+            *named_sources = 1;
         }
-        if (cJSON_HasObjectItem(step, "destination")) {
-            SetResult("shared unpack cannot specify destination");
-            return TCL_ERROR;
-        }
-        shared_step = step;
     }
-    if (!shared_step) { return TCL_OK; }
-    if (unpacks != 1) {
-        SetResult("shared sources require exactly one unpack step");
-        return TCL_ERROR;
-    }
+    if (!*named_sources) { return TCL_OK; }
+
+    Tcl_HashTable sources;
+    Tcl_InitHashTable(&sources, TCL_STRING_KEYS);
+    int selected_shared = 0;
+    int status = TCL_ERROR;
     cJSON_ArrayForEach(step, spec) {
         int enabled;
-        if (ttrek_IsUseFlagEnabled(interp, flags, step, &enabled) != TCL_OK) { return TCL_ERROR; }
+        if (ttrek_IsUseFlagEnabled(interp, flags, step, &enabled) != TCL_OK) { goto done; }
         if (!enabled) { continue; }
         const cJSON *cmd = cJSON_GetObjectItem(step, "cmd");
-        if (!cJSON_IsString(cmd)) { continue; }
-        const char *name = cmd->valuestring;
-        if (ttrek_IsRecipeCommand(cmd, "patch") || ttrek_IsRecipeCommand(cmd, "git") ||
-            ttrek_IsRecipeCommand(cmd, "autogen")) {
-            Tcl_SetObjResult(interp, Tcl_ObjPrintf("shared sources cannot use %s: the source tree is read-only", name));
-            return TCL_ERROR;
-        }
-        const cJSON *variable = cJSON_GetObjectItem(step, "name");
-        if (ttrek_IsRecipeCommand(cmd, "env_variable") && cJSON_IsString(variable) &&
-            strcmp(variable->valuestring, "SOURCE_DIR") == 0) {
-            SetResult("shared sources cannot override SOURCE_DIR");
-            return TCL_ERROR;
+        if (ttrek_IsRecipeCommand(cmd, "unpack")) {
+            const cJSON *alias = cJSON_GetObjectItem(step, "as");
+            const cJSON *into = cJSON_GetObjectItem(step, "into");
+            const cJSON *shared = cJSON_GetObjectItem(step, "shared");
+            const cJSON *select = cJSON_GetObjectItem(step, "select");
+            if (select && (!cJSON_IsBool(select) || (!alias && !into))) {
+                SetResult("unpack select must be a boolean and requires as or into");
+                goto done;
+            }
+            if ((alias && !ttrek_SourceNameValid(alias)) || (into && !ttrek_SourceNameValid(into))) {
+                SetResult("source names must have 1-64 letters, digits or underscores, starting with a letter or underscore");
+                goto done;
+            }
+            if (alias && (into || cJSON_HasObjectItem(step, "destination"))) {
+                SetResult("unpack as cannot be combined with into or destination; use a later unpack into the named source");
+                goto done;
+            }
+            if (shared && (!alias || into)) {
+                SetResult("shared unpack requires as and cannot specify into");
+                goto done;
+            }
+            if (shared && (!cJSON_IsString(shared) || !*shared->valuestring || strlen(shared->valuestring) > 128 ||
+                strspn(shared->valuestring, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") != strlen(shared->valuestring) ||
+                !strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", *shared->valuestring))) {
+                SetResult("unpack shared must be a key of 1-128 letters, digits, '.', '_', '+', '-', starting with a letter or digit");
+                goto done;
+            }
+            if (alias) {
+                int is_new;
+                Tcl_HashEntry *entry = Tcl_CreateHashEntry(&sources, alias->valuestring, &is_new);
+                if (!is_new) {
+                    Tcl_SetObjResult(interp, Tcl_ObjPrintf("source name already declared: %s", alias->valuestring));
+                    goto done;
+                }
+                Tcl_SetHashValue(entry, INT2PTR(shared != NULL));
+            }
+            if (into) {
+                Tcl_HashEntry *entry = Tcl_FindHashEntry(&sources, into->valuestring);
+                if (!entry) {
+                    Tcl_SetObjResult(interp, Tcl_ObjPrintf("source must be declared before unpack into: %s", into->valuestring));
+                    goto done;
+                }
+                if (PTR2INT(Tcl_GetHashValue(entry))) {
+                    Tcl_SetObjResult(interp, Tcl_ObjPrintf("cannot unpack into shared source: %s", into->valuestring));
+                    goto done;
+                }
+            }
+            if (cJSON_IsTrue(select)) {
+                selected_shared = shared != NULL;
+            }
+        } else if (selected_shared && (ttrek_IsRecipeCommand(cmd, "patch") ||
+                   ttrek_IsRecipeCommand(cmd, "git") || ttrek_IsRecipeCommand(cmd, "autogen"))) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("selected source is shared and read-only; cannot use %s", cmd->valuestring));
+            goto done;
+        } else if (ttrek_IsRecipeCommand(cmd, "env_variable")) {
+            const cJSON *name = cJSON_GetObjectItem(step, "name");
+            if (cJSON_IsString(name) && (strcmp(name->valuestring, "SOURCE_DIR") == 0 ||
+                strcmp(name->valuestring, "_TTREK_UNPACK_ROOT") == 0 ||
+                strncmp(name->valuestring, "_TTREK_SOURCE_", 14) == 0)) {
+                SetResult("named sources cannot override source variables; use unpack select");
+                goto done;
+            }
         }
     }
-    return TCL_OK;
+    status = TCL_OK;
+done:
+    Tcl_DeleteHashTable(&sources);
+    return status;
 }
 
 static Tcl_Obj *
@@ -1109,9 +1202,13 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
         Tcl_BounceRefCount(resultList);
         return NULL;
     }
-    if (!is_local_build && ttrek_ValidateSharedSource(interp, spec, global_use_flags_ht_ptr) != TCL_OK) {
+    int named_sources = 0;
+    if (!is_local_build && ttrek_ValidateSources(interp, spec, global_use_flags_ht_ptr, &named_sources) != TCL_OK) {
         goto error;
     }
+    Tcl_ListObjAppendElement(interp, resultList, Tcl_NewStringObj(named_sources
+        ? "_TTREK_UNPACK_ROOT=\"$SOURCE_DIR\"; readonly _TTREK_UNPACK_ROOT"
+        : "_TTREK_UNPACK_ROOT=''", -1));
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
 
