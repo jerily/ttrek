@@ -109,7 +109,37 @@ Recipes keep downloading and extraction as separate steps:
 `unpack.destination` is relative to `$SOURCE_DIR` and defaults to that directory.
 Paths are literal; absolute paths and `..` components are rejected. Parent
 folders are created as needed, and extraction strips the top-level directory.
-Neither command changes `SOURCE_DIR` or `ARCHIVE_FILE`.
+These default forms do not change `SOURCE_DIR` or `ARCHIVE_FILE`.
+
+Packages that build out of tree can explicitly share a pristine source archive:
+
+```json
+{"cmd": "unpack", "filename": "aws-sdk-cpp-1.11.924.tar.gz", "shared": "aws-sdk-cpp-1.11.924"}
+```
+
+Every participating recipe must use the same `shared` key and archive contents.
+The key has 1–128 letters, digits, `.`, `_`, `+`, or `-`, starting with a letter
+or digit. `SOURCE_DIR` becomes
+`$ROOT_BUILD_DIR/shared-source/<key>/<archive-sha256>/source`; normal installs
+keep this inside `ttrek-venv/build`, and standalone scripts inside their `build`
+directory. Build and log directories remain private to each package. Ordinary
+package source cleanup never removes shared trees.
+
+Preparation is locked, extracts into a temporary directory, and publishes a
+completion marker and read-only source tree together. Failed or interrupted
+extractions are retried; changed archive contents get a new entry. Recipe
+downloads are published atomically so concurrent packages cannot read a partial
+download. Shared preparation requires `sha256sum` or `shasum`, and `flock` or
+Perl (the fallback on macOS), in both install modes.
+
+A shared recipe must have exactly one enabled unpack, with no `destination`,
+`patch`, `git`, `autogen`, or `SOURCE_DIR` override. Other build commands must
+respect the read-only source tree and write generated files into `BUILD_DIR`.
+Permissions catch accidental writes; this is not a sandbox for untrusted recipes.
+Keep recipes that add dependencies or generate files inside the sources private
+(AWS core, for example, unpacks its CRT dependencies there). Old hash entries
+remain available to other builds; remove the shared cache only when no builds
+are using it. Read-only directories need write permission restored before removal.
 
 `cmake_config.source` selects another CMake project directory; it defaults to
 `$SOURCE_DIR` and supports build-directory variables, such as

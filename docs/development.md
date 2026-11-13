@@ -63,6 +63,10 @@ to select another executable. Build failures include their logs in CTest output.
 `registry_sources` checks ordered local/HTTP lookup, source precedence, saved
 lists, error handling and installation against an isolated HTTP server.
 
+`shared_sources` checks native installation and Bash/POSIX scripts, shared source
+reuse, private build isolation, recipe validation, failed and killed extractions,
+concurrent preparation, changed archives, and the Perl/shasum fallbacks.
+
 `search_http` checks website fallback, HTTP response validation, mixed registry
 ranking and precedence, and read-only behavior. `clone` checks semantic versions,
 source archive extraction, output directories, failure cleanup and mirror

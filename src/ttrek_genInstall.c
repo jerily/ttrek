@@ -439,26 +439,35 @@ DEFINE_COMMAND(Download) {
     Tcl_IncrRefCount(path);
     Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd mkdir -p \"$(dirname %s)\"", 1, path);
     APPEND_CMD(cmd, NULL);
+    // Publish downloads atomically: another package may be reading the same
+    // named archive while this package downloads it again.
+    cmd = ttrek_AppendFormatToObj(interp, NULL,
+        "( TTREK_DOWNLOAD_FILE=$(mktemp %s.XXXXXX) || exit; "
+        "trap 'rm -f \"$TTREK_DOWNLOAD_FILE\"' 0; ", 1, path);
     if (state_ptr->mode == MODE_SCRIPT) {
         Tcl_Obj *url_obj = Tcl_NewStringObj(url->valuestring, -1);
         Tcl_Obj *fallback = ttrek_DownloadFallbackUrl(url_obj, "$PACKAGE-$VERSION",
             filename ? filename->valuestring : NULL);
         Tcl_BounceRefCount(url_obj);
         if (!fallback) {
+            Tcl_BounceRefCount(cmd);
             Tcl_DecrRefCount(path);
             SetResult("could not encode fallback download URL");
             return TCL_ERROR;
         }
-        cmd = ttrek_AppendFormatToObj(interp, NULL,
+        ttrek_AppendFormatToObj(interp, cmd,
             "{ cmd curl -fLsS --retry 3 -o %s %s || cmd curl -fLsS --retry 3 -o %s %s; }",
-            4, path, sq(url->valuestring), path, odq(fallback));
+            4, dq("$TTREK_DOWNLOAD_FILE"), sq(url->valuestring), dq("$TTREK_DOWNLOAD_FILE"), odq(fallback));
     } else {
-        cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd %s download %s %s %s", 4,
-                                      sq(Tcl_GetNameOfExecutable()), sq(url->valuestring), path, dq("$PACKAGE-$VERSION"));
+        ttrek_AppendFormatToObj(interp, cmd, "cmd %s download %s %s %s", 4,
+                                      sq(Tcl_GetNameOfExecutable()), sq(url->valuestring),
+                                      dq("$TTREK_DOWNLOAD_FILE"), dq("$PACKAGE-$VERSION"));
         if (filename) {
             ttrek_AppendFormatToObj(interp, cmd, " %s", 1, sq(filename->valuestring));
         }
     }
+    ttrek_AppendFormatToObj(interp, cmd,
+        " || exit; cmd mv -f \"$TTREK_DOWNLOAD_FILE\" %s )", 1, path);
     APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/download.log"));
     Tcl_DecrRefCount(path);
     return TCL_OK;
@@ -557,6 +566,16 @@ DEFINE_COMMAND(Unpack) {
     }
     Tcl_Obj *archive = ttrek_ArchivePath(interp, opts);
     if (!archive) { return TCL_ERROR; }
+    const cJSON *shared = cJSON_GetObjectItem(opts, "shared");
+    if (shared) {
+        // Shared declarations are validated together before emitting any steps.
+        Tcl_Obj *cmd = ttrek_AppendFormatToObj(interp, NULL,
+            "SOURCE_DIR=$(cmd shared_unpack %s %s %s unpack)", 3,
+            archive, sq(shared->valuestring),
+            state_ptr->mode == MODE_SCRIPT ? Tcl_NewObj() : sq(Tcl_GetNameOfExecutable()));
+        APPEND_CMD(cmd, dq("$BUILD_LOG_DIR/unpack.log"));
+        return TCL_OK;
+    }
     Tcl_Obj *path = destination
         ? ttrek_AppendFormatToObj(interp, NULL, "%s/%s", 2, dq("$SOURCE_DIR"), sq(destination->valuestring))
         : dq("$SOURCE_DIR");
@@ -994,6 +1013,66 @@ DEFINE_COMMAND(CmakeInstall) {
 }
 
 
+/* Validate only enabled dependency steps; local builds skip source retrieval. */
+static int ttrek_IsRecipeCommand(const cJSON *cmd, const char *name) {
+    // The dispatcher accepts unambiguous command abbreviations too.
+    return cJSON_IsString(cmd) && *cmd->valuestring &&
+        strncmp(name, cmd->valuestring, strlen(cmd->valuestring)) == 0;
+}
+
+static int ttrek_ValidateSharedSource(Tcl_Interp *interp, const cJSON *spec,
+                                     Tcl_HashTable *flags) {
+    const cJSON *shared_step = NULL;
+    const cJSON *step;
+    int unpacks = 0;
+    cJSON_ArrayForEach(step, spec) {
+        int enabled;
+        if (ttrek_IsUseFlagEnabled(interp, flags, step, &enabled) != TCL_OK) { return TCL_ERROR; }
+        if (!enabled) { continue; }
+        const cJSON *cmd = cJSON_GetObjectItem(step, "cmd");
+        if (!ttrek_IsRecipeCommand(cmd, "unpack")) { continue; }
+        ++unpacks;
+        const cJSON *shared = cJSON_GetObjectItem(step, "shared");
+        if (!shared) { continue; }
+        if (!cJSON_IsString(shared) || !*shared->valuestring || strlen(shared->valuestring) > 128 ||
+            strspn(shared->valuestring, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") != strlen(shared->valuestring) ||
+            !strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", *shared->valuestring)) {
+            SetResult("unpack shared must be a key of 1-128 letters, digits, '.', '_', '+', '-', starting with a letter or digit");
+            return TCL_ERROR;
+        }
+        if (cJSON_HasObjectItem(step, "destination")) {
+            SetResult("shared unpack cannot specify destination");
+            return TCL_ERROR;
+        }
+        shared_step = step;
+    }
+    if (!shared_step) { return TCL_OK; }
+    if (unpacks != 1) {
+        SetResult("shared sources require exactly one unpack step");
+        return TCL_ERROR;
+    }
+    cJSON_ArrayForEach(step, spec) {
+        int enabled;
+        if (ttrek_IsUseFlagEnabled(interp, flags, step, &enabled) != TCL_OK) { return TCL_ERROR; }
+        if (!enabled) { continue; }
+        const cJSON *cmd = cJSON_GetObjectItem(step, "cmd");
+        if (!cJSON_IsString(cmd)) { continue; }
+        const char *name = cmd->valuestring;
+        if (ttrek_IsRecipeCommand(cmd, "patch") || ttrek_IsRecipeCommand(cmd, "git") ||
+            ttrek_IsRecipeCommand(cmd, "autogen")) {
+            Tcl_SetObjResult(interp, Tcl_ObjPrintf("shared sources cannot use %s: the source tree is read-only", name));
+            return TCL_ERROR;
+        }
+        const cJSON *variable = cJSON_GetObjectItem(step, "name");
+        if (ttrek_IsRecipeCommand(cmd, "env_variable") && cJSON_IsString(variable) &&
+            strcmp(variable->valuestring, "SOURCE_DIR") == 0) {
+            SetResult("shared sources cannot override SOURCE_DIR");
+            return TCL_ERROR;
+        }
+    }
+    return TCL_OK;
+}
+
 static Tcl_Obj *
 ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_HashTable *global_use_flags_ht_ptr,
                 int is_local_build) {
@@ -1029,6 +1108,9 @@ ttrek_SpecToObj(Tcl_Interp *interp, ttrek_state_t *state_ptr, cJSON *spec, Tcl_H
         SetResult("build instructions must be an array");
         Tcl_BounceRefCount(resultList);
         return NULL;
+    }
+    if (!is_local_build && ttrek_ValidateSharedSource(interp, spec, global_use_flags_ht_ptr) != TCL_OK) {
+        goto error;
     }
     const cJSON *cmd;
     cJSON_ArrayForEach(cmd, spec) {
