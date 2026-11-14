@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
     tools = root / "bin"
     tools.mkdir()
     for name in ("bash", "sh", "make", "git", "patch", "pkg-config", "perl", "tar",
-                 "gzip", "cc", "c++", "uname", "rm", "mkdir", "nproc", "dirname",
+                 "gzip", "cc", "c++", "uname", "rm", "mkdir", "nproc", "sysctl", "xcrun", "dirname",
                  "cat", "cp", "mv", "mktemp", "base64", "unzip"):
         path = shutil.which(name)
         if path:
