@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.3.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.4.0 LANGUAGES C CXX)
 
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
 
@@ -283,6 +283,8 @@ if(BUILD_TESTING)
     add_test(NAME download COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/download.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME shared_sources COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/shared_sources.py
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
+    add_test(NAME source_cleanup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/source_cleanup.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME metapackages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/metapackages.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")

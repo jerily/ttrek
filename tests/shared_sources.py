@@ -138,7 +138,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
         scripts = {}
         for name in recipes:
             if mode == 'native':
-                cli('install', '-y', name + '@1.0.0')
+                cli('install', '-y', '-keep', name + '@1.0.0')
                 script = build / ('install-' + name + '-1.0.0.sh')
             else:
                 script = project / (name + '.sh')

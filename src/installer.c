@@ -25,6 +25,68 @@ static char STRING_FILES[] = "files";
 static char STRING_IUSE[] = "iuse";
 static char STRING_USE[] = "use";
 
+/* Paths come from ttrek's build layout, never from a recipe's SOURCE_DIR or
+ * BUILD_DIR overrides. Pass them as arguments, not interpolated shell code. */
+static void ttrek_CleanupBuildPath(Tcl_Interp *interp, ttrek_state_t *state_ptr,
+                                  const char *relative_path) {
+    Tcl_InterpState saved = Tcl_SaveInterpState(interp, TCL_OK);
+    Tcl_Obj *relative = Tcl_NewStringObj(relative_path, -1);
+    Tcl_IncrRefCount(relative);
+    Tcl_Obj *path = NULL;
+    int status = ttrek_ResolvePath(interp, state_ptr->project_build_dir_ptr, relative, &path);
+    Tcl_DecrRefCount(relative);
+    if (status != TCL_OK) {
+        fprintf(stderr, "warning: could not resolve cleanup path: %s\n", relative_path);
+        Tcl_RestoreInterpState(interp, saved);
+        return;
+    }
+    const char *argv[] = {
+        "/bin/sh", "-c",
+        "if [ -d \"$1\" ] && [ ! -L \"$1\" ]; then\n"
+        "  find \"$1\" -type d -exec chmod u+w {} + || exit\n"
+        "fi\n"
+        "rm -rf -- \"$1\"",
+        "ttrek-cleanup", Tcl_GetString(path)
+    };
+    /* Shared trees are read-only. Only make directories writable, without
+     * following symlinks or changing permissions on their targets. */
+    if (ttrek_ExecuteCommand(interp, 5, argv, NULL) != TCL_OK) {
+        fprintf(stderr, "warning: could not clean up %s: %s\n",
+                Tcl_GetString(path), Tcl_GetStringResult(interp));
+    }
+    Tcl_RestoreInterpState(interp, saved);
+    Tcl_DecrRefCount(path);
+}
+
+static void ttrek_CleanupPackageSources(Tcl_Interp *interp, ttrek_state_t *state_ptr,
+                                       const char *name, const char *version, const cJSON *patches) {
+    if (state_ptr->option_keep) { return; }
+    const char *directories[] = {"source", "named-source", "build"};
+    for (size_t i = 0; i < sizeof(directories) / sizeof(directories[0]); ++i) {
+        Tcl_Obj *relative = Tcl_ObjPrintf("%s/%s-%s", directories[i], name, version);
+        Tcl_IncrRefCount(relative);
+        ttrek_CleanupBuildPath(interp, state_ptr, Tcl_GetString(relative));
+        Tcl_DecrRefCount(relative);
+    }
+    const cJSON *patch;
+    cJSON_ArrayForEach(patch, patches) {
+        Tcl_Obj *relative = Tcl_ObjPrintf("source/patch-%s-%s-%s", name, version, patch->string);
+        Tcl_IncrRefCount(relative);
+        ttrek_CleanupBuildPath(interp, state_ptr, Tcl_GetString(relative));
+        Tcl_DecrRefCount(relative);
+    }
+    state_ptr->cleanup_shared_sources = 1;
+}
+
+void ttrek_CleanupSharedSources(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+    if (state_ptr->option_keep || !state_ptr->cleanup_shared_sources) { return; }
+    /* Native install/update holds the environment lock until state destruction.
+     * Keep shared trees and named downloads until every package, local build
+     * and project hook has succeeded. No-op and aborted operations leave them. */
+    ttrek_CleanupBuildPath(interp, state_ptr, "shared-source");
+    ttrek_CleanupBuildPath(interp, state_ptr, "download");
+}
+
 static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
                                    const char *version_requirement) {
     cJSON *dev_dependencies = cJSON_GetObjectItem(spec_root, "devDependencies");
@@ -356,6 +418,7 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
 
     Tcl_Free((char *) fsmonitor_state_ptr);
+    ttrek_CleanupPackageSources(interp, state_ptr, package_name, package_version, patches);
     cJSON_free(install_spec_root);
     Tcl_DStringFree(&ds);
     return TCL_OK;

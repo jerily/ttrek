@@ -1,4 +1,4 @@
-Usage: update [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-y] [-force] [-u|-g] ?package@version_range ...?
+Usage: update [-registry SOURCE]... [-add-pubreg] [-strategy latest|favored|locked] [-y] [-force] [-keep] [-u|-g] ?package@version_range ...?
 
 Update project dependencies; the default strategy is latest.
 -registry appends a local directory or HTTP(S) API URL; repeat to set lookup order.
@@ -25,3 +25,11 @@ An already-current, fully installed graph does not rebuild packages.
 The resolved versions refresh ttrek-lock.json, including packages already installed.
 Installed-state checks use ttrek-venv/ttrek-manifest.json and its recorded files.
 -u updates the user environment; -g updates the global environment.
+
+Successful packages have their private source trees, patches and build directories
+removed. Shared sources and downloads are removed after the entire operation
+succeeds. Build logs and generated install scripts are retained. Failed packages
+keep their sources and build files; failed operations keep the shared caches.
+-keep preserves all these files for the invocation, for example:
+    ttrek update -keep -y
+No-op and cancelled operations do not clean caches.

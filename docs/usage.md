@@ -82,6 +82,16 @@ Targeted updates prefer locked versions outside the request when compatible;
 `update` without package arguments considers the entire dependency graph.
 See `ttrek help install` for all install options and strategies.
 
+Successful installs and updates remove each package's private sources, patches
+and build directory as it finishes. Shared source trees and downloads are kept
+until the whole operation succeeds, so packages can reuse them, then those
+caches are removed. Logs and generated install scripts remain. Failed packages
+retain their source and build files, and failed operations retain shared caches.
+Use `ttrek install -keep PACKAGE` or `ttrek update -keep` to disable cleanup for
+that invocation. No-op or cancelled commands do not clean caches. The root
+project's own sources and build directory, and standalone `gen-script` builds,
+are unaffected.
+
 ### Lockfiles and installed state
 
 The lockfile records resolution choices. Installed state comes from

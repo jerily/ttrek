@@ -5,6 +5,7 @@ Available options:
     -add-pubreg - append the public default after explicit or saved sources (synced local copy, otherwise API)
     -y - answer yes to the installation confirmation
     -force - reinstall requested packages even when unchanged, plus their transitive reverse dependencies
+    -keep - keep package sources, downloads, patches and build directories after success
     -strategy STRATEGY - dependency resolution: favored (default), latest, or locked
     -fail-verbose - show the build log when installation fails
     -save-dev, -D - save explicitly named packages in devDependencies
@@ -50,11 +51,18 @@ in dependency order. Unchanged forward dependencies and unrelated packages are
 not rebuilt. With no package arguments, -force targets all direct dependencies.
 The preInstall and postInstall project hooks run around the install operation.
 
+Successful packages have their private sources, patches and build directories
+removed; shared sources and downloads are removed once the operation succeeds.
+Logs and generated scripts remain. Failed packages keep their sources and build
+files; failed operations keep shared caches. -keep disables cleanup. No-op and
+cancelled operations leave caches. Root project sources and builds are preserved.
+
 Examples:
     ttrek install -y twebserver
     ttrek install -save-dev cmake
     ttrek install -D ninja
     ttrek install -force web-wiki
+    ttrek install -keep twebserver
     ttrek install -strategy latest web-blog
 
 Like npm, both sections are installed for the root project, but only dependencies

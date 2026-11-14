@@ -721,6 +721,8 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->with_locking = with_locking;
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
+    state_ptr->option_keep = 0;
+    state_ptr->cleanup_shared_sources = 0;
     state_ptr->option_save_dev = 0;
     state_ptr->resolve_all_latest = 0;
     state_ptr->option_pretend = 0;

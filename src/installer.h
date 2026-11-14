@@ -23,6 +23,7 @@ int ttrek_PrepareMetapackage(Tcl_Interp *interp, ttrek_state_t *state_ptr,
     const char *package_name, const char *package_version, const char *os, const char *arch, int *prepared);
 int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
+void ttrek_CleanupSharedSources(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 #ifdef __cplusplus
 }
