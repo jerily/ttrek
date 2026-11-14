@@ -288,7 +288,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
 
     assert "invalid strategy" in run("install", "-strategy", "invalid", ok=False).stderr
     assert "unknown install option: --save-dev" in run("install", "--save-dev", "devtool", ok=False).stderr
-    for flag in ("-save-dev", "-D", "-force", "-strategy", "-fail-verbose", "-y"):
+    for flag in ("-save-dev", "-D", "-force", "-strategy", "-fail-verbose", "-y", "-keep"):
         assert flag in run("help", "install").stdout
+    assert "-keep" in run("help", "update").stdout
 
 print("Install options passed: dev dependencies, targeted rebuilds/updates, ordering, fresh installs, and deep reverse dependencies")

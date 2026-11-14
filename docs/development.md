@@ -67,6 +67,9 @@ lists, error handling and installation against an isolated HTTP server.
 reuse, named-tree selection, multiple unpacks, private build isolation, recipe
 validation, failed and killed extractions,
 concurrent preparation, changed archives, and the Perl/shasum fallbacks.
+`source_cleanup` checks per-package cleanup, shared reuse within an operation,
+`install/update -keep`, failed and cancelled operations, and root project builds
+and hooks. Cleanup also verifies that symlink targets outside the cache survive.
 
 `search_http` checks website fallback, HTTP response validation, mixed registry
 ranking and precedence, and read-only behavior. `clone` checks semantic versions,

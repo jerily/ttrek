@@ -10,6 +10,7 @@
 #include "ttrek_git.h"
 #include "registry.h"
 #include "ttrek_telemetry.h"
+#include "installer.h"
 
 int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
 
@@ -18,9 +19,11 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     int option_global = 0;
     int option_yes = 0;
     int option_force = 0;
+    int option_keep = 0;
     const char *option_strategy = NULL;
     Tcl_ArgvInfo ArgTable[] = {
             TTREK_REGISTRY_OPTIONS,
+            {TCL_ARGV_CONSTANT, "-keep", INT2PTR(1), &option_keep, "keep package sources, downloads and build directories", NULL},
 //            {TCL_ARGV_CONSTANT, "-save-dev", INT2PTR(1), &option_save_dev, "Save the package to the local repository as a dev dependency"},
             {TCL_ARGV_CONSTANT, "-y",        INT2PTR(1), &option_yes,      "answer yes to all questions",                                        NULL},
             {TCL_ARGV_CONSTANT, "-u",        INT2PTR(1), &option_user,     "update user directory tree",                                         NULL},
@@ -74,6 +77,7 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     }
 
     state_ptr->resolve_all_latest = objc == 1;
+    state_ptr->option_keep = option_keep;
 
     if (ttrek_RegistryLoadFromLock(interp, state_ptr->project_home_dir_ptr, state_ptr->lock_root) != TCL_OK) {
         ttrek_DestroyState(state_ptr);
@@ -147,6 +151,7 @@ int ttrek_UpdateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
         return TCL_ERROR;
     }
 
+    ttrek_CleanupSharedSources(interp, state_ptr);
     ttrek_DestroyState(state_ptr);
     return TCL_OK;
 }

@@ -125,6 +125,8 @@ typedef struct {
     int with_locking;
     int option_yes;
     int option_force;
+    int option_keep;
+    int cleanup_shared_sources;
     int option_save_dev;
     int resolve_all_latest;
     int option_pretend;
