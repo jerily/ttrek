@@ -94,7 +94,8 @@ ttrek sync ./registry              # explicit destination
 ttrek sync .                       # current directory must be empty or the registry checkout
 ```
 
-`sync` requires Git and clones `https://github.com/jerily/ttrek-registry.git`.
+`sync` requires Git and clones `https://github.com/jerily/ttrek-registry.git`
+with `--depth 1`, downloading only the latest commit on `main` initially.
 Later runs fast-forward a clean `main` checkout of that repository. Local edits,
 another repository, another branch, and divergent history are rejected without
 overwriting the checkout. Network errors from an explicit sync are reported.

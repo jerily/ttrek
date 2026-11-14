@@ -48,7 +48,7 @@ extern "C" int ttrek_SyncSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *cons
             throw std::runtime_error("Registry destination must be empty or an existing registry checkout");
         }
         fs::create_directories(directory.parent_path());
-        git(interp, {"clone", "--branch", "main", "--single-branch", registry_url, path});
+        git(interp, {"clone", "--depth", "1", "--branch", "main", "--single-branch", registry_url, path});
     }
     // Git resolves the metadata directory correctly for both clones and worktrees.
     auto git_directory = fs::path(git(interp, {"-C", path, "rev-parse", "--absolute-git-dir"}));
