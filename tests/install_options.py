@@ -265,6 +265,42 @@ with tempfile.TemporaryDirectory(prefix="ttrek-install-options-") as temporary:
     assert "invalid strategy" in run("update", "-strategy", "invalid", ok=False).stderr
     assert "unknown update option" in run("update", "-bogus", ok=False).stderr
 
+    # Saving versions must preserve the user's order, even when it is the
+    # reverse of the build order. Exercise both dependency sections.
+    for section in ("dependencies", "devDependencies"):
+        ordered = root / ("ordered-" + section)
+        ordered.mkdir()
+        run("init", "-y", "-registry", str(registry), cwd=ordered)
+        ordered_spec = {"dependencies": {}, "devDependencies": {}}
+        ordered_spec[section] = {"top": "^1.0.0", "middle": "^1.0.0", "base": "1.0.0"}
+        ordered_path = ordered / "ttrek.json"
+        ordered_path.write_text(json.dumps(ordered_spec))
+        run("install", "-y", cwd=ordered)
+        # Restore the chosen order after setup so the regression targets update.
+        ordered_path.write_text(json.dumps(ordered_spec))
+
+        def check_order():
+            saved = json.loads(ordered_path.read_text())
+            assert saved == ordered_spec, saved
+            for key in ("dependencies", "devDependencies"):
+                assert list(saved[key]) == list(ordered_spec[key]), saved
+
+        run("update", "-y", "base@1.1.0", cwd=ordered)
+        ordered_spec[section]["base"] = "1.1.0"
+        check_order()
+        run("update", "-y", cwd=ordered)
+        check_order()
+        # An already installed package can change its saved range without a build.
+        run("update", "-y", "middle@1.0.0", cwd=ordered)
+        ordered_spec[section]["middle"] = "1.0.0"
+        check_order()
+
+        # New dependencies append without disturbing existing entries.
+        options = ["-D"] if section == "devDependencies" else []
+        run("install", "-y", *options, "unrelated@1.0.0", cwd=ordered)
+        ordered_spec[section]["unrelated"] = "1.0.0"
+        check_order()
+
     # Reach every reverse dependency even through chains longer than ten packages.
     deep = root / "deep"
     deep.mkdir()
