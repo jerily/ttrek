@@ -27,6 +27,12 @@ together with installation commands. `CC` and `CXX` select explicit compiler
 commands; otherwise GCC or Clang are accepted. Read-only commands such as
 `search`, `pretend` and `gen-script` do not require a build toolchain.
 
+A recipe with an enabled `autogen` step using `autoconf` also checks for
+Autoconf before downloading that package's sources. If it is missing, ttrek
+names the package and reports `brew install autoconf` on macOS or
+`sudo apt install autoconf` on Ubuntu/Debian. Other recipes and packages that
+do not need rebuilding do not require Autoconf.
+
 On Ubuntu/Debian:
 
 ```sh
