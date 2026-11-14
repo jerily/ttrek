@@ -805,8 +805,12 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             }
             std::string version = requirements.at(spec.package_name);
             if (version.empty()) { version = "^" + spec.package_version; }
-            cJSON_DeleteItemFromObject(deps, name);
-            cJSON_AddStringToObject(deps, name, version.c_str());
+            // Keep existing dependencies in the user's order, independent of build order.
+            if (cJSON_HasObjectItem(deps, name)) {
+                cJSON_ReplaceItemInObject(deps, name, cJSON_CreateString(version.c_str()));
+            } else {
+                cJSON_AddStringToObject(deps, name, version.c_str());
+            }
             const char *other_section = strcmp(section, "dependencies") == 0 ? "devDependencies" : "dependencies";
             cJSON_DeleteItemFromObject(cJSON_GetObjectItem(state_ptr->spec_root, other_section), name);
             cJSON *lock_deps = cJSON_GetObjectItem(state_ptr->lock_root, "dependencies");
