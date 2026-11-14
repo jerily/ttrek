@@ -84,7 +84,24 @@ fail() {
 }
 cmd() {
     LATEST_COMMAND="$@"
+    # Snap's launcher can invalidate redirected stdout/stderr. Use its CMake
+    # binary directly, but keep any other CMake selected by the caller.
+    if [ "$1" = cmake ] && [ "$(command -v cmake)" = /snap/bin/cmake ] \
+            && [ -x /snap/cmake/current/bin/cmake ]; then
+        shift
+        /snap/cmake/current/bin/cmake "$@"
+        return $?
+    fi
     "$@"
+}
+
+require_autoconf() {
+    command -v autoconf >/dev/null 2>&1 && return 0
+    printf 'ttrek: %s@%s requires autoconf, but it was not found on PATH.\n' "$PACKAGE" "$VERSION" >&2
+    printf '%s\n' 'Install it before retrying this package:' \
+        '  macOS: brew install autoconf' \
+        '  Ubuntu/Debian: sudo apt install autoconf' >&2
+    return 1
 }
 
 init_tty

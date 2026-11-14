@@ -659,6 +659,17 @@ DEFINE_COMMAND(Autogen) {
 
     UNUSED(state_ptr);
 
+    const cJSON *tool = cJSON_GetObjectItem(opts, "path");
+    if (cJSON_IsString(tool) && strcmp(tool->valuestring, "autoconf") == 0) {
+        // Only selected autogen steps reach this handler. Check before this
+        // package's downloads, including in standalone generated scripts.
+        Tcl_Obj *check = Tcl_NewStringObj("require_autoconf", -1);
+        if (Tcl_ListObjReplace(interp, resultList, 0, 0, 1, &check) != TCL_OK) {
+            Tcl_BounceRefCount(check);
+            return TCL_ERROR;
+        }
+    }
+
     Tcl_Obj *cmd;
 
     cmd = ttrek_AppendFormatToObj(interp, NULL, "cmd cd %s", 1, dq("$SOURCE_DIR"));
