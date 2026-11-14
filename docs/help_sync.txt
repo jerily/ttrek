@@ -2,6 +2,7 @@ Usage: ttrek sync [DIRECTORY]
 
 Clone https://github.com/jerily/ttrek-registry.git into ~/.local/ttrek-registry
 by default, or into DIRECTORY (use . for the current directory). Requires git.
+New clones use --depth 1 to download only the latest commit on main initially.
 An existing clean main checkout is updated with git pull --ff-only; other
 repositories, local changes and divergent history are preserved and rejected.
 

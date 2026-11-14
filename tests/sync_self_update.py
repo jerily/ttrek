@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     git("init", "-b", "main", str(mirror))
     git("-C", str(mirror), "config", "user.name", "Test")
     git("-C", str(mirror), "config", "user.email", "test@example.invalid")
+    git("-C", str(mirror), "commit", "--allow-empty", "-m", "older history")
     recipe = mirror / "test-package/1.0.0/ttrek.json"
     recipe.parent.mkdir(parents=True)
     recipe.write_text(json.dumps({"name": "test-package", "version": "1.0.0", "dependencies": {}, "build": {"default": []}}))
@@ -58,6 +59,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     run("sync")
     assert (checkout / "test-package/1.0.0/ttrek.json").exists()
     assert (checkout / ".git/ttrek-last-sync").exists()
+    assert git("-C", str(checkout), "rev-parse", "--is-shallow-repository") == "true"
+    assert git("-C", str(checkout), "rev-list", "--count", "HEAD") == "1"
+    assert git("-C", str(checkout), "rev-parse", "HEAD") == git("-C", str(mirror), "rev-parse", "HEAD")
     initialized = root / "initialized"
     initialized.mkdir()
     run("init", "-y", cwd=initialized)
@@ -113,6 +117,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek maintenance ") as temporary:
     current.mkdir()
     run("sync", ".", cwd=current)
     assert (current / ".git").exists()
+    assert git("-C", str(current), "rev-list", "--count", "HEAD") == "1"
     os.utime(current / ".git/ttrek-last-sync", (old, old))
     custom_stale = run("gen-script", "-registry", str(current))
     assert "may be out of date" in custom_stale.stderr and "ttrek sync ." in custom_stale.stderr
