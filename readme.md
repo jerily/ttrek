@@ -11,6 +11,8 @@ This project is under active development.
 
 ## Get started
 
+Visit [ttrek.sh](https://ttrek.sh) to browse packages and download ttrek.
+
 Follow the [installation guide](docs/install.md) to install ttrek and its build
 tools. Then create a project and add a package:
 
