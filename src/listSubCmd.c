@@ -6,6 +6,25 @@
 
 #include "subCmdDecls.h"
 #include "ttrek_git.h"
+#include "registry.h"
+
+static Tcl_Obj *ttrek_LockedPackageLabel(const cJSON *package) {
+    const char *version = cJSON_GetObjectItem(package, "version")->valuestring;
+    Tcl_Obj *name = Tcl_ObjPrintf("%s@%s", package->string, version);
+    const cJSON *languages = cJSON_GetObjectItemCaseSensitive(package, "languages");
+    cJSON *loaded = NULL;
+    // Legacy lockfiles can use a local registry without requiring a network.
+    if (!languages && ttrek_RegistryIsLocal()) {
+        loaded = ttrek_RegistryLanguages(package->string, version);
+        languages = loaded;
+    }
+    Tcl_Obj *label = ttrek_LanguagesLabel(languages);
+    Tcl_IncrRefCount(label);
+    Tcl_AppendObjToObj(name, label);
+    Tcl_DecrRefCount(label);
+    cJSON_Delete(loaded);
+    return name;
+}
 
 static int ttrek_GetLockPackages(Tcl_Interp *interp, cJSON *lock_root, Tcl_Obj *list_ptr) {
 
@@ -17,9 +36,7 @@ static int ttrek_GetLockPackages(Tcl_Interp *interp, cJSON *lock_root, Tcl_Obj *
 
     for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
         cJSON *package = cJSON_GetArrayItem(packages, i);
-        char package_str[256];
-        snprintf(package_str, 256, "%s@%s", package->string, cJSON_GetObjectItem(package, "version")->valuestring);
-        Tcl_Obj *package_name = Tcl_NewStringObj(package_str, -1);
+        Tcl_Obj *package_name = ttrek_LockedPackageLabel(package);
         if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, package_name)) {
             return TCL_ERROR;
         }
@@ -40,9 +57,7 @@ static int ttrek_GetLockPackagesThatMatch(Tcl_Interp *interp, cJSON *lock_root, 
     for (int i = 0; i < cJSON_GetArraySize(packages); i++) {
         cJSON *package = cJSON_GetArrayItem(packages, i);
         if (Tcl_StringMatch(package->string, Tcl_GetString(pattern))) {
-            char package_str[256];
-            snprintf(package_str, 256, "%s@%s", package->string, cJSON_GetObjectItem(package, "version")->valuestring);
-            Tcl_Obj *package_name = Tcl_NewStringObj(package_str, -1);
+            Tcl_Obj *package_name = ttrek_LockedPackageLabel(package);
             if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr, package_name)) {
                 return TCL_ERROR;
             }
@@ -79,6 +94,18 @@ int ttrek_ListSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
         fprintf(stderr, "error: initializing ttrek state failed\n");
         ckfree(remObjv);
         return TCL_ERROR;
+    }
+
+    // Old lockfiles have no language metadata. Resolve their configured local
+    // source once; an unavailable registry must not prevent offline listing.
+    const cJSON *package;
+    cJSON_ArrayForEach(package, cJSON_GetObjectItem(state_ptr->lock_root, "packages")) {
+        if (!cJSON_HasObjectItem(package, "languages")) {
+            if (ttrek_RegistryLoadFromLock(interp, state_ptr->project_home_dir_ptr, state_ptr->lock_root) != TCL_OK) {
+                Tcl_ResetResult(interp);
+            }
+            break;
+        }
     }
 
     Tcl_Obj *list_ptr = Tcl_NewListObj(0, NULL);

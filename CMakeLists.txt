@@ -271,6 +271,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
         $<TARGET_FILE:ttrek>)
+    add_test(NAME languages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/languages.py
+        $<TARGET_FILE:ttrek>)
     add_test(NAME search_http COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search_http.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME clone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clone.py

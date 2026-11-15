@@ -326,6 +326,8 @@ struct InstallSpec {
     int package_installed_p;
     int exact_package_installed_p;
     int exact_use_flags_p;
+    std::string language_label = {};
+    std::string languages_json = {};
 };
 
 static bool ttrek_HashTableCompareUseFlagsEqual(Tcl_Interp *interp, Tcl_HashTable *global_use_flags_ht_ptr,
@@ -497,7 +499,7 @@ ttrek_PrintExecutionPlan(const std::vector<InstallSpec> &execution_plan) {
             continue;
         }
 
-        std::cout << install_spec.package_name << "@" << install_spec.package_version;
+        std::cout << install_spec.package_name << "@" << install_spec.package_version << install_spec.language_label;
 
         if (install_spec.install_type == RDEP_INSTALL) {
             std::cout << " (reverse dependency)";
@@ -630,6 +632,18 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         std::vector<InstallSpec> execution_plan;
         ttrek_GenerateExecutionPlan(state_ptr, installs, requirements, db.get_dependencies_map(), &global_use_flags_ht,
                                     execution_plan);
+
+        for (auto &spec : execution_plan) {
+            std::unique_ptr<cJSON, decltype(&cJSON_Delete)> languages(
+                ttrek_RegistryLanguages(spec.package_name.c_str(), spec.package_version.c_str()), cJSON_Delete);
+            if (!languages) { continue; }
+            Tcl_Obj *label = ttrek_LanguagesLabel(languages.get());
+            Tcl_IncrRefCount(label);
+            spec.language_label = Tcl_GetString(label);
+            Tcl_DecrRefCount(label);
+            std::unique_ptr<char, decltype(&cJSON_free)> json(cJSON_PrintUnformatted(languages.get()), cJSON_free);
+            if (json) { spec.languages_json = json.get(); }
+        }
 
         // print the execution plan
 
@@ -783,9 +797,13 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
         for (const auto &spec : execution_plan) {
             if (spec.install_type != ALREADY_INSTALLED) { continue; }
             const char *name = spec.package_name.c_str();
-            const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, name);
+            cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, name);
+            if (!spec.languages_json.empty()) {
+                cJSON_DeleteItemFromObject(installed, "languages");
+                cJSON_AddItemToObject(installed, "languages", cJSON_Parse(spec.languages_json.c_str()));
+            }
             cJSON *locked = cJSON_CreateObject();
-            for (const char *field : {"version", "iuse", "use", "requires"}) {
+            for (const char *field : {"version", "iuse", "use", "requires", "languages"}) {
                 cJSON_AddItemToObject(locked, field, cJSON_Duplicate(cJSON_GetObjectItem(installed, field), 1));
             }
             cJSON_DeleteItemFromObject(locked_packages, name);

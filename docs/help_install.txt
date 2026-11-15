@@ -75,3 +75,5 @@ The lockfile records resolved versions; it is not proof of installation.
 ttrek-venv/ttrek-manifest.json records installed versions, files, build flags,
 and dependencies. Missing installations or files are rebuilt even when locked.
 Older manifests without build metadata are refreshed by reinstalling once.
+
+Plans include languages, e.g. [C, TCL].

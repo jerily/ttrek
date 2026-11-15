@@ -33,3 +33,6 @@ keep their sources and build files; failed operations keep the shared caches.
 -keep preserves all these files for the invocation, for example:
     ttrek update -keep -y
 No-op and cancelled operations do not clean caches.
+
+The package plan shows programming languages in square brackets when available,
+for example: tjson@1.0.27 [C, TCL].

@@ -28,3 +28,6 @@ first nonempty description in alphabetical order.
 Local indexes are built only for this command. Search never downloads source
 archives, creates project state, sends telemetry or checks for updates.
 Use 'ttrek sync' to make the public registry available for offline search.
+
+Results include programming languages in square brackets when the registry
+provides them, for example: tjson [C, TCL].

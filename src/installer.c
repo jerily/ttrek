@@ -232,6 +232,13 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     // DBG2(fprintf(stderr, "got JSON: [%s]", Tcl_DStringValue(&ds)));
 
     cJSON *install_spec_root = cJSON_Parse(Tcl_DStringValue(&ds));
+    cJSON *languages = cJSON_GetObjectItemCaseSensitive(install_spec_root, "languages");
+    if (!ttrek_LanguagesValid(languages)) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("Invalid recipe languages", -1));
+        cJSON_Delete(install_spec_root);
+        Tcl_DStringFree(&ds);
+        return TCL_ERROR;
+    }
     cJSON *scripts = cJSON_GetObjectItemCaseSensitive(install_spec_root, "scripts");
     if (scripts && ttrek_ScriptsValidate(interp, scripts) != TCL_OK) {
         cJSON_Delete(install_spec_root);
@@ -401,7 +408,8 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     // Installed build metadata belongs to the manifest, independently of the desired lock.
     cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     cJSON *locked = cJSON_GetObjectItem(cJSON_GetObjectItem(state_ptr->lock_root, "packages"), package_name);
-    const char *fields[] = {"iuse", "use", "requires"};
+    cJSON_AddItemToObject(locked, "languages", languages ? cJSON_Duplicate(languages, 1) : cJSON_CreateArray());
+    const char *fields[] = {"iuse", "use", "requires", "languages"};
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i) {
         cJSON_AddItemToObject(installed, fields[i], cJSON_Duplicate(cJSON_GetObjectItem(locked, fields[i]), 1));
     }

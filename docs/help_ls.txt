@@ -1,7 +1,8 @@
 Usage: ttrek ls [-u|-g] [PATTERN ...]
 
 List packages recorded in the selected environment's ttrek-lock.json, one
-PACKAGE@VERSION per line. This includes direct and transitive dependencies.
+PACKAGE@VERSION per line, followed by programming languages such as [C, TCL]
+when available. This includes direct and transitive dependencies.
 The list reflects resolved versions; it does not verify installed files.
 
 Without patterns, list all locked packages. PATTERN matches package names,

@@ -127,4 +127,22 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-") as temporary:
     empty.mkdir()
     assert run("search", "-registry", str(empty), "tcl").stdout == ""
 
+    # Latest-version languages are display metadata, independent of which
+    # historical description matched. Semantic ordering must beat lexical order.
+    for version, languages in (("1.9.0", ["C"]), ("1.10.0-beta.1", ["C"]),
+                               ("1.10.0", ["TCL", "C++", "TCL"])):
+        recipe(other, "language-package", version, description="Language fixture")
+        path = other / "language-package" / version / "ttrek.json"
+        data = json.loads(path.read_text())
+        path.write_text(json.dumps(dict(data, languages=languages)))
+    assert run("search", "-registry", str(other), "language-package").stdout == (
+        "language-package [C++, TCL]\tLanguage fixture\n")
+    latest = other / "language-package/1.10.0/ttrek.json"
+    for languages in ([], None, "C", [42], [""], ["C\nTCL"], ["C\x1b[31m"], ["x" * 256]):
+        latest.write_text(json.dumps({"languages": languages}))
+        if languages == []:
+            assert " [" not in run("search", "-registry", str(other), "language-package").stdout
+        else:
+            assert "languages" in run("search", "-registry", str(other), "language-package", ok=False).stderr
+
 print("Name/description/tag ranking, trigram suggestions, metadata, registry selection and no-write checks passed")

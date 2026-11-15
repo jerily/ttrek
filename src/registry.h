@@ -42,6 +42,11 @@ int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result);
 int ttrek_RegistryReadLocal(const char *directory, const char *url, Tcl_DString *result);
 int ttrek_RegistryReadHTTP(const char *url, Tcl_DString *result);
 int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_Obj *matches);
+int ttrek_LanguagesValid(const cJSON *languages);
+// A new Tcl string containing either " [C, TCL]" or an empty string.
+Tcl_Obj *ttrek_LanguagesLabel(const cJSON *languages);
+// Optional metadata: caller owns the array; NULL means unavailable/unsupported.
+cJSON *ttrek_RegistryLanguages(const char *name, const char *version);
 
 #ifdef __cplusplus
 }

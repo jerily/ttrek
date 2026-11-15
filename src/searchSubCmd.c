@@ -20,10 +20,12 @@ int ttrek_SearchSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     Tcl_Obj **rows;
     if (Tcl_ListObjGetElements(interp, matches, &count, &rows) != TCL_OK) { goto done; }
     for (Tcl_Size i = 0; i < count; ++i) {
-        Tcl_Obj *name, *description;
+        Tcl_Obj *name, *description, *languages;
         if (Tcl_ListObjIndex(interp, rows[i], 0, &name) != TCL_OK ||
-            Tcl_ListObjIndex(interp, rows[i], 1, &description) != TCL_OK) { goto done; }
-        fprintf(stdout, "%s%s%s\n", Tcl_GetString(name), Tcl_GetCharLength(description) ? "\t" : "", Tcl_GetString(description));
+            Tcl_ListObjIndex(interp, rows[i], 1, &description) != TCL_OK ||
+            Tcl_ListObjIndex(interp, rows[i], 2, &languages) != TCL_OK) { goto done; }
+        fprintf(stdout, "%s%s%s%s\n", Tcl_GetString(name), languages ? Tcl_GetString(languages) : "",
+                Tcl_GetCharLength(description) ? "\t" : "", Tcl_GetString(description));
     }
     status = TCL_OK;
 done:

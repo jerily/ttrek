@@ -295,7 +295,8 @@ extern "C" int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result)
         if (end == std::string::npos) { break; }
         start = end + 1;
     } while (true);
-    require(count == 1 || count == 4, "Invalid registry request");
+    require(count == 1 || count == 4 || (count == 3 && suffix.substr(suffix.rfind('/') + 1) == "languages"),
+            "Invalid registry request");
     const auto package = suffix.substr(0, suffix.find('/'));
     auto owner = owners.find(package);
     if (owner == owners.end()) {

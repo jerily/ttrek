@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
     requests = []
     response = [{"name": "tcl", "description": "Tcl language", "match": "exact", "distance": 0}]
     status = 200
+    endpoints = {}
     packages = {"shadow": {"1.0.0": {}}}
 
     class Handler(BaseHTTPRequestHandler):
@@ -28,7 +30,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
         def do_GET(self):
             requests.append(self.path)
             path = urlsplit(self.path).path
-            if path.endswith("/search"):
+            if path in endpoints:
+                body = endpoints[path]
+                code = 200
+            elif path.endswith("/search"):
                 body = response
                 code = status
             else:
@@ -58,6 +63,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
     try:
         assert run("search", "tcl").stdout == "tcl\tTcl language\n"
         assert requests == ["http://localhost:8080/registry/search?q=tcl"]
+        response[0]["languages"] = ["TCL", "C", "C"]
+        assert run("search", "tcl").stdout == "tcl [C, TCL]\tTcl language\n"
+        for languages in (None, "C", [42], ["C\nTCL"]):
+            response[0]["languages"] = languages
+            assert "languages" in run("search", "tcl", ok=False).stderr
+        del response[0]["languages"]
         assert not list(home.iterdir()) and not list(work.iterdir())
         for query in ("web server", "a+b", "  TCL  "):
             run("search", "-registry", address + "/custom", query)
@@ -122,6 +133,29 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
         assert urlsplit(requests[-1]).path == "/saved/search"
         assert lock.read_bytes() == before_lock and not (work / "ttrek-venv").exists()
         assert not list(home.iterdir())
+
+        # Language metadata has its own lightweight endpoint, so previewing a
+        # plan does not request a build recipe. Older servers may return 404.
+        project = root / "install-project"
+        project.mkdir()
+        packages["native"] = {"1.0.0": {}}
+        endpoints["/registry/native/1.0.0/languages"] = ["C", "TCL"]
+        build_path = f"/registry/native/1.0.0/{platform.system()}/{platform.machine()}"
+        endpoints[build_path] = {"version": "1.0.0", "dependencies": {}, "iuse": [],
+                                 "install_script": [], "scripts": {}, "languages": ["C", "TCL"]}
+        run("init", "-y", "-registry", address + "/registry", cwd=project)
+        before = len(requests)
+        assert "native@1.0.0 [C, TCL]" in run("pretend", "native", cwd=project).stdout
+        assert build_path not in requests[before:]
+        assert "native@1.0.0 [C, TCL]" in run("install", "-y", "native", cwd=project).stdout
+        before = len(requests)
+        assert run("ls", "native", cwd=project).stdout == "native@1.0.0 [C, TCL]\n"
+        assert len(requests) == before
+        # An older server lacking both metadata fields remains installable.
+        del endpoints["/registry/native/1.0.0/languages"]
+        del endpoints[build_path]["languages"]
+        assert "native@1.0.0" in run("install", "-y", "-force", "native", cwd=project).stdout
+        assert run("ls", "native", cwd=project).stdout == "native@1.0.0\n"
     finally:
         server.shutdown()
         thread.join()
