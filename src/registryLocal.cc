@@ -14,6 +14,7 @@
 #include <curl/curl.h>
 #include "registry.h"
 #include "base64.h"
+#include "semver/semver.h"
 #include <ttrie.h>
 #include <ttrigrams.h>
 
@@ -99,6 +100,7 @@ struct SearchEntry {
     size_t unmatched = 0;
     int source = 0;
     bool remote = false;
+    std::string languages = {};
 };
 
 struct SearchDocuments {
@@ -180,6 +182,12 @@ void collect_remote_matches(const char *base, int source, const std::string &que
                 coverage->valuedouble >= 0 && coverage->valuedouble <= 1), "Invalid registry search coverage");
         if (!claimed.insert(name->valuestring).second) { continue; }
         SearchEntry entry{name->valuestring, search_text(name->valuestring), text};
+        const auto *languages = cJSON_GetObjectItemCaseSensitive(row, "languages");
+        require(ttrek_LanguagesValid(languages), "Invalid registry search languages");
+        Tcl_Obj *label = ttrek_LanguagesLabel(languages);
+        Tcl_IncrRefCount(label);
+        entry.languages = Tcl_GetString(label);
+        Tcl_DecrRefCount(label);
         entry.tier = tier - kinds.begin();
         if (entry.tier >= 4) { ++entry.tier; }
         // Keep the HTTP match vocabulary compatible with older clients.
@@ -205,12 +213,34 @@ void collect_remote_matches(const char *base, int source, const std::string &que
 struct SearchMetadata {
     std::set<std::string> descriptions;
     std::set<std::string> tags;
+    std::string latest_version;
+    std::string languages = {};
 };
+
+bool newer_version(const std::string &a, const std::string &b) {
+    if (b.empty()) { return true; }
+    semver_t av{}, bv{};
+    const bool valid = semver_parse(a.c_str(), &av) == 0 && semver_parse(b.c_str(), &bv) == 0;
+    const bool newer = valid ? semver_compare(av, bv) > 0 : a > b;
+    semver_free(&av);
+    semver_free(&bv);
+    return newer;
+}
 
 void read_search_metadata(const fs::path &path, SearchMetadata &metadata) {
     auto data = read_file(path);
     Json spec(cJSON_ParseWithLengthOpts(data.c_str(), data.size() + 1, nullptr, 1), cJSON_Delete);
     require(cJSON_IsObject(spec.get()), "Invalid JSON object in " + path.string());
+    const auto *languages = cJSON_GetObjectItemCaseSensitive(spec.get(), "languages");
+    require(ttrek_LanguagesValid(languages), "languages must be an array of nonempty single-line strings in " + path.string());
+    const auto version = path.parent_path().filename().string();
+    if (newer_version(version, metadata.latest_version)) {
+        metadata.latest_version = version;
+        Tcl_Obj *label = ttrek_LanguagesLabel(languages);
+        Tcl_IncrRefCount(label);
+        metadata.languages = Tcl_GetString(label);
+        Tcl_DecrRefCount(label);
+    }
     auto *description = cJSON_GetObjectItemCaseSensitive(spec.get(), "description");
     if (description) {
         require(cJSON_IsString(description), "description must be a string in " + path.string());
@@ -322,6 +352,9 @@ Json recipe(const fs::path &registry_directory, const std::vector<std::string> &
 
     Json result(cJSON_CreateObject(), cJSON_Delete);
     cJSON_AddStringToObject(result.get(), "version", parts[1].c_str());
+    const auto *languages = cJSON_GetObjectItemCaseSensitive(spec.get(), "languages");
+    require(ttrek_LanguagesValid(languages), "Invalid recipe languages in " + directory.string());
+    cJSON_AddItemToObject(result.get(), "languages", languages ? cJSON_Duplicate(languages, 1) : cJSON_CreateArray());
     cJSON_AddItemToObject(result.get(), "dependencies",
         cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
     cJSON_AddItemToObject(result.get(), "install_script", cJSON_Duplicate(steps, 1));
@@ -399,6 +432,7 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
             }
             if (!has_recipe) { continue; }
             SearchEntry entry{name, search_text(name), metadata.descriptions.empty() ? "" : *metadata.descriptions.begin()};
+            entry.languages = metadata.languages;
             entry.source = source;
             require(ttrie_insert(trie.get(), entry.normalized.c_str()) == 0, "Cannot index recipe: " + name);
             if (entry.normalized == normalized) { entry.tier = 0; }
@@ -436,8 +470,9 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
         int owns;
         if (ttrek_RegistrySearchIsOwner(interp, entry.source, entry.name.c_str(), &owns) != TCL_OK) { return TCL_ERROR; }
         if (!owns) { continue; }
-        Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1)};
-        if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(2, fields)) != TCL_OK) { return TCL_ERROR; }
+        Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1),
+                            Tcl_NewStringObj(entry.languages.c_str(), -1)};
+        if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(3, fields)) != TCL_OK) { return TCL_ERROR; }
     }
     return TCL_OK;
 } catch (const std::exception &error) {
@@ -459,11 +494,20 @@ extern "C" int ttrek_RegistryReadLocal(const char *directory, const char *url, T
         if (end == std::string::npos) { break; }
         start = end + 1;
     } while (true);
-    require(parts.size() == 1 || parts.size() == 4, "Invalid registry request: " + suffix);
+    require(parts.size() == 1 || parts.size() == 4 || (parts.size() == 3 && parts[2] == "languages"),
+            "Invalid registry request: " + suffix);
     const fs::path registry_directory(directory);
     require(fs::is_directory(registry_directory), "Registry directory is unavailable: " + registry_directory.string());
     if (!fs::exists(fs::symlink_status(registry_directory / parts[0]))) { return TTREK_REGISTRY_NOT_FOUND; }
-    auto response = parts.size() == 1 ? versions(registry_directory, parts[0]) : recipe(registry_directory, parts);
+    Json response(nullptr, cJSON_Delete);
+    if (parts.size() == 3) {
+        auto spec = read_spec(registry_directory / parts[0] / parts[1]);
+        const auto *languages = cJSON_GetObjectItemCaseSensitive(spec.get(), "languages");
+        require(ttrek_LanguagesValid(languages), "Invalid recipe languages");
+        response.reset(languages ? cJSON_Duplicate(languages, 1) : cJSON_CreateArray());
+    } else {
+        response = parts.size() == 1 ? versions(registry_directory, parts[0]) : recipe(registry_directory, parts);
+    }
     std::unique_ptr<char, decltype(&cJSON_free)> json(cJSON_PrintUnformatted(response.get()), cJSON_free);
     require(json != nullptr, "Cannot serialize local registry response");
     Tcl_DStringAppend(result, json.get(), -1);
@@ -472,4 +516,50 @@ extern "C" int ttrek_RegistryReadLocal(const char *directory, const char *url, T
     Tcl_DStringSetLength(result, 0);
     Tcl_DStringAppend(result, error.what(), -1);
     return TCL_ERROR;
+}
+
+extern "C" int ttrek_LanguagesValid(const cJSON *languages) {
+    if (!languages) { return 1; }
+    if (!cJSON_IsArray(languages)) { return 0; }
+    const cJSON *language;
+    cJSON_ArrayForEach(language, languages) {
+        if (!cJSON_IsString(language) || !language->valuestring[0] || strlen(language->valuestring) > 255) { return 0; }
+        for (const unsigned char *ch = reinterpret_cast<const unsigned char *>(language->valuestring); *ch; ++ch) {
+            if (*ch < 32 || *ch == 127) { return 0; }
+        }
+    }
+    return 1;
+}
+
+extern "C" Tcl_Obj *ttrek_LanguagesLabel(const cJSON *languages) {
+    Tcl_Obj *label = Tcl_NewObj();
+    if (!ttrek_LanguagesValid(languages)) { return label; }
+    std::set<std::string> names;
+    const cJSON *language;
+    cJSON_ArrayForEach(language, languages) { names.insert(language->valuestring); }
+    const char *separator = " [";
+    for (const auto &name : names) {
+        Tcl_AppendToObj(label, separator, -1);
+        Tcl_AppendToObj(label, name.c_str(), -1);
+        separator = ", ";
+    }
+    if (!names.empty()) { Tcl_AppendToObj(label, "]", 1); }
+    return label;
+}
+
+extern "C" cJSON *ttrek_RegistryLanguages(const char *name, const char *version) {
+    // Older registries can omit this optional endpoint. Do not make display
+    // metadata a prerequisite for dependency resolution or installation.
+    const auto url = std::string(REGISTRY_URL) + "/" + name + "/" + version + "/languages";
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
+    cJSON *languages = status == TCL_OK ? cJSON_ParseWithLengthOpts(
+        Tcl_DStringValue(&data), Tcl_DStringLength(&data) + 1, nullptr, 1) : nullptr;
+    Tcl_DStringFree(&data);
+    if (!cJSON_IsArray(languages) || !ttrek_LanguagesValid(languages)) {
+        cJSON_Delete(languages);
+        return nullptr;
+    }
+    return languages;
 }
