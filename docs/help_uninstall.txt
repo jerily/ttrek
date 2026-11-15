@@ -1,1 +1,32 @@
-There is no specific help on the specified command.
+Usage: ttrek uninstall [-y] [-autoremove] [-u|-g] [-strategy latest|favored|locked] PACKAGE ...
+
+Remove one or more packages from the selected environment. Supply exact
+package names, without version constraints or glob patterns.
+Installed packages that depend on a selected package, directly or indirectly,
+are also removed. The removal plan is printed before confirmation; enter y
+to proceed, or use -y to accept it automatically.
+
+Available options:
+    -y - accept the removal plan without prompting
+    -autoremove - also remove dependencies of removed packages when they have no remaining dependants
+    -u - select the user environment (~/.local)
+    -g - select the global environment (/usr/local/ttrek)
+    -strategy STRATEGY - accepted, but does not change the removal plan
+
+Without -u or -g, use the current project environment (ttrek-venv).
+The -u and -g options cannot be combined. At least one package is required.
+
+The plan uses the installed manifest's reverse dependencies and the lockfile's
+dependency relationships. Without -autoremove, dependencies of removed packages
+are kept unless they are explicitly selected or also depend on a removed package.
+Review the full plan, especially when removing a shared dependency.
+
+Removal deletes the package files recorded in the installed manifest and removes
+the package entries from ttrek.json, ttrek-lock.json and the installed manifest.
+Direct dependencies are removed from dependencies or devDependencies as applicable.
+
+Examples:
+    ttrek uninstall twebserver
+    ttrek uninstall -y tjson twebserver
+    ttrek uninstall -autoremove web-blog
+    ttrek uninstall -u tjson
