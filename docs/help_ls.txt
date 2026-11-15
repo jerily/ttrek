@@ -1,1 +1,23 @@
-There is no specific help on the specified command.
+Usage: ttrek ls [-u|-g] [PATTERN ...]
+
+List packages recorded in the selected environment's ttrek-lock.json, one
+PACKAGE@VERSION per line. This includes direct and transitive dependencies.
+The list reflects resolved versions; it does not verify installed files.
+
+Without patterns, list all locked packages. PATTERN matches package names,
+not versions, using case-sensitive Tcl glob syntax: * matches any sequence,
+? matches one character, and [abc] or [a-z] matches a character set or range.
+Quote patterns to prevent your shell from expanding them. Multiple patterns
+are processed in order; a package matching more than one may appear again.
+A pattern with no matches prints nothing.
+
+By default, use the current project environment (ttrek-venv).
+-u selects the user environment (~/.local).
+-g selects the global environment (/usr/local/ttrek).
+The -u and -g options cannot be combined.
+
+Examples:
+    ttrek ls
+    ttrek ls 'tcl*'
+    ttrek ls tjson 'web-*'
+    ttrek ls -u
