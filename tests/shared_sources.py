@@ -276,7 +276,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek shared ' ") as temporary:
     # makes a SIGKILL during extraction and concurrent first use deterministic.
     generated = cli('gen-script', 'one@1.0.0').stdout
     helper = root / 'helper.sh'
-    helper.write_text(generated[generated.index('shared_archive_hash()'):generated.index('\n(\n', generated.index('shared_unpack()'))]
+    # Stop before the whole-plan preflight: these helper tests deliberately hide
+    # build tools while exercising only the extractor and locking primitives.
+    helper.write_text(generated[generated.index('shared_archive_hash()'):generated.index('\n_ttrek_missing=0\n', generated.index('shared_unpack()'))]
                       + '\nROOT_BUILD_DIR=$1\nshift\nshared_unpack "$@"\n')
     extractor = root / 'extractor.py'
     extractor.write_text('#!' + sys.executable + '\n'

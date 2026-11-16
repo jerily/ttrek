@@ -211,44 +211,22 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
 }
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
-                                         const char *package_version, const char *os, const char *arch,
+                                         const char *package_version, cJSON *install_spec_root,
                                          const char *direct_version_requirement, int package_num_current,
                                          int package_num_total) {
 
-    char install_spec_url[256];
-    snprintf(install_spec_url, sizeof(install_spec_url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version,
-             os, arch);
-
-    Tcl_DString ds;
-    Tcl_DStringInit(&ds);
-    if (TCL_OK != ttrek_RegistryGet(install_spec_url, &ds, NULL)) {
-        Tcl_SetObjResult(interp, Tcl_DStringLength(&ds)
-            ? Tcl_NewStringObj(Tcl_DStringValue(&ds), Tcl_DStringLength(&ds))
-            : Tcl_ObjPrintf("Could not read build recipe for %s@%s", package_name, package_version));
-        Tcl_DStringFree(&ds);
-        return TCL_ERROR;
-    }
-
-    // DBG2(fprintf(stderr, "got JSON: [%s]", Tcl_DStringValue(&ds)));
-
-    cJSON *install_spec_root = cJSON_Parse(Tcl_DStringValue(&ds));
     cJSON *languages = cJSON_GetObjectItemCaseSensitive(install_spec_root, "languages");
     if (!ttrek_LanguagesValid(languages)) {
         Tcl_SetObjResult(interp, Tcl_NewStringObj("Invalid recipe languages", -1));
-        cJSON_Delete(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
     cJSON *scripts = cJSON_GetObjectItemCaseSensitive(install_spec_root, "scripts");
     if (scripts && ttrek_ScriptsValidate(interp, scripts) != TCL_OK) {
-        cJSON_Delete(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
     cJSON *install_script_node = cJSON_GetObjectItem(install_spec_root, "install_script");
     if (!install_script_node) {
         fprintf(stderr, "error: install_script not found in spec file\n");
-        cJSON_free(install_spec_root);
         return TCL_ERROR;
     }
 
@@ -259,7 +237,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     if (install_script_full == NULL) {
         fprintf(stderr, "error: could not generate install script: %s\n",
             Tcl_GetStringResult(interp));
-        cJSON_free(install_spec_root);
         return TCL_ERROR;
     }
     Tcl_IncrRefCount(install_script_full);
@@ -271,8 +248,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         Tcl_DecrRefCount(patch_dir);
         if (status != TCL_OK) {
             Tcl_DecrRefCount(install_script_full);
-            cJSON_Delete(install_spec_root);
-            Tcl_DStringFree(&ds);
             return TCL_ERROR;
         }
         for (int i = 0; i < cJSON_GetArraySize(patches); i++) {
@@ -301,8 +276,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
             Tcl_DecrRefCount(patch_file_path_ptr);
             if (status != TCL_OK) {
                 Tcl_DecrRefCount(install_script_full);
-                cJSON_Delete(install_spec_root);
-                Tcl_DStringFree(&ds);
                 return TCL_ERROR;
             }
 
@@ -340,8 +313,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     if (TCL_OK != ttrek_FSMonitor_AddWatch(interp, state_ptr->project_install_dir_ptr, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not add watch on install directory\n");
         Tcl_Free((char *) fsmonitor_state_ptr);
-        cJSON_free(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 
@@ -350,8 +321,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
                 Tcl_GetString(path_to_install_file_ptr));
         (void) ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr);
         Tcl_Free((char *) fsmonitor_state_ptr);
-        cJSON_free(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 
@@ -359,8 +328,6 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
         fprintf(stderr, "error: could not read changes from file system\n");
         (void) ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr);
         Tcl_Free((char *) fsmonitor_state_ptr);
-        cJSON_free(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 
@@ -420,15 +387,11 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     if (TCL_OK != ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr)) {
         fprintf(stderr, "error: could not remove watch on install directory\n");
         Tcl_Free((char *) fsmonitor_state_ptr);
-        cJSON_free(install_spec_root);
-        Tcl_DStringFree(&ds);
         return TCL_ERROR;
     }
 
     Tcl_Free((char *) fsmonitor_state_ptr);
     ttrek_CleanupPackageSources(interp, state_ptr, package_name, package_version, patches);
-    cJSON_free(install_spec_root);
-    Tcl_DStringFree(&ds);
     return TCL_OK;
 }
 
@@ -564,24 +527,12 @@ static int ttrek_DeletePackageFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr
 
 /* Retire a former bundle before its new dependencies claim the same paths. */
 int ttrek_PrepareMetapackage(Tcl_Interp *interp, ttrek_state_t *state_ptr,
-    const char *package_name, const char *package_version, const char *os, const char *arch, int *prepared) {
+    const char *package_name, const cJSON *spec, int *prepared) {
     *prepared = 0;
     const cJSON *installed = cJSON_GetObjectItem(state_ptr->manifest_root, package_name);
     if (!cJSON_GetArraySize(cJSON_GetObjectItem(installed, STRING_FILES))) { return TCL_OK; }
-    char url[256];
-    snprintf(url, sizeof(url), "%s/%s/%s/%s/%s", REGISTRY_URL, package_name, package_version, os, arch);
-    Tcl_DString data;
-    Tcl_DStringInit(&data);
-    if (ttrek_RegistryGet(url, &data, NULL) != TCL_OK) {
-        Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_DStringValue(&data), Tcl_DStringLength(&data)));
-        Tcl_DStringFree(&data);
-        return TCL_ERROR;
-    }
-    cJSON *spec = cJSON_Parse(Tcl_DStringValue(&data));
-    Tcl_DStringFree(&data);
     const cJSON *steps = cJSON_GetObjectItem(spec, "install_script");
     int metapackage = cJSON_IsArray(steps) && cJSON_GetArraySize(steps) == 0;
-    cJSON_Delete(spec);
     if (!metapackage) { return TCL_OK; }
     if (ttrek_BackupPackageFiles(interp, state_ptr, package_name) != TCL_OK) { return TCL_ERROR; }
     *prepared = 1;
@@ -639,7 +590,7 @@ int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const ch
 }
 
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
-                         const char *package_version, const char *os, const char *arch,
+                         const char *package_version, cJSON *recipe,
                          const char *direct_version_requirement, int package_installed_p,
                          int package_num_current, int package_num_total) {
 
@@ -655,7 +606,7 @@ int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashT
     }
 
     if (TCL_OK !=
-        ttrek_InstallScriptAndPatches(interp, state_ptr, global_use_flags_ht_ptr, package_name, package_version, os, arch,
+        ttrek_InstallScriptAndPatches(interp, state_ptr, global_use_flags_ht_ptr, package_name, package_version, recipe,
                                       direct_version_requirement, package_num_current, package_num_total)) {
 
         fprintf(stderr, "error: installing script & patches failed\n");

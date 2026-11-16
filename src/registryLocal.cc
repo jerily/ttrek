@@ -358,6 +358,8 @@ Json recipe(const fs::path &registry_directory, const std::vector<std::string> &
     cJSON_AddItemToObject(result.get(), "dependencies",
         cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(spec.get(), "dependencies"), 1));
     cJSON_AddItemToObject(result.get(), "install_script", cJSON_Duplicate(steps, 1));
+    const auto *external = cJSON_GetObjectItemCaseSensitive(spec.get(), "externalDependencies");
+    if (external) { cJSON_AddItemToObject(result.get(), "externalDependencies", cJSON_Duplicate(external, 1)); }
     auto scripts = resolve_scripts(cJSON_GetObjectItemCaseSensitive(spec.get(), "scripts"), directory);
     cJSON_AddItemToObject(result.get(), "scripts", scripts.release());
     auto *iuse = cJSON_AddArrayToObject(result.get(), "iuse");

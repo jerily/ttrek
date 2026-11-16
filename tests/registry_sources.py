@@ -55,6 +55,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
     requests = []
     first_status = None
     first_body = None
+    external_dependencies = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -85,6 +86,8 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                 else:
                     body = {"version": version, "dependencies": metadata[source][name][version],
                             "install_script": [], "scripts": {"source": "printf " + source}}
+                    if name in external_dependencies:
+                        body["externalDependencies"] = external_dependencies[name]
             else:
                 status = 404
             self.send_response(status)
@@ -129,7 +132,18 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             assert not (project / "ttrek-venv/machine-id").exists()
 
             # Actual install/update load recipes from the source that owns each package.
+            host_file = root / "host-sdk.h"
+            external_dependencies["app"] = {"host-sdk": {
+                "check": {"files": [str(host_file)]}, "installHint": "install host-sdk"}}
+            failed = run("install", "-y", ok=False)
+            assert "app@1.0.0 requires host-sdk" in failed.stderr and "install host-sdk" in failed.stderr
+            assert "Package [" not in failed.stdout  # Even earlier dependencies must not build.
+            host_file.touch()
+            requests.clear()
             run("install", "-y")
+            recipe_requests = [path for _, path, _ in requests if len(path.strip("/").split("/")) == 5]
+            assert len(recipe_requests) == len(set(recipe_requests)) == 3, recipe_requests
+            external_dependencies.clear()
             assert run("run", "-package", "app", "-script", "source").stdout == "first"
             assert run("run", "-package", "public-only", "-script", "source").stdout == "second"
             run("update", "-y")

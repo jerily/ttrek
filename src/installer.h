@@ -13,14 +13,15 @@
 extern "C" {
 #endif
 
+/* recipe is borrowed from the preflighted install plan. */
 int ttrek_InstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
-                         const char *package_version, const char *os, const char *arch,
+                         const char *package_version, cJSON *recipe,
                          const char *direct_version_requirement, int package_installed_p,
                          int package_num_current, int package_num_total);
 
 int ttrek_UninstallPackage(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 int ttrek_PrepareMetapackage(Tcl_Interp *interp, ttrek_state_t *state_ptr,
-    const char *package_name, const char *package_version, const char *os, const char *arch, int *prepared);
+    const char *package_name, const cJSON *recipe, int *prepared);
 int ttrek_DeleteTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 int ttrek_RestoreTempFiles(Tcl_Interp *interp, ttrek_state_t *state_ptr, const char *package_name);
 void ttrek_CleanupSharedSources(Tcl_Interp *interp, ttrek_state_t *state_ptr);

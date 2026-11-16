@@ -1,6 +1,6 @@
 # Runtime preflight for install/update. Keep this independent of project state.
 missing=
-for tool in bash cmake make curl git patch pkg-config perl tar gzip; do
+for tool in bash make curl git patch pkg-config perl tar gzip; do
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
 done
 # Honor explicit compiler commands, including wrappers such as 'ccache gcc'.
