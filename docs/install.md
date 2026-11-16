@@ -20,18 +20,47 @@ To compile ttrek yourself, see [Build from source](build.md).
 Packages are built from source, so installing ttrek is only the first step.
 Install the tools below before adding packages to a project.
 
-`ttrek install` and `ttrek update` check for Bash, CMake, Make, curl, Git,
+`ttrek install` and `ttrek update` check for Bash, Make, curl, Git,
 patch, pkg-config, Perl, tar, gzip and C/C++ compilers before creating project
 state, contacting a registry or running hooks. Missing tools are reported
 together with installation commands. `CC` and `CXX` select explicit compiler
 commands; otherwise GCC or Clang are accepted. Read-only commands such as
 `search`, `pretend` and `gen-script` do not require a build toolchain.
 
-A recipe with an enabled `autogen` step using `autoconf` also checks for
-Autoconf before downloading that package's sources. If it is missing, ttrek
-names the package and reports `brew install autoconf` on macOS or
-`sudo apt install autoconf` on Ubuntu/Debian. Other recipes and packages that
-do not need rebuilding do not require Autoconf.
+After resolving dependencies, ttrek fetches all recipes that need building and
+checks their host requirements before downloading any package sources or
+replacing installed files. Enabled `cmake_config`, `cmake_make`, and
+`cmake_install` steps require CMake; an enabled `autogen` step with
+`"path": "autoconf"` requires Autoconf. Missing tools are reported together,
+with the requesting package and installation commands. Disabled steps and
+packages that do not need rebuilding do not require these tools. A local
+project build is also checked before its dependencies build.
+
+Recipes can declare host files through `externalDependencies`, for example:
+
+```json
+"externalDependencies": {
+  "xquartz": {
+    "platforms": ["darwin"],
+    "check": {
+      "files": ["/opt/X11/include/X11/Xlib.h", "/opt/X11/lib/libX11.dylib"]
+    },
+    "installHint": "brew install --cask xquartz",
+    "url": "https://www.xquartz.org/"
+  }
+}
+```
+
+`platforms` uses lowercase operating system names; omitting it applies the
+requirement to every platform. Every path in `check.files` must be a file
+(symlinks to files are accepted). Missing files are listed with the dependency
+name, `installHint`, and optional `url`. Hints are printed literally and never
+executed. Local registries preserve this metadata; HTTP registry APIs must
+include `externalDependencies` in their recipe responses.
+
+`gen-script` emits the same checks before any package builds, and evaluates
+them on the host running the generated script. Generating or previewing an
+installation does not require those host dependencies to be present.
 
 On Ubuntu/Debian:
 

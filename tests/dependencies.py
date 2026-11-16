@@ -44,10 +44,10 @@ with tempfile.TemporaryDirectory(prefix='ttrek-dependencies-') as temporary:
     stub.chmod(0o755)
     for name in names:
         (tools / name).symlink_to(stub)
-    (tools / 'cmake').unlink()
+    (tools / 'make').unlink()
     result = run('install', '-y')
-    assert 'missing external build dependencies: cmake\n' in result.stderr, result.stderr
-    (tools / 'cmake').symlink_to(stub)
+    assert 'missing external build dependencies: make\n' in result.stderr, result.stderr
+    (tools / 'make').symlink_to(stub)
     env['CC'] = 'missing-cc -O2'
     env['CXX'] = 'missing-cxx'
     result = run('update', '-y')

@@ -41,7 +41,7 @@ static const char *pkg_counter_script =
 
 static const char *pkg_counter_template = "${%d:-1}";
 
-static int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
+int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
                                   const cJSON *json, int *result) {
 
     const cJSON *flagJson = cJSON_GetObjectItem(json, "if");

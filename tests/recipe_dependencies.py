@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
     tools.mkdir()
     for name in ("bash", "sh", "make", "git", "patch", "pkg-config", "perl", "tar",
                  "gzip", "cc", "c++", "uname", "rm", "mkdir", "nproc", "sysctl", "xcrun", "dirname",
-                 "cat", "cp", "mv", "mktemp", "base64", "unzip"):
+                 "cat", "cp", "mv", "mktemp", "base64", "unzip", "find"):
         path = shutil.which(name)
         if path:
             (tools / name).symlink_to(path)
@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
     source = root / "source"
     source.mkdir()
     bootstrap = source / "bootstrap.sh"
-    bootstrap.write_text('#!/bin/sh\nprintf built > "$1/marker"\n')
+    bootstrap.write_text('#!/bin/sh\nprintf built > "$1/${2:-marker}"\n')
     bootstrap.chmod(0o755)
     archive = root / "source.tar.gz"
     with tarfile.open(archive, "w:gz") as output:
@@ -39,6 +39,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
              {"cmd": "autogen", "path": "autoconf"},
              {"cmd": "autogen", "path": "./bootstrap.sh",
               "options": [{"name": "$INSTALL_DIR"}]}]
+    early_dir = registry / "early/1.0.0"
+    early_dir.mkdir(parents=True)
+    (early_dir / "ttrek.json").write_text(json.dumps({"dependencies": {}, "build": {"default": [
+        *steps[:2], dict(steps[-1], options=[{"name": "$INSTALL_DIR"}, {"name": "early-marker"}])]}}))
 
     def recipe(autoconf):
         selected = list(steps)
@@ -47,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
         elif not autoconf:
             del selected[2]
         (recipe_dir / "ttrek.json").write_text(json.dumps({
-            "dependencies": {}, "build": {"default": selected}}))
+            "dependencies": {"early": "1.0.0"}, "build": {"default": selected}}))
 
     def project(name):
         directory = root / name
@@ -71,6 +75,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
         missing(run(directory, command, "-y"))
         assert not list((directory / "ttrek-venv/build").rglob("download.log"))
         assert not (directory / "ttrek-venv/local/marker").exists()
+        assert not (directory / "ttrek-venv/local/early-marker").exists()
 
     # Generation is allowed without Autoconf; execution checks the target host.
     directory = project("scripts")
@@ -82,6 +87,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek-recipe-dependencies-") as tempora
         missing(subprocess.run([str(tools / shell), str(script)], cwd=directory,
                                env=env, capture_output=True, text=True, timeout=30))
         assert not list((directory / "build").rglob("download.log"))
+        assert not (directory / "build/install/early-marker").exists()
 
     for condition in (False, "disabled"):
         recipe(condition)

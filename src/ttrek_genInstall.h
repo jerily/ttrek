@@ -20,6 +20,8 @@ Tcl_Obj *ttrek_generateInstallScript(Tcl_Interp *interp, const char *package_nam
 
 Tcl_Obj *ttrek_generateScriptHeader(const char *shell);
 
+int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *flags, const cJSON *step, int *enabled);
+
 Tcl_Obj *ttrek_generatePackageCounter(Tcl_Interp *interp, int package_num_current, int package_num_total);
 
 #ifdef __cplusplus

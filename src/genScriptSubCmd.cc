@@ -9,6 +9,7 @@
 #include "ttrek_genInstall.h"
 #include "ttrek_solver.h"
 #include "ttrek_useflags.h"
+#include "recipeDependencies.h"
 
 namespace {
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
@@ -47,18 +48,10 @@ bool valid_name(const std::string &name) {
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") == std::string::npos;
 }
 
-Json fetch_spec(const std::string &name, const std::string &version, const utsname &platform) {
+Json fetch_spec(Tcl_Interp *interp, const std::string &name, const std::string &version, const utsname &platform) {
     require(valid_name(name) && valid_name(version), "Invalid package name or version");
-    std::string url = std::string(REGISTRY_URL) + "/" + name + "/" + version + "/" +
-        platform.sysname + "/" + platform.machine;
-    Tcl_DString data;
-    Tcl_DStringInit(&data);
-    int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
-    const std::string error = status != TCL_OK ? Tcl_DStringValue(&data) : "";
-    Json spec(status == TCL_OK ? cJSON_Parse(Tcl_DStringValue(&data)) : nullptr, cJSON_Delete);
-    Tcl_DStringFree(&data);
-    require(status == TCL_OK && cJSON_IsObject(spec.get()),
-            error.empty() ? "Cannot read build recipe for " + name + "@" + version : error);
+    Json spec(ttrek_FetchRecipe(interp, name.c_str(), version.c_str(), platform.sysname, platform.machine), cJSON_Delete);
+    require(spec != nullptr, Tcl_GetStringResult(interp));
     return spec;
 }
 
@@ -171,6 +164,8 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
         require(uname(&platform) == 0, "Cannot determine build platform");
         auto header = retain(ttrek_generateScriptHeader(shell));
         std::string script = Tcl_GetString(header.get());
+        auto checks = retain(Tcl_NewStringObj("_ttrek_missing=0\n", -1));
+        const auto checks_position = script.size();
         append_hook(script, spec.get(), "preInstall");
         Tcl_Size count;
         Tcl_Obj **packages;
@@ -180,18 +175,23 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
             Tcl_ListObjIndex(interp, packages[i], 0, &name_obj);
             Tcl_ListObjIndex(interp, packages[i], 1, &version_obj);
             std::string name = Tcl_GetString(name_obj), version = Tcl_GetString(version_obj);
-            auto recipe = fetch_spec(name, version, platform);
+            auto recipe = fetch_spec(interp, name, version, platform);
+            check(interp, ttrek_AppendRecipeChecks(interp, checks.get(), name.c_str(), version.c_str(),
+                cJSON_GetObjectItemCaseSensitive(recipe.get(), "externalDependencies"),
+                cJSON_GetObjectItemCaseSensitive(recipe.get(), "install_script"), &flags.table));
             append_patches(script, recipe.get(), name, version);
             append_package(interp, script, name, version, cJSON_GetObjectItemCaseSensitive(recipe.get(), "install_script"),
                            state, flags, i + 1, count);
         }
         auto *build = cJSON_GetObjectItemCaseSensitive(spec.get(), "build");
+        cJSON *project_steps = nullptr;
         if (objc == 1 && build) {
             std::string platform_name = std::string(platform.sysname) + "." + platform.machine;
             for (char &ch : platform_name) { ch = std::tolower(static_cast<unsigned char>(ch)); }
             auto *steps = cJSON_GetObjectItemCaseSensitive(build, platform_name.c_str());
             if (!steps) { steps = cJSON_GetObjectItemCaseSensitive(build, "default"); }
             require(steps != nullptr, "No build recipe for " + platform_name);
+            project_steps = steps;
             auto *name = cJSON_GetObjectItemCaseSensitive(spec.get(), "name");
             auto *version = cJSON_GetObjectItemCaseSensitive(spec.get(), "version");
             require(cJSON_IsString(name) && cJSON_IsString(version), "Project build needs name and version strings");
@@ -199,7 +199,17 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
             state.is_local_build = 1;
             append_package(interp, script, name->valuestring, version->valuestring, steps, state, flags, 1, 1);
         }
+        if (objc == 1) {
+            const auto *name = cJSON_GetObjectItemCaseSensitive(spec.get(), "name");
+            const auto *version = cJSON_GetObjectItemCaseSensitive(spec.get(), "version");
+            check(interp, ttrek_AppendRecipeChecks(interp, checks.get(),
+                cJSON_IsString(name) ? name->valuestring : "project",
+                cJSON_IsString(version) ? version->valuestring : "unknown",
+                cJSON_GetObjectItemCaseSensitive(spec.get(), "externalDependencies"), project_steps, &flags.table));
+        }
         append_hook(script, spec.get(), "postInstall");
+        Tcl_AppendToObj(checks.get(), "[ \"$_ttrek_missing\" = 0 ] || exit 1\n", -1);
+        script.insert(checks_position, Tcl_GetString(checks.get()));
         require(std::fwrite(script.data(), 1, script.size(), stdout) == script.size(), "Cannot write build script");
         status = TCL_OK;
     } catch (const std::exception &error) {

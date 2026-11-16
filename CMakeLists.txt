@@ -167,6 +167,8 @@ add_executable(${TARGET}
         src/base64/cencode.h
         src/installer.h
         src/installer.c
+        src/recipeDependencies.cc
+        src/recipeDependencies.h
         src/fsmonitor/fsmonitor.h
         src/fsmonitor/fsmonitor.c
         src/listSubCmd.c
@@ -294,6 +296,8 @@ if(BUILD_TESTING)
     add_test(NAME dependencies COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/dependencies.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME recipe_dependencies COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/recipe_dependencies.py
+        $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
+    add_test(NAME external_dependencies COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/external_dependencies.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")
     add_test(NAME install_options COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/install_options.py
         $<TARGET_FILE:ttrek> ${CMAKE_COMMAND} "${TTREK_TEST_CURL}")

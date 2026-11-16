@@ -17,6 +17,7 @@
 #include "registry.h"
 #include "ttrek_telemetry.h"
 #include "installer.h"
+#include "recipeDependencies.h"
 
 #define MAX_INSTALL_SCRIPT_LEN 1048576
 
@@ -185,7 +186,8 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
         DBG2(fprintf(stderr, "set TTREK_FAIL_VERBOSE: 1"));
     }
 
-    if (ttrek_InstallRunHook(interp, state_ptr, "preInstall") != TCL_OK) {
+    if ((do_local_build && ttrek_CheckProjectDependencies(interp, state_ptr) != TCL_OK) ||
+            ttrek_InstallRunHook(interp, state_ptr, "preInstall") != TCL_OK) {
         ttrek_DestroyState(state_ptr);
         Tcl_DecrRefCount(list_ptr);
         ckfree(remObjv);

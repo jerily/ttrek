@@ -17,6 +17,7 @@
 #include "installer.h"
 #include "ttrek_telemetry.h"
 #include "ttrek_useflags.h"
+#include "recipeDependencies.h"
 
 int ttrek_ParseRequirements(Tcl_Size objc, Tcl_Obj *const objv[], std::map<std::string, std::string> &requirements) {
     for (int i = 0; i < objc; i++) {
@@ -672,6 +673,41 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_OK;
         }
 
+        struct utsname sysinfo;
+        if (uname(&sysinfo)) {
+            fprintf(stderr, "error: could not get system information\n");
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
+            return TCL_ERROR;
+        }
+
+        // Fetch every recipe that will be built and check the entire plan before
+        // downloading sources or moving any installed files. Reuse these exact
+        // recipes below so preflight and installation cannot disagree.
+        using Recipe = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+        std::map<std::string, Recipe> recipes;
+        Tcl_Obj *checks = Tcl_NewStringObj("_ttrek_missing=0\n", -1);
+        Tcl_IncrRefCount(checks);
+        int check_status = TCL_OK;
+        for (const auto &spec : execution_plan) {
+            if (spec.install_type == ALREADY_INSTALLED) { continue; }
+            Recipe recipe(ttrek_FetchRecipe(interp, spec.package_name.c_str(), spec.package_version.c_str(),
+                sysinfo.sysname, sysinfo.machine), cJSON_Delete);
+            if (!recipe) { check_status = TCL_ERROR; break; }
+            check_status = ttrek_AppendRecipeChecks(interp, checks, spec.package_name.c_str(),
+                spec.package_version.c_str(), cJSON_GetObjectItemCaseSensitive(recipe.get(), "externalDependencies"),
+                cJSON_GetObjectItemCaseSensitive(recipe.get(), "install_script"), &global_use_flags_ht);
+            if (check_status != TCL_OK) { break; }
+            recipes.emplace(spec.package_name, std::move(recipe));
+        }
+        if (check_status == TCL_OK) { check_status = ttrek_RunRecipeChecks(interp, checks); }
+        Tcl_DecrRefCount(checks);
+        if (check_status != TCL_OK) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
+            return TCL_ERROR;
+        }
+
         if (!state_ptr->option_yes) {
             // get yes/no from user
             std::string answer;
@@ -706,14 +742,6 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             package_num_total++;
         }
 
-        struct utsname sysinfo;
-        if (uname(&sysinfo)) {
-            fprintf(stderr, "error: could not get system information\n");
-            Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&global_use_flags_ht);
-            return TCL_ERROR;
-        }
-
         // A bundle becoming a metapackage must relinquish its files before
         // dependency installation, so the new owners can track those paths.
         std::unordered_set<std::string> prepared_metapackages;
@@ -731,7 +759,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             if (!spec.package_installed_p || spec.install_type == ALREADY_INSTALLED) { continue; }
             int prepared = 0;
             int status = ttrek_PrepareMetapackage(interp, state_ptr, spec.package_name.c_str(),
-                spec.package_version.c_str(), sysinfo.sysname, sysinfo.machine, &prepared);
+                recipes.at(spec.package_name).get(), &prepared);
             if (prepared) { prepared_metapackages.insert(spec.package_name); }
             if (status != TCL_OK) {
                 restore_metapackages();
@@ -755,7 +783,7 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             // std::cout << "installing... " << package_name << "@" << package_version << std::endl;
 
             auto outcome = ttrek_InstallPackage(interp, state_ptr, &global_use_flags_ht, package_name.c_str(),
-                                                package_version.c_str(), sysinfo.sysname, sysinfo.machine,
+                                                package_version.c_str(), recipes.at(package_name).get(),
                                                 direct_version_requirement.c_str(),
                                                 package_installed_p && !prepared_metapackages.count(package_name),
                                                 ++package_num_current, package_num_total);
