@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "registry.h"
+#include "ttrek_useflags.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -336,6 +337,44 @@ int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root) {
     int result = ttrek_WriteChars(interp, path_ptr, contents_ptr, 0666);
     Tcl_DecrRefCount(contents_ptr);
     return result;
+}
+
+/* Callers hold the installation lock. A failed write must not truncate the
+ * manifest, which also contains the records of installed packages. */
+int ttrek_WriteManifestFile(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
+    Tcl_DString name;
+    Tcl_DStringInit(&name);
+    Tcl_DStringAppend(&name, Tcl_GetString(state_ptr->manifest_json_path_ptr), -1);
+    Tcl_DStringAppend(&name, ".tmp.XXXXXX", -1);
+    int fd = mkstemp(Tcl_DStringValue(&name));
+    if (fd < 0) {
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("Could not create manifest temporary file: %s", Tcl_PosixError(interp)));
+        Tcl_DStringFree(&name);
+        return TCL_ERROR;
+    }
+    struct stat original;
+    mode_t permissions;
+    if (stat(Tcl_GetString(state_ptr->manifest_json_path_ptr), &original) == 0) {
+        permissions = original.st_mode & 0777;
+    } else {
+        mode_t mask = umask(0);
+        umask(mask);
+        permissions = 0666 & ~mask;
+    }
+    int mode_status = fchmod(fd, permissions);
+    close(fd);
+    Tcl_Obj *temporary = Tcl_NewStringObj(Tcl_DStringValue(&name), Tcl_DStringLength(&name));
+    Tcl_DStringFree(&name);
+    Tcl_IncrRefCount(temporary);
+    int status = mode_status == 0 ? ttrek_WriteJsonFile(interp, temporary, state_ptr->manifest_root) : TCL_ERROR;
+    if (mode_status != 0) { Tcl_SetObjResult(interp, Tcl_NewStringObj("Could not set manifest permissions", -1)); }
+    if (status == TCL_OK && Tcl_FSRenameFile(temporary, state_ptr->manifest_json_path_ptr) != TCL_OK) {
+        Tcl_SetObjResult(interp, Tcl_ObjPrintf("Could not replace installation manifest: %s", Tcl_PosixError(interp)));
+        status = TCL_ERROR;
+    }
+    if (status != TCL_OK) { Tcl_FSDeleteFile(temporary); }
+    Tcl_DecrRefCount(temporary);
+    return status;
 }
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr) {
@@ -670,6 +709,7 @@ static int ttrek_UnlockFile(ttrek_state_t *state_ptr) {
         close(state_ptr->lock_fd);
         return TCL_ERROR;
     }
+    close(state_ptr->lock_fd);
     return TCL_OK;
 }
 
@@ -718,7 +758,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 
     Tcl_Obj *project_venv_dir_ptr = ttrek_GetProjectVenvDir(interp, project_home_dir_ptr);
 
-    state_ptr->with_locking = with_locking;
+    state_ptr->with_locking = 0;
     state_ptr->option_yes = option_yes;
     state_ptr->option_force = option_force;
     state_ptr->option_keep = 0;
@@ -743,7 +783,7 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
     state_ptr->lock_json_path_ptr = path_lock_file_ptr;
     state_ptr->spec_root = ttrek_GetSpecRoot(interp, project_home_dir_ptr);
     state_ptr->lock_root = ttrek_GetLockRoot(interp, project_home_dir_ptr);
-    state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
+    state_ptr->manifest_root = NULL;
 
     // print all refCount for all dir_ptr in state_ptr
     DBG(fprintf(stderr, "project_home_dir_ptr refCount: %" TCL_SIZE_MODIFIER "d\n",
@@ -767,14 +807,23 @@ ttrek_state_t *ttrek_CreateState(Tcl_Interp *interp, int option_yes, int option_
 
     if (TCL_OK != ttrek_EnsureSkeletonExists(interp, state_ptr)) {
         fprintf(stderr, "error: could not ensure skeleton exists\n");
+        ttrek_DestroyState(state_ptr);
         return NULL;
     }
 
-    if (state_ptr->with_locking) {
+    if (with_locking) {
         if (TCL_OK != ttrek_LockFile(state_ptr)) {
             fprintf(stderr, "error: could not lock file\n");
+            ttrek_DestroyState(state_ptr);
             return NULL;
         }
+        state_ptr->with_locking = 1;
+    }
+    state_ptr->manifest_root = ttrek_GetManifestRoot(interp, project_venv_dir_ptr);
+    if (!cJSON_IsObject(state_ptr->manifest_root)) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("Invalid installed manifest JSON", -1));
+        ttrek_DestroyState(state_ptr);
+        return NULL;
     }
 
     return state_ptr;
@@ -794,6 +843,8 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr) {
     Tcl_DecrRefCount(state_ptr->project_install_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_build_dir_ptr);
     Tcl_DecrRefCount(state_ptr->project_temp_dir_ptr);
+    Tcl_DecrRefCount(state_ptr->dirty_file_path_ptr);
+    Tcl_DecrRefCount(state_ptr->locking_file_path_ptr);
     Tcl_DecrRefCount(state_ptr->spec_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->lock_json_path_ptr);
     Tcl_DecrRefCount(state_ptr->manifest_json_path_ptr);
@@ -840,28 +891,43 @@ int ttrek_CheckDependencySections(Tcl_Interp *interp, const cJSON *spec_root) {
     return TCL_OK;
 }
 
-int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr) {
+int ttrek_GetDirectDependencies(Tcl_Interp *interp, ttrek_state_t *state, Tcl_Obj *list_ptr) {
+    cJSON *spec_root = state->spec_root;
     if (ttrek_CheckDependencySections(interp, spec_root) != TCL_OK) { return TCL_ERROR; }
+    Tcl_Obj *list = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(list);
+    cJSON *iuse = cJSON_GetObjectItemCaseSensitive(spec_root, "iuse");
+    int status = iuse ? ttrek_PopulateIUseFlagsListFromNode(interp, iuse, list) : TCL_OK;
+    Tcl_DecrRefCount(list);
+    if (status != TCL_OK) { return status; }
+    list = Tcl_NewListObj(0, NULL);
+    Tcl_IncrRefCount(list);
+    Tcl_HashTable flags;
+    Tcl_InitHashTable(&flags, TCL_STRING_KEYS);
+    status = ttrek_GetUseFlags(interp, state->manifest_root, list);
+    if (status == TCL_OK) { status = ttrek_PopulateHashTableFromUseFlagsList(interp, list, &flags); }
+    Tcl_DecrRefCount(list);
     const char *sections[] = {"dependencies", "devDependencies"};
-    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); ++i) {
-        cJSON *deps = cJSON_GetObjectItem(spec_root, sections[i]);
+    for (size_t i = 0; status == TCL_OK && i < sizeof(sections) / sizeof(sections[0]); ++i) {
+        cJSON *deps = cJSON_GetObjectItemCaseSensitive(spec_root, sections[i]);
         if (deps && !cJSON_IsObject(deps)) {
             Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s must be an object", sections[i]));
-            return TCL_ERROR;
+            status = TCL_ERROR;
+            break;
         }
         cJSON *dep;
         cJSON_ArrayForEach(dep, deps) {
-            if (!cJSON_IsString(dep)) {
-                Tcl_SetObjResult(interp, Tcl_NewStringObj("Project dependency constraints must be strings", -1));
-                return TCL_ERROR;
-            }
-            if (TCL_OK != Tcl_ListObjAppendElement(interp, list_ptr,
-                    Tcl_ObjPrintf("%s@%s", dep->string, dep->valuestring))) {
-                return TCL_ERROR;
+            const char *version;
+            status = ttrek_GetDependencyVersion(interp, &flags, dep, &version);
+            if (status != TCL_OK) { break; }
+            if (version) {
+                status = Tcl_ListObjAppendElement(interp, list_ptr, Tcl_ObjPrintf("%s@%s", dep->string, version));
+                if (status != TCL_OK) { break; }
             }
         }
     }
-    return TCL_OK;
+    Tcl_DeleteHashTable(&flags);
+    return status;
 }
 
 

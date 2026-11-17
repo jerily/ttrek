@@ -93,20 +93,12 @@ void validate_project(cJSON *spec, cJSON *lock) {
     for (const char *section : {"dependencies", "devDependencies"}) {
         auto *dependencies = cJSON_GetObjectItemCaseSensitive(spec, section);
         require(!dependencies || cJSON_IsObject(dependencies), std::string(section) + " must be an object");
-        cJSON_ArrayForEach(item, dependencies) {
-            require(cJSON_IsString(item), "Project dependency constraints must be strings");
-        }
     }
     auto *packages = cJSON_GetObjectItemCaseSensitive(lock, "packages");
     require(!packages || cJSON_IsObject(packages), "Locked packages must be an object");
     cJSON_ArrayForEach(item, packages) {
         require(cJSON_IsObject(item) && cJSON_IsString(cJSON_GetObjectItemCaseSensitive(item, "version")),
                 "Locked package must have a version string");
-    }
-    auto *flags = cJSON_GetObjectItemCaseSensitive(spec, "useFlags");
-    require(!flags || cJSON_IsArray(flags), "useFlags must be an array");
-    cJSON_ArrayForEach(item, flags) {
-        require(cJSON_IsString(item) && ttrek_IsValidUseFlag(item->valuestring), "Invalid USE flag");
     }
 }
 } // namespace
@@ -136,10 +128,12 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
         require(project != nullptr, Tcl_GetStringResult(interp));
         Json spec(ttrek_GetSpecRoot(interp, project.get()), cJSON_Delete);
         Json lock(ttrek_GetLockRoot(interp, project.get()), cJSON_Delete);
+        TclObject venv(ttrek_GetProjectVenvDir(interp, project.get()));
+        Json manifest(ttrek_GetManifestRoot(interp, venv.get()), cJSON_Delete);
         validate_project(spec.get(), lock.get());
         check(interp, ttrek_RegistryLoadFromLock(interp, project.get(), lock.get()));
         auto flags_list = retain(Tcl_NewListObj(0, nullptr));
-        check(interp, ttrek_GetUseFlags(interp, spec.get(), flags_list.get()));
+        check(interp, ttrek_GetUseFlags(interp, manifest.get(), flags_list.get()));
         UseFlags flags;
         check(interp, ttrek_PopulateHashTableFromUseFlagsList(interp, flags_list.get(), &flags.table));
         if (static_build) {
@@ -150,12 +144,13 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
             Tcl_Size count;
             Tcl_Obj **values;
             Tcl_ListObjGetElements(interp, updated.get(), &count, &values);
-            ttrek_SetUseFlags(interp, spec.get(), count, values);
+            check(interp, ttrek_SetUseFlags(interp, manifest.get(), count, values));
         }
         ttrek_state_t state{};
         state.interp = interp;
         state.spec_root = spec.get();
         state.lock_root = lock.get();
+        state.manifest_root = manifest.get();
         state.mode = MODE_SCRIPT;
         state.strategy = ttrek_StrategyFromString(strategy, STRATEGY_FAVORED);
         auto plan = retain(Tcl_NewListObj(0, nullptr));

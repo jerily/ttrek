@@ -177,7 +177,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek-external-dependencies-") as tempo
     for command in ("cmake_config", "cmake_make", "cmake_install"):
         recipe("top", {"middle": "1.0.0"}, steps=[{"cmd": command, "if": "+static"}])
         run(project(command + "-disabled"), "install", "-y")
-        directory = project(command + "-enabled", useFlags=["+static"])
+        directory = project(command + "-enabled")
+        (directory / "ttrek-venv").mkdir()
+        (directory / "ttrek-venv/ttrek-manifest.json").write_text(json.dumps({"useFlags": ["+static"]}))
         assert "requires cmake" in run(directory, "install", "-y", ok=False).stderr
         untouched(directory)
     # The registry's selected platform build is what gets checked.

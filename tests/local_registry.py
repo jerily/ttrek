@@ -137,7 +137,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
     lock = json.loads(lock_file.read_text())
     assert lock["registry"] == relative_registry
     assert lock["packages"]["base"]["version"] == "1.0.0"
-    assert "+static" in lock["packages"]["base"]["iuse"]
+    assert "static" in lock["packages"]["base"]["iuse"]
     assert "return 42" in (project / "ttrek-venv/local/include/base.h").read_text()
     manifest_file = project / "ttrek-venv/ttrek-manifest.json"
     installed = json.loads(manifest_file.read_text())
@@ -217,8 +217,13 @@ with tempfile.TemporaryDirectory(prefix="ttrek local registry ' ") as temporary:
         hidden_registry.rename(registry)
 
     # Desired lock flags cannot stand in for the flags used by the installed build.
-    spec["useFlags"] = ["+static"]
-    spec_file.write_text(json.dumps(spec))
+    before_flags = json.loads(manifest_file.read_text())
+    spec_before_flags = spec_file.read_bytes()
+    run("use-flags", "set", "+static")
+    assert spec_file.read_bytes() == spec_before_flags
+    after_flags = json.loads(manifest_file.read_text())
+    assert after_flags.pop("useFlags") == ["+static"]
+    assert after_flags == before_flags
     desired = json.loads(lock_file.read_text())
     for package in desired["packages"].values():
         package["use"] = ["+static"]

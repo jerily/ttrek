@@ -148,6 +148,7 @@ int ttrek_EnsureSkeletonExists(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 Tcl_Obj *ttrek_GetVenvSubDir(Tcl_Interp *interp, Tcl_Obj *project_venv_dir_ptr, const char *subdir);
 
 int ttrek_WriteJsonFile(Tcl_Interp *interp, Tcl_Obj *path_ptr, cJSON *root);
+int ttrek_WriteManifestFile(Tcl_Interp *interp, ttrek_state_t *state_ptr);
 
 int ttrek_ReadChars(Tcl_Interp *interp, Tcl_Obj *path_ptr, Tcl_Obj **contents_ptr);
 
@@ -173,7 +174,7 @@ void ttrek_DestroyState(ttrek_state_t *state_ptr);
 ttrek_strategy_t ttrek_StrategyFromString(const char *strategy_str, ttrek_strategy_t default_strategy);
 int ttrek_CheckDependencySections(Tcl_Interp *interp, const cJSON *spec_root);
 
-int ttrek_GetDirectDependencies(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
+int ttrek_GetDirectDependencies(Tcl_Interp *interp, ttrek_state_t *state, Tcl_Obj *list_ptr);
 
 int ttrek_InitSpecFile(Tcl_Interp *interp, Tcl_Obj *path_to_spec_ptr, const char *project_name, const char *project_version);
 Tcl_Obj *ttrek_GetFilePath(Tcl_Interp *interp, Tcl_Obj *directory, const char *filename);

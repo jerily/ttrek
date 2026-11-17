@@ -18,6 +18,7 @@
 #include <memory>
 #include <string_view>
 #include <utility>
+#include <sstream>
 #include <vector>
 #include <set>
 #include <map>
@@ -58,6 +59,10 @@ struct UseFlag {
             throw std::runtime_error("Invalid use flag: " + std::string(use_flag_str));
         }
         name = std::string(use_flag_str.substr(1));
+        if (name.empty() || name[0] == '-' || name.find_first_not_of(
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") != std::string::npos) {
+            throw std::runtime_error("Invalid use flag: " + std::string(use_flag_str));
+        }
         this->polarity = polarity;
     }
 
@@ -93,20 +98,11 @@ struct DependencyInfo {
     std::unordered_set<UseFlag> if_use_flags;
 
     DependencyInfo(std::string version_requirement, std::string if_value) : version_requirement(std::move(version_requirement)) {
-        if (!if_value.empty()) {
-            auto use_flags = split_string(if_value, " ");
-            for (const auto &use_flag : use_flags) {
-                bool polarity = true;
-                if (use_flag.empty()) { continue; }
-                if (use_flag[0] == '-') {
-                    polarity = false;
-                } else if (use_flag[0] == '+') {
-                    polarity = true;
-                } else {
-                    throw std::runtime_error("Invalid use flag: " + std::string(use_flag));
-                }
-                if_use_flags.emplace(UseFlag(use_flag.substr(1), polarity));
-            }
+        std::istringstream tokens(if_value);
+        std::string flag;
+        while (tokens >> flag) { if_use_flags.emplace(flag); }
+        if (!if_value.empty() && if_use_flags.empty()) {
+            throw std::runtime_error("'if' must contain a USE flag");
         }
     }
 
@@ -139,7 +135,7 @@ inline PackageVersions fetch_package_versions(const std::string &package_name) {
         for (auto *dep = version->child; dep; dep = dep->next) {
             const auto *range = cJSON_IsObject(dep) ? cJSON_GetObjectItem(dep, "version") : dep;
             const auto *condition = cJSON_IsObject(dep) ? cJSON_GetObjectItem(dep, "if") : nullptr;
-            if (!cJSON_IsString(range) || (condition && !cJSON_IsString(condition))) {
+            if (!cJSON_IsString(range) || (condition && (!cJSON_IsString(condition) || !condition->valuestring[0]))) {
                 throw std::runtime_error("Invalid dependency " + std::string(dep->string) + " for " + package_name);
             }
             deps.emplace_back(dep->string, DependencyInfo(range->valuestring, condition ? condition->valuestring : ""));
@@ -319,6 +315,9 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
     }
 
     VersionSetId alloc_requirement_from_str(std::string_view name, std::string_view versions) {
+        std::string reserved(name);
+        for (char &ch : reserved) { if (ch >= 'A' && ch <= 'Z') { ch += 'a' - 'A'; } }
+        if (reserved == "useflags") { throw std::runtime_error("useFlags is reserved for installation settings"); }
         auto name_id = pool->intern_package_name(std::string(name));
         return pool->intern_version_set(name_id, version_range(versions.empty() ? std::nullopt : std::optional(versions)));
     }
@@ -453,7 +452,7 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
 
     bool satisfies_use_flags(const std::unordered_set<UseFlag> &use_flags) {
         for (const auto &use_flag : use_flags) {
-            if (global_use_flags.find(use_flag) == global_use_flags.end()) {
+            if ((global_use_flags.count(UseFlag(use_flag.name, true)) != 0) != use_flag.polarity) {
                 return false;
             }
         }

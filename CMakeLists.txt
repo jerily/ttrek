@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.5.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.6.0 LANGUAGES C CXX)
 
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
 
@@ -244,6 +244,8 @@ if(BUILD_TESTING)
     add_test(NAME cmake_logging COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake_logging.py)
     add_test(NAME release_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_abi.py)
     add_test(NAME help COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/help.py
+        $<TARGET_FILE:ttrek>)
+    add_test(NAME use_flags COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/use_flags.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME project_scripts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/project_scripts.py
         $<TARGET_FILE:ttrek>)

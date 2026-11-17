@@ -97,7 +97,11 @@ static void ttrek_AddPackageToSpec(cJSON *spec_root, const char *package_name,
         cJSON_AddItemToObject(spec_root, section, dependencies);
     }
 
-    if (cJSON_HasObjectItem(dependencies, package_name)) {
+    cJSON *existing = cJSON_GetObjectItem(dependencies, package_name);
+    if (cJSON_IsObject(existing)) {
+        cJSON_DeleteItemFromObject(existing, "version");
+        cJSON_AddStringToObject(existing, "version", version_requirement);
+    } else if (existing) {
         cJSON_ReplaceItemInObject(dependencies, package_name, cJSON_CreateString(version_requirement));
     } else {
         cJSON_AddStringToObject(dependencies, package_name, version_requirement);
@@ -133,7 +137,7 @@ static void ttrek_AddPackageToManifest(cJSON *manifest_root, const char *package
 
 }
 
-static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
+static int ttrek_AddPackageToLock(Tcl_Interp *interp, Tcl_HashTable *flags, cJSON *lock_root, const char *direct_version_requirement, const char *package_name,
                                    const char *package_version, cJSON *deps_node, Tcl_Obj * iuse_list_ptr, Tcl_Obj * use_list_ptr) {
 
     // add direct requirement to dependencies
@@ -162,10 +166,13 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     for (int i = 0; i < cJSON_GetArraySize(deps_node); i++) {
         cJSON *dep_item = cJSON_GetArrayItem(deps_node, i);
         const char *dep_name = dep_item->string;
-        const char *dep_version_requirement = dep_item->valuestring;
-        DBG(fprintf(stderr, "AddPackageToLock: dep_name: %s\n", dep_name));
-        DBG(fprintf(stderr, "AddPackageToLock: dep_version_requirement: %s\n", dep_version_requirement));
-        cJSON_AddStringToObject(reqs_node, dep_name, dep_version_requirement);
+        const char *version;
+        if (ttrek_GetDependencyVersion(interp, flags, dep_item, &version) != TCL_OK) {
+            cJSON_Delete(reqs_node);
+            cJSON_Delete(item_node);
+            return TCL_ERROR;
+        }
+        if (version) { cJSON_AddStringToObject(reqs_node, dep_name, version); }
     }
     cJSON_AddItemToObject(item_node, STRING_REQUIRES, reqs_node);
 
@@ -208,6 +215,7 @@ static void ttrek_AddPackageToLock(cJSON *lock_root, const char *direct_version_
     } else {
         cJSON_AddItemToObject(packages, package_name, item_node);
     }
+    return TCL_OK;
 }
 
 static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *state_ptr, Tcl_HashTable *global_use_flags_ht_ptr, const char *package_name,
@@ -355,20 +363,20 @@ static int ttrek_InstallScriptAndPatches(Tcl_Interp *interp, ttrek_state_t *stat
     }
 
     cJSON *deps_node = cJSON_GetObjectItem(install_spec_root, STRING_DEPENDENCIES);
-    if (strncmp(direct_version_requirement, "none", 4) != 0) {
-        if (strnlen(direct_version_requirement, 256) > 0) {
-            ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct_version_requirement);
-            ttrek_AddPackageToLock(state_ptr->lock_root, direct_version_requirement, package_name, package_version,
-                                   deps_node, iuse_list_ptr, use_list_ptr);
-        } else {
-            char package_version_with_caret_op[256];
-            snprintf(package_version_with_caret_op, sizeof(package_version_with_caret_op), "^%s", package_version);
-            ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, package_version_with_caret_op);
-            ttrek_AddPackageToLock(state_ptr->lock_root, package_version_with_caret_op, package_name, package_version,
-                                   deps_node, iuse_list_ptr, use_list_ptr);
-        }
-    } else {
-        ttrek_AddPackageToLock(state_ptr->lock_root, NULL, package_name, package_version, deps_node, iuse_list_ptr, use_list_ptr);
+    const char *direct = NULL;
+    char default_version[256];
+    if (strcmp(direct_version_requirement, "none") != 0) {
+        snprintf(default_version, sizeof(default_version), "^%s", package_version);
+        direct = direct_version_requirement[0] ? direct_version_requirement : default_version;
+        ttrek_AddPackageToSpec(state_ptr->spec_root, package_name, direct);
+    }
+    if (ttrek_AddPackageToLock(interp, global_use_flags_ht_ptr, state_ptr->lock_root,
+            direct, package_name, package_version, deps_node, iuse_list_ptr, use_list_ptr) != TCL_OK) {
+        Tcl_DecrRefCount(iuse_list_ptr);
+        Tcl_DecrRefCount(use_list_ptr);
+        (void) ttrek_FSMonitor_RemoveWatch(interp, fsmonitor_state_ptr);
+        Tcl_Free((char *) fsmonitor_state_ptr);
+        return TCL_ERROR;
     }
     ttrek_AddPackageToManifest(state_ptr->manifest_root, package_name, package_version,
         scripts, fsmonitor_state_ptr->files_diff);

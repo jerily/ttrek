@@ -49,7 +49,7 @@ int ttrek_RunBuildInstructions(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
 
     Tcl_Obj *use_flags_list_ptr = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(use_flags_list_ptr);
-    if (TCL_OK != ttrek_GetUseFlags(interp, state_ptr->spec_root, use_flags_list_ptr)) {
+    if (TCL_OK != ttrek_GetUseFlags(interp, state_ptr->manifest_root, use_flags_list_ptr)) {
         Tcl_DecrRefCount(use_flags_list_ptr);
         return TCL_ERROR;
     }

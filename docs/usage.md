@@ -75,6 +75,14 @@ in only one root-project section; duplicate names across those sections are reje
 
 ### Rebuilds and version selection
 
+USE flags belong to each installation. Configure them with
+`ttrek use-flags set +static -debug`, inspect them with `ttrek use-flags ls`,
+or clear them with `ttrek use-flags set`. The settings live in the installation's
+`ttrek-manifest.json`; `ttrek.json` is never a source of flag settings.
+`use-flags add -u +static` selects the user installation, and `-g` selects the
+global installation. See `ttrek help use-flags` for the full command syntax.
+Changing flags saves settings; the next install or update applies them.
+
 `install -force PACKAGE` rebuilds that package and its transitive reverse
 dependencies. Changed versions and USE flags also rebuild affected dependents,
 in dependency order, while unchanged forward dependencies remain installed.
@@ -98,7 +106,20 @@ The lockfile records resolution choices. Installed state comes from
 `ttrek-venv/ttrek-manifest.json`: each package records its version, files, `iuse`,
 `use`, `requires`, and scripts. A lockfile copied into a fresh checkout does not
 skip installation. Missing files or mismatching installed versions/flags trigger
-reinstallation; old manifests without build metadata are rebuilt once.
+reinstallation.
+The manifest's top-level `useFlags` array holds the requested installation
+settings. `iuse` declares unsigned names, for example `["local"]`; it does not
+set their values. Each package's manifest `use` array records the effective signed
+value of every `iuse` name at the last successful build. Absent flags are disabled,
+so `"if": "-local"` matches by default and `"if": "+local"` requires `+local`.
+Multiple whitespace-separated conditions are ANDed. Root `dependencies` and
+`devDependencies`, like recipe dependencies, accept conditional objects such as
+`{"version": "^1.0.0", "if": "+local"}`. Installation keeps these conditions in
+the project spec and only selected packages in the lock. Excluded packages remain
+installed until explicitly uninstalled; use a fresh installation for production.
+There is no migration of signed `iuse` or settings from `ttrek.json`.
+Package entries and settings survive flag edits and failed-build recovery.
+The top-level key `useFlags` is reserved and cannot be a package name.
 Resolution defaults stay `favored` for install and `latest` for update. Update
 selects newer versions within the saved constraints and refreshes the lockfile.
 

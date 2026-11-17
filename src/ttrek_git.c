@@ -6,6 +6,7 @@
 
 #include <git2.h>
 #include "ttrek_git.h"
+#include "ttrek_useflags.h"
 
 #define MAX_GIT_DEPTH 3
 
@@ -589,18 +590,38 @@ int ttrek_EnsureGitReady(Tcl_Interp *interp, ttrek_state_t *state_ptr) {
         }
 
         if (dirty_dir_exists) {
+            /* Package records are rolled back, but requested installation flags
+             * must survive a failed build or a flag edit made after it failed. */
+            Tcl_Obj *flags = Tcl_NewListObj(0, NULL);
+            Tcl_IncrRefCount(flags);
+            int has_flags = cJSON_HasObjectItem(state_ptr->manifest_root, "useFlags");
+            if (ttrek_GetUseFlags(interp, state_ptr->manifest_root, flags) != TCL_OK) {
+                Tcl_DecrRefCount(flags);
+                return TCL_ERROR;
+            }
             if (TCL_OK != ttrek_GitResetHard(state_ptr)) {
+                Tcl_DecrRefCount(flags);
                 fprintf(stderr, "error: resetting git repository failed\n");
                 return TCL_ERROR;
             }
             // The reset restored installed metadata as well as package files.
             cJSON *manifest = ttrek_GetManifestRoot(interp, state_ptr->project_venv_dir_ptr);
             if (!cJSON_IsObject(manifest)) {
+                Tcl_DecrRefCount(flags);
                 cJSON_Delete(manifest);
                 return TCL_ERROR;
             }
+            Tcl_Size count;
+            Tcl_Obj **values;
+            Tcl_ListObjGetElements(interp, flags, &count, &values);
+            int status = TCL_OK;
+            if (has_flags) { status = ttrek_SetUseFlags(interp, manifest, count, values); }
+            else { cJSON_DeleteItemFromObjectCaseSensitive(manifest, "useFlags"); }
+            Tcl_DecrRefCount(flags);
+            if (status != TCL_OK) { cJSON_Delete(manifest); return status; }
             cJSON_Delete(state_ptr->manifest_root);
             state_ptr->manifest_root = manifest;
+            if (ttrek_WriteManifestFile(interp, state_ptr) != TCL_OK) { return TCL_ERROR; }
         }
 
     } else {

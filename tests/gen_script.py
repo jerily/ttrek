@@ -134,17 +134,26 @@ with tempfile.TemporaryDirectory(prefix="ttrek gen-script ' ") as temporary:
     registry_file.write_text(json.dumps(broken))
     generate(ok=False)
     registry_file.write_text(json.dumps(registry))
+    # Project flags have no effect; only the installation manifest is read.
     spec["useFlags"] = ["+static"]
     spec_file.write_text(json.dumps(spec))
+    assert "'BUILD_SHARED_LIBS'=\"OFF\"" not in generate().stdout
+    manifest_file = project / "ttrek-venv/ttrek-manifest.json"
+    manifest_file.parent.mkdir(exist_ok=True)
+    manifest_file.write_text(json.dumps({"useFlags": ["+static"]}))
     assert "'BUILD_SHARED_LIBS'=\"OFF\"" in generate().stdout
-    spec["useFlags"] = ["-static"]
-    spec_file.write_text(json.dumps(spec))
+    manifest_file.write_text(json.dumps({"useFlags": ["-static"]}))
     assert "'BUILD_SHARED_LIBS'=\"OFF\"" not in generate().stdout
     assert "'BUILD_SHARED_LIBS'=\"OFF\"" in generate("-static").stdout
-    spec["useFlags"] = [42]
-    spec_file.write_text(json.dumps(spec))
+    manifest_file.write_text(json.dumps({"useFlags": [42]}))
     generate(ok=False)
-    spec["useFlags"] = []
+    manifest_file.write_text(json.dumps({"useFlags": []}))
+    for invalid_iuse in ("local", [42], ["+static"], ["+static -debug"]):
+        broken = copy.deepcopy(registry)
+        broken[app_path]["iuse"] = invalid_iuse
+        registry_file.write_text(json.dumps(broken))
+        assert "iuse" in generate(ok=False).stderr
+    registry_file.write_text(json.dumps(registry))
     spec["dependencies"] = {"app": 42}
     spec_file.write_text(json.dumps(spec))
     generate(ok=False)

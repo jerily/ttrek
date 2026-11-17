@@ -30,6 +30,7 @@ Available commands:
     search
     run
     scripts
+    use-flags
 
 Run 'ttrek help COMMAND' for more information on a command.
 

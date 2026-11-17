@@ -44,35 +44,8 @@ static const char *pkg_counter_template = "${%d:-1}";
 int ttrek_IsUseFlagEnabled(Tcl_Interp *interp, Tcl_HashTable *use_flags_ht_ptr,
                                   const cJSON *json, int *result) {
 
-    const cJSON *flagJson = cJSON_GetObjectItem(json, "if");
-
-    if (flagJson != NULL) {
-
-        if (!cJSON_IsString(flagJson)) {
-            SetResult("\"if\" property in json is not a string");
-            return TCL_ERROR;
-        }
-
-        const char *flag_str = cJSON_GetStringValue(flagJson);
-
-        if (flag_str == NULL) {
-            SetResult("error while parsing \"if\" property in json");
-            return TCL_ERROR;
-        }
-
-        if (TCL_OK != ttrek_HashTableContainsUseFlag(interp, use_flags_ht_ptr, flag_str, result)) {
-            SetResult("error while checking if a flag exists");
-            return TCL_ERROR;
-        }
-
-        DBG2(fprintf(stderr, "check flag \"%s\": %s", flag_str, (*result ? "yes" : "no")));
-        return TCL_OK;
-
-    }
-
-    // If no flags are defined, consider the flag enabled
-    *result = 1;
-    return TCL_OK;
+    return ttrek_EvaluateUseCondition(interp, use_flags_ht_ptr,
+        cJSON_GetObjectItemCaseSensitive(json, "if"), result);
 
 }
 
