@@ -134,17 +134,17 @@ ttrek run -script prepare-macos-x86_64
 ./bin/prepare-macos.sh
 ```
 
-To build every architecture this Mac can execute with minimum macOS 11.0:
+To build the supported release targets on Apple Silicon with minimum macOS 11.0:
 
 ```sh
 ./bin/prepare-macos-target-11.0.sh
 # Or: ttrek run -script prepare-macos-target-11.0
 ```
 
-Apple Silicon builds ARM64 and x86_64 (with Rosetta and both toolsets), then
-combines them into universal2 without rebuilding either input. With Docker
-Desktop running, it also builds both ARM64 Linux libc targets and runs their
-runtime matrix natively. Intel Macs build macOS x86_64 only. This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
+The wrapper builds macOS ARM64 only; x86_64 and universal2 release builds are
+disabled. With Docker Desktop running, it also builds both ARM64 Linux libc
+targets and runs their runtime matrix natively. Intel Macs are rejected.
+This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
 
 `bin/prepare-macos.sh` requires macOS and runs the full build and tests in the
 selected architecture, using its Homebrew tools and a matching Python
