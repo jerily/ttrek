@@ -75,7 +75,7 @@ class Releases(unittest.TestCase):
                 self.assertIn("JOBS=3", arguments)
                 self.assertIn(f"type=local,dest=dist/{target}", arguments)
 
-    def test_macos_11_builds_supported_architectures_and_combines_once(self):
+    def test_macos_11_builds_arm64_only_and_rejects_intel(self):
         for name, body in {
             "uname": 'echo Darwin',
             "sysctl": 'echo "$TEST_ARM64"',
@@ -91,13 +91,13 @@ class Releases(unittest.TestCase):
         self.env["TEST_ARM64"] = "1"
         self.run_script("prepare-macos-target-11.0.sh")
         self.assertEqual(self.log.read_text().splitlines(), [
-            "prepare-macos.sh arm64 11.0", "prepare-macos.sh x86_64 11.0",
-            "prepare-universal2.sh  11.0", "prepare-linux.sh arm64 glibc 11.0",
+            "prepare-macos.sh arm64 11.0", "prepare-linux.sh arm64 glibc 11.0",
             "prepare-linux.sh arm64 musl 11.0", "test-linux-release.sh arm64 11.0"])
         self.log.unlink()
         self.env["TEST_ARM64"] = "0"
-        self.run_script("prepare-macos-target-11.0.sh")
-        self.assertEqual(self.log.read_text(), "prepare-macos.sh x86_64 11.0\n")
+        result = self.run_script("prepare-macos-target-11.0.sh", success=False)
+        self.assertIn("require Apple Silicon", result.stderr)
+        self.assertFalse(self.log.exists())
 
     def test_invalid_inputs_never_upload(self):
         for arguments in ((), ("staging", "1.0.0"), ("prod", "latest"),
