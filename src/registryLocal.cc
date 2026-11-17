@@ -7,6 +7,7 @@
 #include <iterator>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -14,6 +15,7 @@
 #include <curl/curl.h>
 #include "registry.h"
 #include "base64.h"
+#include "ttrek_useflags.h"
 #include "semver/semver.h"
 #include <ttrie.h>
 #include <ttrigrams.h>
@@ -285,7 +287,15 @@ void collect_use_flags(const cJSON *node, std::set<std::string> &flags) {
         auto *condition = cJSON_GetObjectItemCaseSensitive(node, "if");
         if (condition) {
             require(cJSON_IsString(condition), "Recipe 'if' must be a USE flag string");
-            flags.insert(condition->valuestring);
+            std::istringstream tokens(condition->valuestring);
+            std::string flag;
+            bool any = false;
+            while (tokens >> flag) {
+                require(ttrek_IsValidUseFlag(flag.c_str()), "Invalid USE flag in recipe 'if': " + flag);
+                flags.insert(flag.substr(1));
+                any = true;
+            }
+            require(any, "Recipe 'if' must contain a USE flag");
         }
     }
     const cJSON *child;
@@ -365,6 +375,14 @@ Json recipe(const fs::path &registry_directory, const std::vector<std::string> &
     auto *iuse = cJSON_AddArrayToObject(result.get(), "iuse");
     std::set<std::string> flags;
     collect_use_flags(spec.get(), flags);
+    auto *declared = cJSON_GetObjectItemCaseSensitive(spec.get(), "iuse");
+    require(!declared || cJSON_IsArray(declared), "iuse must be an array of unsigned USE flag names");
+    const cJSON *flag;
+    cJSON_ArrayForEach(flag, declared) {
+        require(cJSON_IsString(flag) && ttrek_IsValidUseFlagName(flag->valuestring),
+                "Invalid unsigned USE flag name in iuse");
+        flags.insert(flag->valuestring);
+    }
     for (const auto &flag : flags) { cJSON_AddItemToArray(iuse, cJSON_CreateString(flag.c_str())); }
 
     auto *patches = cJSON_AddObjectToObject(result.get(), "patches");

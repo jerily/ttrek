@@ -71,6 +71,13 @@ static void test_use_flags() {
     auto without = solve(disabled, {disabled.alloc_requirement_from_str("feature", "")});
     assert((without == std::vector<std::string>{"feature=1.0.0"}));
 
+    assert(disabled.satisfies_use_flags({UseFlag("-local")}));
+    assert(!disabled.satisfies_use_flags({UseFlag("+local")}));
+    PackageDatabase implicit_disabled;
+    implicit_disabled.set_global_use_flags({UseFlag("+threads")});
+    auto implicit = solve(implicit_disabled, {implicit_disabled.alloc_requirement_from_str("feature", "")});
+    assert((implicit == std::vector<std::string>{"lib=1.2.0", "feature=1.0.0"}));
+
     PackageDatabase enabled;
     enabled.set_global_use_flags({UseFlag("+threads"), UseFlag("-debug")});
     auto with = solve(enabled, {enabled.alloc_requirement_from_str("feature", "")});

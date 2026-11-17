@@ -14,10 +14,13 @@ extern "C" {
 #endif
 
 int ttrek_IsValidUseFlag(const char *use_flag_str);
-int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Obj *list_ptr);
-int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
-int ttrek_AddUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
-int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *spec_root, Tcl_Size objc, Tcl_Obj *const objv[]);
+int ttrek_IsValidUseFlagName(const char *name);
+int ttrek_EvaluateUseCondition(Tcl_Interp *interp, Tcl_HashTable *flags, const cJSON *condition, int *enabled);
+int ttrek_GetDependencyVersion(Tcl_Interp *interp, Tcl_HashTable *flags, const cJSON *dependency, const char **version);
+int ttrek_GetUseFlags(Tcl_Interp *interp, cJSON *manifest_root, Tcl_Obj *list_ptr);
+int ttrek_SetUseFlags(Tcl_Interp *interp, cJSON *manifest_root, Tcl_Size objc, Tcl_Obj *const objv[]);
+int ttrek_AddUseFlags(Tcl_Interp *interp, cJSON *manifest_root, Tcl_Size objc, Tcl_Obj *const objv[]);
+int ttrek_DelUseFlags(Tcl_Interp *interp, cJSON *manifest_root, Tcl_Size objc, Tcl_Obj *const objv[]);
 int ttrek_PopulateHashTableFromUseFlagsList(Tcl_Interp *interp, Tcl_Obj *list_ptr, Tcl_HashTable *ht);
 int ttrek_PopulateUseFlagsListFromHashTable(Tcl_Interp *interp, Tcl_HashTable *ht, Tcl_Obj *list_ptr);
 int ttrek_PopulateIUseFlagsListFromNode(Tcl_Interp *interp, cJSON *use_node, Tcl_Obj *list_ptr);

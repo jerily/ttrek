@@ -63,6 +63,9 @@ behavior sanitizers.
 `gen_script` exercises the CLI with a fixture registry, builds shared and static
 libraries, and checks patches, dependency order, shell isolation and generation errors.
 `local_registry` checks directory registries, saved settings, installs and updates.
+`use_flags` checks installation-scoped settings, local/user isolation, validation,
+locking, atomic manifest updates, per-package `iuse` arrays, rebuild detection,
+and preservation of requested flags during failed-install recovery.
 Both tests use temporary home directories and local source archives. CMake prefers
 the dependency prefix's `bin/curl` for these tests; set `-DTTREK_TEST_CURL=/path/to/curl`
 to select another executable. Build failures include their logs in CTest output.

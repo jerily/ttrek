@@ -10,7 +10,9 @@ Generation does not install packages, change project files, or send telemetry.
 (synced local copy, otherwise API) without changing the saved configuration.
 
 The script installs into build/install beside the script and needs no ttrek binary.
--static enables the +static USE flag for conditional recipe options.
+USE flags come from the current installation's ttrek-venv/ttrek-manifest.json.
+A missing manifest or useFlags field means no configured flags.
+-static enables +static for this script only, without changing the manifest.
 Static Tcl extensions require registration by an embedding application.
 
 Examples:

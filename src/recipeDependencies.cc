@@ -62,6 +62,15 @@ extern "C" cJSON *ttrek_FetchRecipe(Tcl_Interp *interp, const char *name, const 
         cJSON_Delete(recipe);
         recipe = nullptr;
     }
+    if (recipe) {
+        cJSON *iuse = cJSON_GetObjectItemCaseSensitive(recipe, "iuse");
+        if (!iuse) { iuse = cJSON_AddArrayToObject(recipe, "iuse"); }
+        Tcl_Obj *flags = Tcl_NewListObj(0, nullptr);
+        Tcl_IncrRefCount(flags);
+        status = ttrek_PopulateIUseFlagsListFromNode(interp, iuse, flags);
+        Tcl_DecrRefCount(flags);
+        if (status != TCL_OK) { cJSON_Delete(recipe); recipe = nullptr; }
+    }
     return recipe;
 }
 
@@ -158,7 +167,7 @@ extern "C" int ttrek_CheckProjectDependencies(Tcl_Interp *interp, ttrek_state_t 
     Tcl_IncrRefCount(flags_list);
     Tcl_HashTable flags;
     Tcl_InitHashTable(&flags, TCL_STRING_KEYS);
-    int status = ttrek_GetUseFlags(interp, state->spec_root, flags_list);
+    int status = ttrek_GetUseFlags(interp, state->manifest_root, flags_list);
     if (status == TCL_OK) { status = ttrek_PopulateHashTableFromUseFlagsList(interp, flags_list, &flags); }
     Tcl_DecrRefCount(flags_list);
     Tcl_Obj *checks = Tcl_NewStringObj("_ttrek_missing=0\n", -1);

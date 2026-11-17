@@ -154,7 +154,7 @@ int ttrek_InstallSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]
     Tcl_IncrRefCount(list_ptr);
     if (installObjc == 0) {
         // add direct dependencies from state_ptr->spec_root to installObjv
-        if (TCL_OK != ttrek_GetDirectDependencies(interp, state_ptr->spec_root, list_ptr)) {
+        if (TCL_OK != ttrek_GetDirectDependencies(interp, state_ptr, list_ptr)) {
             fprintf(stderr, "error: getting direct dependencies failed\n");
             Tcl_DecrRefCount(list_ptr);
             ttrek_DestroyState(state_ptr);

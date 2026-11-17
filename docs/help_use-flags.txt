@@ -1,0 +1,52 @@
+Usage: use-flags SUBCOMMAND [-u|-g] [--] ?+flag|-flag ...?
+
+Configure USE flags for one installation in its ttrek-manifest.json.
+Without -u or -g, select the current project's ttrek-venv installation.
+-u selects the user installation; -g selects the global installation.
+The mode options follow the subcommand. They cannot be combined.
+
+Subcommands:
+    ls                 - print the configured flags, one per line
+    set ?flags ...?    - replace the flags; no flags clears the list
+    add flags ...      - add flags or change their existing polarity
+    del flags ...      - remove settings by name, regardless of polarity
+
+Each flag starts with + (enabled) or - (explicitly disabled), followed by
+letters, digits, underscores, dots or hyphens. Names are case-sensitive.
+set rejects conflicting polarities for the same name. add applies arguments
+in order, so the last setting for a name wins. Use -- to end mode options,
+for example when configuring a flag named u or g.
+
+An absent flag is disabled: "if": "-local" matches when local is absent or
+explicitly disabled, while "if": "+local" requires +local. Whitespace-separated
+conditions are ANDed, e.g. "+local -debug". Project dependencies and
+devDependencies accept {"version": "^1.0.0", "if": "+local"} as well as plain
+version strings. Recipe dependencies, build steps and options use the same rules.
+
+There is no migration or fallback from ttrek.json: useFlags is read and written
+only in the selected installation's manifest. A missing useFlags field means
+all flags are disabled. Declare supported names with "iuse": ["local"] in
+project/recipe metadata. Names in iuse are unsigned and never enable flags.
+Registries also infer names from recipe conditions.
+
+Changing settings does not build packages or change their last-built flags.
+Run ttrek pretend to preview the current project's changes, then ttrek install
+(with the same -u or -g mode, if selected) to rebuild affected packages.
+Each package's manifest iuse is an array of unsigned names; use records the
+effective signed value of every name at its last successful build, including
+negative defaults. Last-built flags are never stored in ttrek.json.
+Disabled dependencies leave the selected lock graph. Previously installed
+files remain tracked in the manifest until explicitly uninstalled. Use a fresh
+installation for production artifacts when switching from a local build.
+
+Examples:
+    ttrek use-flags ls
+    ttrek use-flags set +static -debug
+    ttrek use-flags add -u +static
+    ttrek use-flags add -debug
+    ttrek use-flags del +debug
+    ttrek use-flags set
+    ttrek use-flags add -- -u
+    ttrek use-flags add +local
+    ttrek install
+    ttrek use-flags del +local

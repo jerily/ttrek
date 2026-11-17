@@ -34,6 +34,9 @@ static const struct {
     {"scripts",
 #include "help_scripts.txt.h"
     },
+    {"use-flags",
+#include "help_use-flags.txt.h"
+    },
     {"update",
 #include "help_update.txt.h"
     },
