@@ -239,7 +239,9 @@ int ttrek_ActivateSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[
     /* Replace ttrek so the shell owns the terminal, job control and exit status. */
     fflush(NULL);
     if (is_zsh) {
-        execlp(shell, "zsh", "-i", (char *)NULL);
+        /* Explicit -s keeps piped input on stdin instead of letting ZLE read
+         * from the controlling terminal. Terminal input still gets ZLE. */
+        execlp(shell, "zsh", "-i", "-s", (char *)NULL);
     } else {
         execlp(shell, "bash", "--noprofile", "--rcfile", path, "-i", (char *)NULL);
     }
