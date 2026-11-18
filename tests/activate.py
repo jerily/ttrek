@@ -161,23 +161,42 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
                                   shlex.quote(str(binary)) + " activate; exit $?"], parent_env)
     output = b""
 
+    def read_terminal():
+        try:
+            return os.read(fd, 65536)
+        except OSError as error:
+            if error.errno == errno.EIO:
+                return b""
+            raise
+
     def expect(token):
         global output
         deadline = time.monotonic() + 10
         while token not in output:
             assert time.monotonic() < deadline, output
             if select.select([fd], [], [], 0.1)[0]:
-                try:
-                    chunk = os.read(fd, 65536)
-                except OSError as error:
-                    if error.errno == errno.EIO:
-                        chunk = b""
-                    else:
-                        raise
+                chunk = read_terminal()
                 assert chunk, output
                 output += chunk
         consumed, output = output.split(token, 1)
         return consumed
+
+    def wait_for_exit():
+        global output
+        deadline = time.monotonic() + 10
+        while True:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited == pid:
+                return status
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"shell did not exit within 10 seconds: {output!r}")
+            # A PTY close can wait for pending output to drain on macOS.
+            # Keep reading while waiting for the shell to exit.
+            if select.select([fd], [], [], 0.1)[0]:
+                chunk = read_terminal()
+                output += chunk
+                if not chunk:
+                    time.sleep(0.01)
 
     try:
         startup = expect(b"(ttrek) base> ")
@@ -192,13 +211,13 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         os.write(fd, b"deactivate\n")
         expect(b"base> ")
         os.write(fd, b"exit 7\n")
-        waited, status = os.waitpid(pid, 0)
-        assert waited == pid and os.waitstatus_to_exitcode(status) == 7, status
+        status = wait_for_exit()
         pid = None
+        assert os.waitstatus_to_exitcode(status) == 7, status
     finally:
+        os.close(fd)
         if pid is not None:
             os.kill(pid, signal.SIGKILL)
             os.waitpid(pid, 0)
-        os.close(fd)
 
 print(f"{shell_name}: activation environment, restoration, modes, errors and terminal behavior passed")

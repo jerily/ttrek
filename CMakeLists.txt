@@ -262,10 +262,12 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek>)
     add_test(NAME activate COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/activate.py
         $<TARGET_FILE:ttrek>)
+    set_tests_properties(activate PROPERTIES TIMEOUT 60)
     find_program(TTREK_TEST_ZSH NAMES zsh)
     if(TTREK_TEST_ZSH)
         add_test(NAME activate_zsh COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/activate.py
             $<TARGET_FILE:ttrek> "${TTREK_TEST_ZSH}")
+        set_tests_properties(activate_zsh PROPERTIES TIMEOUT 60)
     endif()
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
         $<TARGET_FILE:ttrek>)
