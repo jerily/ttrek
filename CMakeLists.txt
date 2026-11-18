@@ -108,6 +108,12 @@ add_custom_command(
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/script_header.sh
 )
 
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
+  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/activate.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/activate.sh
+)
+
 file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
 
 set(HELP_TOPICS_H) # List of *.h files for the help topics
@@ -132,6 +138,7 @@ add_custom_command(
 )
 
 add_executable(${TARGET}
+        ${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/check_dependencies.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
@@ -159,6 +166,7 @@ add_executable(${TARGET}
         src/installSubCmd.c
         src/genScriptSubCmd.cc
         src/runSubCmd.c
+        src/activateSubCmd.c
         src/updateSubCmd.c
         src/ttrek.c
         src/common.c
@@ -248,6 +256,8 @@ if(BUILD_TESTING)
     add_test(NAME use_flags COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/use_flags.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME project_scripts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/project_scripts.py
+        $<TARGET_FILE:ttrek>)
+    add_test(NAME activate COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/activate.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
         $<TARGET_FILE:ttrek>)

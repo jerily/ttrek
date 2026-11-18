@@ -28,6 +28,14 @@ ttrek run tclsh9.1
 At the Tcl prompt, try `package require tjson`. To install an existing project's
 declared packages, run `ttrek install -y` from its directory.
 
+To work interactively with installed tools, run `ttrek activate`. This opens
+Bash in your current directory with a `(ttrek)` prompt and the same `PATH`,
+`LD_LIBRARY_PATH`, `PROJECT_HOME` and `PROJECT_INSTALL_DIR` as `ttrek run`.
+Your `~/.bashrc` is loaded before activation. Use `deactivate` to restore the
+shell's environment and prompt, or `exit` / Ctrl-D to return to your original
+shell. `ttrek activate -u` and `-g` select user and global installations.
+See `ttrek help activate` for prompt settings and environment markers.
+
 ## Clone package sources
 
 ```sh
