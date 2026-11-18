@@ -95,7 +95,10 @@ before any package in the plan builds.
 hooks, source-file preservation and the release aliases with stub executables.
 `activate` compares the interactive environment with `run`, checks deactivation,
 prompt settings, quoted paths and user mode, and uses a controlling terminal to
-verify job control, Ctrl-C and shell exit status.
+verify job control, Ctrl-C and shell exit status. When Zsh is available,
+`activate_zsh` runs the same suite plus ZDOTDIR and .zshenv redirect checks.
+Both suites check parent-shell detection against a conflicting SHELL setting.
+Set `TTREK_TEST_ZSH` when configuring CMake to test a Zsh outside PATH.
 
 With the website available (or a synced default registry), the optional read-only smoke test verifies
 `tjson@1.0.26`, `twebserver@1.47.54`, a Tcl 8.6 pin, unsatisfiable/missing packages,

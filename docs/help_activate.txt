@@ -1,6 +1,6 @@
 Usage: ttrek activate [-u|-g]
 
-Open an interactive Bash shell with the installed environment and a (ttrek)
+Open an interactive Bash or Zsh shell with the installed environment and a (ttrek)
 prompt. Local mode finds ttrek.json in the current directory or a parent.
 Use -u for the user installation or -g for the global installation.
 
@@ -11,10 +11,14 @@ Activation keeps the current directory and sets the same environment as run:
   PROJECT_INSTALL_DIR  absolute installation prefix
 It also exports TTREK_VENV (the ttrek-venv directory) and TTREK_VENV_PROMPT=ttrek.
 
-Bash reads ~/.bashrc before applying activation and prefixing its prompt.
+On Linux and macOS, activation detects Bash or Zsh from the parent process.
+Otherwise it uses a supported shell named by SHELL, or defaults to Bash.
+Bash reads ~/.bashrc; Zsh reads .zshenv and .zshrc, respecting ZDOTDIR.
+Activation and the prompt prefix are applied after the startup files.
 Set TTREK_VENV_DISABLE_PROMPT=1 to leave the prompt unchanged.
 Python's VIRTUAL_ENV and PYTHONHOME are left alone.
 
-Run deactivate to restore the environment and prompt from Bash startup.
+Run deactivate to restore the environment and prompt from shell startup.
 Run exit or press Ctrl-D to return to the parent shell. The parent environment
-is unchanged. Bash must be available on PATH; SHELL need not be set.
+is unchanged. The detected shell must be available on PATH. When falling back
+to SHELL, its path is used directly. SHELL need not be set.
