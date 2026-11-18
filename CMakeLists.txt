@@ -108,11 +108,13 @@ add_custom_command(
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/script_header.sh
 )
 
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
-  COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/activate.sh | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/activate.sh
-)
+foreach(ACTIVATION_SCRIPT activate.sh activate.zsh)
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${ACTIVATION_SCRIPT}.h
+      COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/src/${ACTIVATION_SCRIPT} | od -A n -v -t xC | sed 's@[^0-9A-Fa-f]@@g\;s@..@0x&, @g' >${CMAKE_CURRENT_BINARY_DIR}/${ACTIVATION_SCRIPT}.h
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${ACTIVATION_SCRIPT}
+    )
+endforeach()
 
 file(GLOB HELP_TOPICS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_SOURCE_DIR}/docs/help_*.txt")
 
@@ -139,6 +141,7 @@ add_custom_command(
 
 add_executable(${TARGET}
         ${CMAKE_CURRENT_BINARY_DIR}/activate.sh.h
+        ${CMAKE_CURRENT_BINARY_DIR}/activate.zsh.h
         ${CMAKE_CURRENT_BINARY_DIR}/check_dependencies.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
         ${CMAKE_CURRENT_BINARY_DIR}/script_package.sh.h
@@ -259,6 +262,11 @@ if(BUILD_TESTING)
         $<TARGET_FILE:ttrek>)
     add_test(NAME activate COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/activate.py
         $<TARGET_FILE:ttrek>)
+    find_program(TTREK_TEST_ZSH NAMES zsh)
+    if(TTREK_TEST_ZSH)
+        add_test(NAME activate_zsh COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/activate.py
+            $<TARGET_FILE:ttrek> "${TTREK_TEST_ZSH}")
+    endif()
     add_test(NAME unpack COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unpack.py
         $<TARGET_FILE:ttrek>)
     # The dependency build installs curl here. Prefer it over a host curl that

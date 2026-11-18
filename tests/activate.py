@@ -1,4 +1,4 @@
-"""Activation uses run's environment and preserves Bash terminal behavior."""
+"""Activation uses run's environment and preserves Bash/Zsh terminal behavior."""
 import errno
 import json
 import os
@@ -6,6 +6,7 @@ from pathlib import Path
 import pty
 import select
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -13,10 +14,13 @@ import tempfile
 import time
 
 binary = Path(sys.argv[1]).resolve()
+zsh = str(Path(sys.argv[2]).resolve()) if len(sys.argv) > 2 else None
+shell_name = "zsh" if zsh else "bash"
+rc_name = ".zshrc" if zsh else ".bashrc"
 names = ["PATH", "LD_LIBRARY_PATH", "PROJECT_HOME", "PROJECT_INSTALL_DIR",
          "TTREK_VENV", "TTREK_VENV_PROMPT", "PS1", "VIRTUAL_ENV", "PYTHONHOME"]
 probe = ("import json,os; print(json.dumps({k:os.environ.get(k) for k in "
-         + repr(names + ["PWD"]) + "}))")
+         + repr(names + ["PWD", "ZDOTDIR", "STARTUP_ORDER"]) + "}))")
 command = shlex.join([sys.executable, "-c", probe])
 
 with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") as directory:
@@ -26,19 +30,25 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         path.mkdir()
     child = project / "nested"
     child.mkdir()
+    temporary = root / "startup files"
+    temporary.mkdir()
     env = dict(os.environ, HOME=str(home), TTREK_NO_UPDATE_CHECK="1", TTREK_TELEMETRY="0",
                LD_LIBRARY_PATH="", PROJECT_HOME="old ' $(touch injected)",
-               VIRTUAL_ENV="python-environment", TERM="dumb")
+               VIRTUAL_ENV="python-environment", TERM="dumb", TMPDIR=str(temporary))
     for name in ("SHELL", "PROJECT_INSTALL_DIR", "TTREK_VENV", "TTREK_VENV_PROMPT",
-                 "TTREK_VENV_DISABLE_PROMPT", "PYTHONHOME", "PS1", "PROMPT_COMMAND"):
+                 "TTREK_VENV_DISABLE_PROMPT", "PYTHONHOME", "PS1", "PROMPT_COMMAND", "ZDOTDIR"):
         env.pop(name, None)
-    (home / ".bashrc").write_text("PS1='base> '\nexport PS1\nset -u\n"
+    if zsh:
+        env.update(SHELL=zsh, PATH=str(Path(zsh).parent) + os.pathsep + env["PATH"])
+    startup = home / rc_name
+    startup.write_text("PS1='base> '\nexport PS1\nset -u\n"
                                   "alias activation_alias='printf alias-ok'\n")
 
     def run(*args, cwd=child, input=None, environment=env, ok=True):
         result = subprocess.run([binary, *args], cwd=cwd, env=environment, input=input,
                                 capture_output=True, text=True, timeout=15)
         assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
+        assert not list(temporary.iterdir()), list(temporary.iterdir())
         return result
 
     run("init", "-y", "-registry", str(registry), cwd=project)
@@ -51,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
     baseline = json.loads(run("run", "--", sys.executable, "-c", probe).stdout)
     result = run("activate", input=command + "\nactivation-tool\nactivation_alias\n"
                  "printf '\\n'\ndeactivate\n" + command + "\n"
-                 "declare -F deactivate && exit 99\nexit 0\n")
+                 "typeset -f deactivate >/dev/null && exit 99\nexit 0\n")
     rows = result.stdout.splitlines()
     active, restored = json.loads(rows[0]), json.loads(rows[-1])
     assert rows[1:3] == ["tool-ok", "alias-ok"], rows
@@ -77,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         assert restored[name] == ("base> " if name == "PS1" else alternate.get(name)), (name, restored)
 
     # No inherited search paths and no user startup file are valid too.
-    (home / ".bashrc").rename(home / "saved-bashrc")
+    startup.rename(home / "saved-rc")
     minimal = dict(env)
     for name in ("PATH", "LD_LIBRARY_PATH", "PROJECT_HOME"):
         minimal.pop(name, None)
@@ -88,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
     assert active["PS1"].startswith("(ttrek) "), active
     assert restored["LD_LIBRARY_PATH"] is None and restored["PROJECT_HOME"] is None, restored
     assert restored["PS1"] == active["PS1"][len("(ttrek) "):], restored
-    (home / "saved-bashrc").rename(home / ".bashrc")
+    (home / "saved-rc").rename(startup)
     python_home = run("activate", environment=dict(env, PYTHONHOME="python-home"),
                       input="printf '%s\\n' \"$PYTHONHOME\"\nexit\n")
     assert python_home.stdout == "python-home\n", python_home
@@ -105,15 +115,50 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
     run("activate", cwd=root, ok=False)
     failed = run("activate", input="exit 7\n", ok=False)
     assert failed.returncode == 7, failed
-    missing = run("activate", environment=dict(env, PATH=str(root)), ok=False)
-    assert "cannot start bash" in missing.stderr, missing
+    missing = run("activate", environment=dict(env, PATH=str(root), SHELL=shell_name), ok=False)
+    assert f"cannot start {shell_name}" in missing.stderr, missing
+
+    if zsh:
+        # Existing ZDOTDIR and redirects made by .zshenv must reach the right
+        # .zshrc, without exposing or retaining the temporary startup directory.
+        config = root / "custom zsh configuration"
+        config.mkdir()
+        (config / ".zshenv").write_text("export STARTUP_ORDER=env\n")
+        (config / ".zshrc").write_text(startup.read_text() +
+            "export STARTUP_ORDER=${STARTUP_ORDER}-rc\nexport PATH=/rc-tools:$PATH\n")
+        custom = dict(env, ZDOTDIR=str(config))
+        rows = run("activate", environment=custom,
+                   input=command + "\ndeactivate\n" + command + "\nexit\n").stdout.splitlines()
+        active, restored = map(json.loads, rows)
+        assert active["STARTUP_ORDER"] == "env-rc", active
+        assert active["ZDOTDIR"] == restored["ZDOTDIR"] == str(config)
+        assert active["PATH"] == baseline["PATH"]
+        assert restored["PATH"] == "/rc-tools:" + env["PATH"]
+
+        (home / ".zshenv").write_text("export STARTUP_ORDER=redirect\nexport ZDOTDIR=" + shlex.quote(str(config)) + "\n")
+        active = json.loads(run("activate", input=command + "\nexit\n").stdout)
+        assert active["STARTUP_ORDER"] == "redirect-rc", active
+        assert active["ZDOTDIR"] == str(config), active
+        (home / ".zshenv").write_text("export STARTUP_ORDER=local\nZDOTDIR=" + shlex.quote(str(config)) + "\n")
+        active = json.loads(run("activate", input=command + "\nexit\n").stdout)
+        assert active["STARTUP_ORDER"] == "local-rc" and active["ZDOTDIR"] is None, active
+        (home / ".zshenv").write_text("unsetopt rcs\nexport PS1='env> '\n")
+        active = json.loads(run("activate", input=command + "\nexit\n").stdout)
+        assert active["PS1"] == "(ttrek) env> ", active
+        assert active["ZDOTDIR"] is None, active
+        (home / ".zshenv").unlink()
 
     # A real controlling terminal catches pipeline-based launches that break
     # job control, Ctrl-C, and interactive prompts.
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(child)
-        os.execve(binary, [str(binary), "activate"], env)
+        # The invoking shell must win over a conflicting login-shell setting.
+        invoking_shell = zsh or shutil.which("bash")
+        parent_env = dict(env, SHELL="/does/not/exist/" + ("bash" if zsh else "zsh"))
+        flags = ["-f"] if zsh else ["--noprofile", "--norc"]
+        os.execve(invoking_shell, [invoking_shell, *flags, "-c",
+                                  shlex.quote(str(binary)) + " activate; exit $?"], parent_env)
     output = b""
 
     def expect(token):
@@ -145,7 +190,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         os.write(fd, b"\x03")
         expect(b"(ttrek) base> ")
         os.write(fd, b"deactivate\n")
-        expect(b"\r\nbase> ")
+        expect(b"base> ")
         os.write(fd, b"exit 7\n")
         waited, status = os.waitpid(pid, 0)
         assert waited == pid and os.waitstatus_to_exitcode(status) == 7, status
@@ -156,4 +201,4 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
             os.waitpid(pid, 0)
         os.close(fd)
 
-print("Activation environment, restoration, modes, errors and terminal behavior passed")
+print(f"{shell_name}: activation environment, restoration, modes, errors and terminal behavior passed")
