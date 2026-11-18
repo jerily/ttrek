@@ -157,8 +157,15 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         invoking_shell = zsh or shutil.which("bash")
         parent_env = dict(env, SHELL="/does/not/exist/" + ("bash" if zsh else "zsh"))
         flags = ["-f"] if zsh else ["--noprofile", "--norc"]
+        # Piped commands must still use stdin when a controlling terminal is
+        # available. Zsh's line editor can otherwise wait on /dev/tty instead.
+        piped_input = "printf 'piped-%s\\n' ok\nexit 7\n"
+        launch = ("printf %s " + shlex.quote(piped_input) + " | "
+                  + shlex.quote(str(binary)) + " activate; "
+                  "test $? -eq 7 || exit 98; "
+                  + shlex.quote(str(binary)) + " activate; exit $?")
         os.execve(invoking_shell, [invoking_shell, *flags, "-c",
-                                  shlex.quote(str(binary)) + " activate; exit $?"], parent_env)
+                                  launch], parent_env)
     output = b""
 
     def read_terminal():
@@ -199,6 +206,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
                     time.sleep(0.01)
 
     try:
+        expect(b"piped-ok\r\n")
         startup = expect(b"(ttrek) base> ")
         assert b"no job control" not in startup, startup
         os.write(fd, b"[[ -t 0 && -t 1 && -t 2 && $- == *m* ]] && printf 'terminal-%s\\n' ok\n")
