@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 
 binary = Path(sys.argv[1]).resolve()
@@ -153,6 +154,11 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(child)
+        # Give the test terminal a known interrupt key on both Linux and macOS.
+        attrs = termios.tcgetattr(0)
+        attrs[3] |= termios.ISIG
+        attrs[6][termios.VINTR] = b"\x03"
+        termios.tcsetattr(0, termios.TCSANOW, attrs)
         # The invoking shell must win over a conflicting login-shell setting.
         invoking_shell = zsh or shutil.which("bash")
         parent_env = dict(env, SHELL="/does/not/exist/" + ("bash" if zsh else "zsh"))
@@ -180,10 +186,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         global output
         deadline = time.monotonic() + 10
         while token not in output:
-            assert time.monotonic() < deadline, output
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"timed out waiting for {token!r}, received {output!r}")
             if select.select([fd], [], [], 0.1)[0]:
                 chunk = read_terminal()
-                assert chunk, output
+                if not chunk:
+                    raise AssertionError(f"terminal closed waiting for {token!r}, received {output!r}")
                 output += chunk
         consumed, output = output.split(token, 1)
         return consumed
@@ -212,9 +220,21 @@ with tempfile.TemporaryDirectory(prefix="ttrek activate ' $(touch injected) ") a
         os.write(fd, b"[[ -t 0 && -t 1 && -t 2 && $- == *m* ]] && printf 'terminal-%s\\n' ok\n")
         expect(b"terminal-ok\r\n")
         expect(b"(ttrek) base> ")
-        os.write(fd, b"sleep 30\n")
-        time.sleep(0.2)
+        # Wait for the foreground job itself before sending the interrupt.
+        interrupt_probe = (
+            "import os, signal; "
+            "assert os.tcgetpgrp(0) == os.getpgrp(); "
+            "signal.signal(signal.SIGINT, signal.SIG_DFL); "
+            "signal.alarm(8); "
+            "print('interrupt-' + 'ready', flush=True); signal.pause()"
+        )
+        job = shlex.join([sys.executable, "-c", interrupt_probe])
+        os.write(fd, (job + "\n").encode())
+        expect(b"interrupt-ready\r\n")
         os.write(fd, b"\x03")
+        expect(b"(ttrek) base> ")
+        os.write(fd, b"printf 'job-status-%s\\n' \"$?\"\n")
+        expect(b"job-status-130\r\n")
         expect(b"(ttrek) base> ")
         os.write(fd, b"deactivate\n")
         expect(b"base> ")
