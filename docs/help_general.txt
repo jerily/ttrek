@@ -29,6 +29,7 @@ Available commands:
     ls
     search
     run
+    activate
     scripts
     use-flags
 

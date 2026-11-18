@@ -31,6 +31,9 @@ static const struct {
     {"run",
 #include "help_run.txt.h"
     },
+    {"activate",
+#include "help_activate.txt.h"
+    },
     {"scripts",
 #include "help_scripts.txt.h"
     },

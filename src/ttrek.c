@@ -18,6 +18,7 @@ static const char *subcommands[] = {
         "install",
         "uninstall",
         "run",
+        "activate",
         "update",
         "ls",
         /* internal subcommands */
@@ -41,6 +42,7 @@ enum subcommand {
     SUBCMD_INSTALL,
     SUBCMD_UNINSTALL,
     SUBCMD_RUN,
+    SUBCMD_ACTIVATE,
     SUBCMD_UPDATE,
     SUBCMD_LIST,
     SUBCMD_DOWNLOAD,
@@ -124,7 +126,8 @@ int main(int argc, char *argv[]) {
     if (!ttrek_RegistryHasSources() && sub_cmd_index != SUBCMD_PRETEND && sub_cmd_index != SUBCMD_GEN_SCRIPT &&
         sub_cmd_index != SUBCMD_INIT && sub_cmd_index != SUBCMD_INSTALL && sub_cmd_index != SUBCMD_UPDATE &&
         sub_cmd_index != SUBCMD_SYNC && sub_cmd_index != SUBCMD_SELF_UPDATE && sub_cmd_index != SUBCMD_SEARCH &&
-        sub_cmd_index != SUBCMD_CLONE && sub_cmd_index != SUBCMD_HELP && sub_cmd_index != SUBCMD_VERSION) {
+        sub_cmd_index != SUBCMD_CLONE && sub_cmd_index != SUBCMD_HELP && sub_cmd_index != SUBCMD_VERSION &&
+        sub_cmd_index != SUBCMD_ACTIVATE) {
         ttrek_TelemetryLoadMachineId(interp);
     }
 
@@ -199,6 +202,12 @@ int main(int argc, char *argv[]) {
         case SUBCMD_UNINSTALL:
             if (TCL_OK != ttrek_UninstallSubCmd(interp, objc-1, &objv[1])) {
                 fprintf(stderr, "error: uninstall subcommand failed: %s\n", Tcl_GetStringResult(interp));
+                exitcode = 1;
+            }
+            break;
+        case SUBCMD_ACTIVATE:
+            if (ttrek_ActivateSubCmd(interp, objc-1, &objv[1]) != TCL_OK) {
+                fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
                 exitcode = 1;
             }
             break;
