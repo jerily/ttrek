@@ -1,5 +1,5 @@
-ttrek (1.8.0-1) unstable; urgency=medium
+ttrek (1.8.0-1~ppa1) resolute; urgency=medium
 
-  * Initial Debian packaging.
+  * Package ttrek 1.8.0 for Ubuntu 26.04 LTS.
 
  -- Neofytos Dimitriou <neo@jerily.cy>  Thu, 19 Nov 2026 00:00:00 -0500

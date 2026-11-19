@@ -35,9 +35,19 @@ dpkg-buildpackage -us -uc
 ```
 
 Debhelper stages the system-linked binary at `/usr/bin/ttrek`. Install the
-resulting architecture-specific package with `apt install ./ttrek_1.8.0-1_amd64.deb`
+resulting architecture-specific package with `apt install ./ttrek_1.8.0-1~ppa1_amd64.deb`
 (or the arm64 equivalent) from the output directory. The static release binaries
 use the separate build below.
+
+For the first Ubuntu 26.04 upload to `ppa:jerily/ttrek`, the package version
+and target series are set in `debian/changelog`. From the extracted source
+directory, build and sign the source package with your Launchpad-registered
+OpenPGP key. Upload it when ready:
+
+```sh
+debuild -S -sa
+dput ppa:jerily/ttrek '../ttrek_1.8.0-1~ppa1_source.changes'
+```
 
 ## Linux release binaries
 
