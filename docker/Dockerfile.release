@@ -29,6 +29,7 @@ COPY ttrek.json ./
 COPY cmake/ cmake/
 COPY docs/ docs/
 COPY src/ src/
+COPY vendor/ vendor/
 COPY tests/ tests/
 COPY bin/check-linux-release.py bin/check-linux-release.py
 

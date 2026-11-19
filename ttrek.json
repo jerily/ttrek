@@ -1,7 +1,10 @@
 {
   "name": "ttrek",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "scripts": {
+    "prepare-source": {
+      "file": "bin/prepare-source.py"
+    },
     "prepare-linux-amd64-glibc": {
       "file": "bin/prepare-linux.sh",
       "args": [
@@ -80,10 +83,7 @@
     "curl": "=8.23.0",
     "tcl": "=9.1.0",
     "libgit2": "=1.9.7",
-    "libarchive": "=3.8.11",
-    "satdepsolver": "=0.6.0",
-    "ttrie": "=0.1.1",
-    "ttrigrams": "=0.1.0"
+    "libarchive": "=3.8.11"
   },
   "devDependencies": {},
   "build": {
@@ -103,8 +103,8 @@
             "value": "ON"
           },
           {
-            "name": "satdepsolver_DIR",
-            "value": "$INSTALL_DIR/lib/cmake/satdepsolver"
+            "name": "USE_SYSTEM_LIBS",
+            "value": "OFF"
           }
         ]
       },

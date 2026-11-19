@@ -76,7 +76,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
             assert request.path == "/custom/search"
             assert parse_qs(request.query) == {"q": [query.strip().lower()]}
         before = len(requests)
-        for query in ("", "..", "a/b", "a" * 256, "é", "\n"):
+        for args in ((), ("one", "two"), ("-registry",)):
+            run("search", *args, ok=False)
+        for query in ("", "   ", ".", "..", "a/b", "a" * 256, "é", "\n"):
             run("search", query, ok=False)
         assert len(requests) == before
 
@@ -114,25 +116,47 @@ with tempfile.TemporaryDirectory(prefix="ttrek-search-http-") as temporary:
             recipe.write_text(json.dumps({"description": description}))
         response = [{"name": "tcl", "description": "Remote package", "match": "exact", "distance": 0},
                     {"name": "local-owner", "description": "Tcl remote", "match": "description", "distance": 0}]
-        # Earlier HTTP metadata hides a local hit even when its search has no hit.
-        assert run("search", "-registry", address + "/registry", "-registry", str(local), "tcl").stdout == (
-            "tcl\tRemote package\ntcl-local\tLocal package\nlocal-owner\tTcl remote\n")
-        # Earlier local metadata likewise hides the remote result.
-        assert run("-registry", str(local), "search", "-registry", address + "/registry", "tcl").stdout == (
-            "tcl\tRemote package\ntcl-local\tLocal package\nshadow\tTcl hidden locally\n")
-        assert "Remote package" in run("search", "-registry", str(local), "-add-pubreg", "tcl").stdout
-        assert any(url.startswith("http://localhost:8080/registry/search?") for url in requests)
+        expected = "tcl\tRemote package\nlocal-owner\tTcl remote\n"
+        # Invalid explicit sources fail before contacting any website, even in mixed lists.
+        before = len(requests)
+        for path in (str(local), str(local / "missing"), "../registry", "."):
+            for args in (("search", "-registry", path), ("-registry", path, "search"),
+                         ("search", "-registry", address + "/custom", "-registry", path),
+                         ("-registry", path, "search", "-add-pubreg")):
+                assert "HTTP(S) registry API URL" in run(*args, "tcl", ok=False).stderr
+        assert len(requests) == before
+        status = 404
+        assert "search endpoint" in run("search", "-registry", address + "/unsupported", "tcl", ok=False).stderr
+        assert requests[-1] == address + "/unsupported/search?q=tcl"
+        status = 200
+
+        # A synced checkout has no effect on the default search website.
+        stamp = home / ".local/ttrek-registry/.git/ttrek-last-sync"
+        stamp.parent.mkdir(parents=True)
+        stamp.touch()
+        before = len(requests)
+        assert run("search", "tcl").stdout == expected
+        assert requests[before:] == ["http://localhost:8080/registry/search?q=tcl"]
+
+        # The first website owns its packages even if only the second found a match.
+        endpoints["/custom/search"] = []
+        endpoints["/registry/search"] = [
+            {"name": "shadow", "description": "", "match": "description"}, *response]
+        assert run("search", "-registry", address + "/custom", "-add-pubreg", "tcl").stdout == expected
 
         (work / "ttrek.json").write_text("{}")
         lock = work / "ttrek-lock.json"
-        lock.write_text(json.dumps({"registries": [{"url": address + "/saved"}]}))
+        lock.write_text(json.dumps({"registries": [{"directory": str(local)}, {"url": address + "/saved"}]}))
         before_lock = lock.read_bytes()
         child = work / "child"
         child.mkdir()
         run("search", "tcl", cwd=child)
         assert urlsplit(requests[-1]).path == "/saved/search"
         assert lock.read_bytes() == before_lock and not (work / "ttrek-venv").exists()
-        assert not list(home.iterdir())
+        lock.write_text(json.dumps({"registry": str(local / "missing")}))
+        assert run("search", "tcl", cwd=child).stdout.startswith("tcl\tRemote package\n")
+        assert requests[-1] == "http://localhost:8080/registry/search?q=tcl"
+        assert not (work / "ttrek-venv").exists()
 
         # Language metadata has its own lightweight endpoint, so previewing a
         # plan does not request a build recipe. Older servers may return 404.

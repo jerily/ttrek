@@ -12,11 +12,11 @@ curl, tar, Python 3 for tests, and the normal platform development tools. Rust a
 ./build-ttrek.sh
 ```
 
-The script builds pinned zlib, OpenSSL, cJSON, curl, Tcl 9.1, libgit2, and libarchive
-sources, installs the [satdepsolver 0.6.0](https://github.com/jerily/satdepsolver-cpp/releases/tag/v0.6.0)
-CMake package and ttrie 0.1.1/ttrigrams 0.1.0 static C libraries, then builds and tests
-`build/ttrek`. Downloads and extracted sources are cached for reruns. OpenSSL is
-installed under `lib`, and dependency configuration uses the local static prefix.
+The script builds the seven pinned dependencies (zlib, OpenSSL, cJSON, curl,
+Tcl 9.1, libgit2, and libarchive), tests the vendored C++ solver, then builds
+and tests `build/ttrek`. In a Git checkout it initializes the solver submodule
+if needed. The complete source release includes it. Downloads and extracted
+sources are cached for reruns. OpenSSL installs under `lib`.
 Tcl 9.0 static installations remain usable for manual CMake builds.
 
 Dependency release sources: [zlib](https://zlib.net/),
@@ -34,10 +34,8 @@ SATDEPSOLVER_SOURCE_DIR=../satdepsolver-cpp ./build-ttrek.sh
 Other build controls: `JOBS` (default: 2, suitable for an 8 GB Mac), `BUILD_TYPE`,
 `TTREK_BUILD_DIR`, `TTREK_INSTALL_DIR`, `CMAKE`, `CTEST`, `CURL`, and `PYTHON`
 (the Python 3 test interpreter). `TTREK_SKIP_DEPS=1` skips building the seven C dependencies
-when a complete compatible static prefix already exists; it still builds, tests,
-and installs satdepsolver, ttrie and ttrigrams and rebuilds/tests ttrek.
-Set `TTRIE_SOURCE_DIR=/path/to/ttrie` to use a local trie checkout.
-Set `TTRIGRAMS_SOURCE_DIR=/path/to/ttrigrams` to use a local trigram checkout.
+when a compatible static prefix exists. The solver and CLI are still built and tested.
+`TTREK_DEPS_ONLY=1` prepares just the seven dependencies for a later build.
 
 On macOS, `build-ttrek.sh` uses `MACOSX_DEPLOYMENT_TARGET` for every dependency
 and the final executable, defaulting to the build machine's macOS version.
@@ -69,14 +67,26 @@ cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
-CMake normally uses `find_package(satdepsolver 0.6 CONFIG REQUIRED)` and
-`satdepsolver::satdepsolver`. Set `-DSATDEPSOLVER_SOURCE_DIR=/path/to/checkout`
-for an explicit `add_subdirectory` integration. No network download happens at
-CMake configure time. The build script downloads the tagged satdepsolver 0.6.0 release.
-The trie uses `find_package(ttrie 0.1 CONFIG REQUIRED)` and `ttrie::core`; the
-build script downloads its 0.1.1 release and builds it without Tcl bindings.
+Both modes use the pinned `vendor/satdepsolver-cpp` submodule. For a manual
+CMake build from Git, run `git submodule update --init` first. Set
+`-DSATDEPSOLVER_SOURCE_DIR=/path/to/checkout` to use a development checkout.
 
-`ttrek.json` also describes ttrek’s pinned static build. `build-ttrek.sh` remains available.
+### System libraries
+
+Install the development packages listed in [debian/control](../debian/control).
+CMake discovers OpenSSL, curl, zlib and libarchive with its package finders.
+It uses pkg-config to locate libgit2, libcjson and Tcl 9. To stage an install:
+
+```sh
+cmake -S . -B build/system -DUSE_SYSTEM_LIBS=ON -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build/system --parallel
+DESTDIR="$PWD/build/stage" cmake --install build/system
+build/stage/usr/bin/ttrek version
+```
+
+When building through the project's `ttrek.json`, run `ttrek use-flags add +static`
+before `ttrek install` so its dependency recipes produce static archives.
+Both CMake modes install the executable into `bin` beneath the chosen prefix.
 
 See [development](development.md) for implementation notes and test coverage,
 and [releases](releases.md) for platform binaries and upload instructions.

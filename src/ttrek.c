@@ -86,7 +86,6 @@ int main(int argc, char *argv[]) {
     int first_command = 1;
     while (first_command < argc) {
         if (strcmp(argv[first_command], "-add-pubreg") == 0) {
-            *ttrek_RegistryPublicOption() = 1;
             ++first_command;
             continue;
         }
@@ -96,30 +95,35 @@ int main(int argc, char *argv[]) {
             exitcode = 1;
             goto done;
         }
-        int status = ttrek_RegistryAddSource(interp, argv[first_command + 1]);
-        if (status != TCL_OK) {
+        first_command += 2;
+    }
+    int sub_cmd_index = -1;
+    if (first_command < argc) {
+        objc = argc - first_command + 1;
+        objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * objc);
+        for (Tcl_Size i = 0; i < objc; i++) {
+            objv[i] = Tcl_NewStringObj(argv[i == 0 ? 0 : first_command + i - 1], -1);
+            Tcl_IncrRefCount(objv[i]);
+        }
+        if (Tcl_GetIndexFromObj(interp, objv[1], subcommands, "subcommand", 0, &sub_cmd_index) != TCL_OK) {
+            fprintf(stderr, "Error: unknown subcommand \"%s\"\n\n", Tcl_GetString(objv[1]));
+            goto usage;
+        }
+    }
+    if (sub_cmd_index == SUBCMD_SEARCH) { ttrek_RegistryUseWebsitesForSearch(); }
+    for (int i = 1; i < first_command; ++i) {
+        if (strcmp(argv[i], "-add-pubreg") == 0) {
+            *ttrek_RegistryPublicOption() = 1;
+        } else if (ttrek_RegistryAddSource(interp, argv[++i]) != TCL_OK) {
             fprintf(stderr, "error: %s\n", Tcl_GetStringResult(interp));
             exitcode = 1;
             goto done;
         }
-        first_command += 2;
     }
+
     if (first_command >= argc) {
         ttrek_HelpSubCmd(interp, 0, NULL);
         goto done;
-    }
-
-    objc = argc - first_command + 1;
-    objv = (Tcl_Obj **) ckalloc(sizeof(Tcl_Obj *) * objc);
-    for (Tcl_Size i = 0; i < objc; i++) {
-        objv[i] = Tcl_NewStringObj(argv[i == 0 ? 0 : first_command + i - 1], -1);
-        Tcl_IncrRefCount(objv[i]);
-    }
-
-    int sub_cmd_index;
-    if (Tcl_GetIndexFromObj(interp, objv[1], subcommands, "subcommand", 0, &sub_cmd_index) != TCL_OK) {
-        fprintf(stderr, "Error: unknown subcommand \"%s\"\n\n", Tcl_GetString(objv[1]));
-        goto usage;
     }
 
     // Init/install/update load telemetry after selecting their registry.

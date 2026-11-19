@@ -6,6 +6,39 @@ These instructions are for release maintainers. To install ttrek as a user,
 see [Install ttrek](install.md). Run the commands below from the repository root;
 relative paths refer to that directory.
 
+## Source release and Debian packages
+
+From a checkout of the release revision, initialize the solver and prepare the
+source archive. Substitute the release tag you are packaging:
+
+```sh
+git submodule update --init
+./bin/prepare-source.py v1.8.0
+```
+
+Attach `dist/ttrek-1.8.0.tar.gz` to the release. The script reads the parent
+revision and its recorded solver commit from Git. The archive includes the
+solver headers, license, and tests. GitHub's automatic tag downloads omit the
+submodule contents. The compiled executable includes the solver at build time.
+
+Ubuntu 26.04 provides the Tcl 9 development package for amd64 and arm64.
+With the build dependencies from `debian/control` installed, build on each
+target architecture from the extracted source, with no network required:
+
+```sh
+mkdir -p build/debian
+cd build/debian
+cp ../../dist/ttrek-1.8.0.tar.gz ttrek_1.8.0.orig.tar.gz
+tar xf ttrek_1.8.0.orig.tar.gz
+cd ttrek-1.8.0
+dpkg-buildpackage -us -uc
+```
+
+Debhelper stages the system-linked binary at `/usr/bin/ttrek`. Install the
+resulting architecture-specific package with `apt install ./ttrek_1.8.0-1_amd64.deb`
+(or the arm64 equivalent) from the output directory. The static release binaries
+use the separate build below.
+
 ## Linux release binaries
 
 `bin/prepare-linux.sh` uses Docker Buildx and the existing build/tests in
@@ -141,8 +174,7 @@ To build the supported release targets on Apple Silicon with minimum macOS 11.0:
 # Or: ttrek run -script prepare-macos-target-11.0
 ```
 
-The wrapper builds macOS ARM64 only; x86_64 and universal2 release builds are
-disabled. With Docker Desktop running, it also builds both ARM64 Linux libc
+The wrapper builds macOS arm64 and x86_64 binaries, then combines them into universal2. With Docker Desktop running, it also builds both ARM64 Linux libc
 targets and runs their runtime matrix natively. Intel Macs are rejected.
 This wrapper always sets `MACOSX_DEPLOYMENT_TARGET=11.0`.
 

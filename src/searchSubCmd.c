@@ -3,7 +3,7 @@
 
 int ttrek_SearchSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[]) {
     Tcl_ArgvInfo options[] = {
-        TTREK_REGISTRY_OPTIONS,
+        TTREK_REGISTRY_OPTIONS_HELP("append an HTTP(S) registry API base URL"),
         {TCL_ARGV_END, NULL, NULL, NULL, NULL, NULL}
     };
     Tcl_Obj **remaining = NULL;
@@ -12,7 +12,7 @@ int ttrek_SearchSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
     Tcl_Obj *matches = Tcl_NewListObj(0, NULL);
     Tcl_IncrRefCount(matches);
     if (objc != 2) {
-        Tcl_SetObjResult(interp, Tcl_NewStringObj("Usage: ttrek search [-registry SOURCE]... [-add-pubreg] QUERY", -1));
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("Usage: ttrek search [-registry URL]... [-add-pubreg] QUERY", -1));
         goto done;
     }
     if (ttrek_RegistrySearch(interp, Tcl_GetString(remaining[1]), matches) != TCL_OK) { goto done; }

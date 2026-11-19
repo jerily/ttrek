@@ -28,6 +28,7 @@ RUN apk add \
 
 COPY docs /var/ttrek/docs
 COPY src /var/ttrek/src
+COPY vendor /var/ttrek/vendor
 COPY cmake /var/ttrek/cmake
 COPY tests /var/ttrek/tests
 COPY CMakeLists.txt /var/ttrek/CMakeLists.txt

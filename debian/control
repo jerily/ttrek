@@ -1,0 +1,18 @@
+Source: ttrek
+Section: devel
+Priority: optional
+Maintainer: Neofytos Dimitriou <neo@jerily.cy>
+Build-Depends: debhelper-compat (= 13), cmake (>= 3.22.1), g++, pkgconf, python3,
+ libssl-dev, libcurl4-openssl-dev, zlib1g-dev, libcjson-dev, libgit2-dev,
+ libarchive-dev, tcl9.0-dev, libtommath-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://ttrek.sh
+
+Package: ttrek
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, build-essential, cmake, curl,
+ git, patch, perl, pkgconf, ca-certificates
+Description: project-local package manager for Tcl toolchains and extensions
+ ttrek resolves dependencies and builds packages in a project environment.
+ It supports declarative build recipes, lock files and reproducible installs.

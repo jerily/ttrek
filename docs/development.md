@@ -5,10 +5,10 @@
 ## Rules and principles
 
 - `ttrek` owns registry access, semantic version policy, USE flags, lockfiles, build scripts, and installation ordering.
-- Dependency solving belongs to the standalone [satdepsolver-cpp](https://github.com/jerily/satdepsolver-cpp) C++17 library. Do not vendor another solver implementation here.
+- Dependency solving belongs to the standalone [satdepsolver-cpp](https://github.com/jerily/satdepsolver-cpp) C++17 library. Its pinned submodule lives in `vendor/satdepsolver-cpp`.
 - Installation and update use the same provider and planner. Their default strategies remain `favored` and `latest`, respectively; `locked` prevents changing a locked candidate when that version is available.
 - Linux release builds remain static. Preserve the existing range syntax, caret behavior (same major), and prerelease policy when changing the provider.
-- Search uses [ttrie](https://github.com/jerily/ttrie) for names and [ttrigrams](https://github.com/jerily/ttrigrams) for descriptions; registry selection and ranking remain in ttrek.
+- Search queries registry websites. The CLI validates responses and merges results from ordered HTTP sources.
 
 ## Dependency preflight
 
@@ -81,7 +81,7 @@ concurrent preparation, changed archives, and the Perl/shasum fallbacks.
 `install/update -keep`, failed and cancelled operations, and root project builds
 and hooks. Cleanup also verifies that symlink targets outside the cache survive.
 
-`search_http` checks website fallback, HTTP response validation, mixed registry
+`search_http` checks website fallback, HTTP response validation, explicit directory rejection, saved registry selection, multi-website
 ranking and precedence, and read-only behavior. `clone` checks semantic versions,
 source archive extraction, output directories, failure cleanup and mirror
 fallback without installing dependencies or running build commands.

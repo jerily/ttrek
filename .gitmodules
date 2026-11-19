@@ -1,0 +1,3 @@
+[submodule "vendor/satdepsolver-cpp"]
+	path = vendor/satdepsolver-cpp
+	url = https://github.com/jerily/satdepsolver-cpp.git

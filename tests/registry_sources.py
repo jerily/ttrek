@@ -185,12 +185,11 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                 assert "private failure" not in failed.stderr
             first_status, first_body = None, None
 
-            # All-local lists support search and the same first-package precedence.
+            # All-local lists retain first-package precedence for resolution.
             earlier = root / "earlier"
             earlier.mkdir()
             recipe(earlier, "shadow", "1.0.0")
             local_options = ("-registry", str(earlier), "-registry", str(local))
-            assert run("search", *local_options, "shadow").stdout == "shadow\tshadow\n"
             dependency("shadow", ">=1.0.0")
             assert "shadow@1.0.0" in run("pretend", *local_options).stdout
             dependency("local-only")
@@ -223,8 +222,6 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             run("update", "-y", "-add-pubreg")
             assert json.loads(lock_file.read_text())["registry"] == "../local registry"
             assert "registries" not in json.loads(lock_file.read_text())
-            assert run("search", "-registry", str(local), "-add-pubreg", "public-only").stdout == \
-                "public-only\tpublic-only\n"
             dependency("shadow", ">=1.0.0")
             assert "shadow@3.0.0" in run("-add-pubreg", "pretend", "-registry", str(local)).stdout
 
@@ -236,7 +233,6 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
             assert json.loads((portable / "ttrek-lock.json").read_text())["registries"] == saved["registries"]
             (portable / "ttrek.json").write_text(json.dumps({"dependencies": {"public-only": "1.0.0"}}))
             assert "public-only@1.0.0" in run("pretend", cwd=portable).stdout
-            assert "public-only" in run("search", "public-only", cwd=portable).stdout
             public_project = root / "public project"
             public_project.mkdir()
             run("init", "-y", "-add-pubreg", cwd=public_project)

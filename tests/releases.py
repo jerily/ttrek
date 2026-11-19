@@ -75,7 +75,7 @@ class Releases(unittest.TestCase):
                 self.assertIn("JOBS=3", arguments)
                 self.assertIn(f"type=local,dest=dist/{target}", arguments)
 
-    def test_macos_11_builds_arm64_only_and_rejects_intel(self):
+    def test_macos_11_builds_both_architectures_on_apple_silicon(self):
         for name, body in {
             "uname": 'echo Darwin',
             "sysctl": 'echo "$TEST_ARM64"',
@@ -91,7 +91,8 @@ class Releases(unittest.TestCase):
         self.env["TEST_ARM64"] = "1"
         self.run_script("prepare-macos-target-11.0.sh")
         self.assertEqual(self.log.read_text().splitlines(), [
-            "prepare-macos.sh arm64 11.0", "prepare-linux.sh arm64 glibc 11.0",
+            "prepare-macos.sh arm64 11.0", "prepare-macos.sh x86_64 11.0",
+            "prepare-universal2.sh  11.0", "prepare-linux.sh arm64 glibc 11.0",
             "prepare-linux.sh arm64 musl 11.0", "test-linux-release.sh arm64 11.0"])
         self.log.unlink()
         self.env["TEST_ARM64"] = "0"

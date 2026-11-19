@@ -21,17 +21,15 @@ Tcl_Size ttrek_RegistryOption(void *, Tcl_Interp *, Tcl_Size, Tcl_Obj *const *, 
 void *ttrek_RegistryOptionHandler(void);
 // The public fallback is resolved after all explicit or saved sources are loaded.
 int *ttrek_RegistryPublicOption(void);
-#define TTREK_REGISTRY_OPTIONS \
-    {TCL_ARGV_GENFUNC, "-registry", ttrek_RegistryOptionHandler(), NULL, "append a registry directory or API URL", NULL}, \
+#define TTREK_REGISTRY_OPTIONS_HELP(source_help) \
+    {TCL_ARGV_GENFUNC, "-registry", ttrek_RegistryOptionHandler(), NULL, source_help, NULL}, \
     {TCL_ARGV_CONSTANT, "-add-pubreg", INT2PTR(1), ttrek_RegistryPublicOption(), "append the default public registry", NULL}
+#define TTREK_REGISTRY_OPTIONS TTREK_REGISTRY_OPTIONS_HELP("append a registry directory or API URL")
 int ttrek_RegistryHasSources(void);
 int ttrek_RegistryIsLocal(void);
-int ttrek_RegistrySourceCount(void);
-const char *ttrek_RegistryLocalDirectory(int index);
-const char *ttrek_RegistryHTTPUrl(int index);
+void ttrek_RegistryUseWebsitesForSearch(void);
 // Select explicit, nearest-project, or default sources without creating state.
 int ttrek_RegistrySelectForRead(Tcl_Interp *interp);
-int ttrek_RegistrySearchIsOwner(Tcl_Interp *interp, int source, const char *name, int *owns);
 void ttrek_RegistrySaveConfiguration(cJSON *lock);
 int ttrek_RegistryLoadFromLock(Tcl_Interp *interp, Tcl_Obj *project, const cJSON *lock);
 const char *ttrek_RegistryDefaultDirectory(void);

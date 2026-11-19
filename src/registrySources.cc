@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <map>
@@ -23,6 +24,7 @@ struct Source {
 std::vector<Source> sources;
 std::map<std::string, size_t> owners;
 bool implicit_source = false;
+bool websites_only = false;
 int include_public = 0;
 
 void require(bool condition, const std::string &message) {
@@ -104,12 +106,19 @@ void warn_registry_freshness(const std::string &location) {
 void add_source(const std::string &argument, const fs::path &project = {}) {
     require(!argument.empty(), "-registry requires a directory or API URL");
     const bool http = is_url(argument);
+    if (websites_only && !http) {
+        // Saved registries can contain directories for package installation.
+        if (!project.empty()) { return; }
+        throw std::runtime_error("ttrek search -registry requires an HTTP(S) registry API URL supporting GET BASE/search?q=QUERY");
+    }
     const auto location = http ? validate_url(argument) : fs::canonical(project / argument).string();
-    if (!http) { require(fs::is_directory(location), "Registry is not a directory: " + location); }
+    if (!http) {
+        require(fs::is_directory(location), "Registry is not a directory: " + location);
+        warn_registry_freshness(location);
+    }
     sources.push_back({location, http ? location : argument, http});
     implicit_source = false;
     owners.clear();
-    if (!http) { warn_registry_freshness(location); }
 }
 
 int read_source(const Source &source, const std::string &suffix, Tcl_DString *result) {
@@ -122,6 +131,115 @@ int read_source(const Source &source, const std::string &suffix, Tcl_DString *re
         return status;
     }
     return ttrek_RegistryReadLocal(source.location.c_str(), (std::string(REGISTRY_URL) + "/" + suffix).c_str(), result);
+}
+
+bool valid_component(const std::string &name) {
+    return !name.empty() && name != "." && name != ".." &&
+        name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") == std::string::npos;
+}
+
+std::string search_text(std::string text) {
+    for (char &ch : text) { if (ch >= 'A' && ch <= 'Z') { ch += 'a' - 'A'; } }
+    return text;
+}
+
+struct SearchEntry {
+    std::string name;
+    std::string description;
+    int tier = 8;
+    int distance = 0;
+    double coverage = 0;
+    size_t unmatched = 0;
+    size_t source = 0;
+    std::string languages = {};
+};
+
+bool search_order(const SearchEntry &a, const SearchEntry &b) {
+    if (a.tier != b.tier) { return a.tier < b.tier; }
+    if (a.distance != b.distance) { return a.distance < b.distance; }
+    if (a.coverage != b.coverage) { return a.coverage > b.coverage; }
+    if (a.unmatched != b.unmatched) { return a.unmatched < b.unmatched; }
+    return a.name < b.name;
+}
+
+void collect_remote_matches(const std::string &base, size_t source, const std::string &query,
+                            std::vector<SearchEntry> &found, std::set<std::string> &claimed) {
+    std::unique_ptr<char, decltype(&curl_free)> encoded(curl_easy_escape(nullptr, query.c_str(), 0), curl_free);
+    require(encoded != nullptr, "Cannot encode search query");
+    const auto url = base + "/search?q=" + encoded.get();
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    int status = ttrek_RegistryReadHTTP(url.c_str(), &data);
+    std::string body = Tcl_DStringValue(&data);
+    Tcl_DStringFree(&data);
+    require(status != TTREK_REGISTRY_NOT_FOUND, "Registry does not provide a search endpoint: " + base);
+    require(status == TCL_OK, body);
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> result(
+        cJSON_ParseWithLengthOpts(body.c_str(), body.size() + 1, nullptr, 1), cJSON_Delete);
+    require(cJSON_IsArray(result.get()), "Invalid registry search response");
+    const std::vector<std::string> kinds{"exact", "prefix", "substring", "description", "fuzzy", "description-fuzzy"};
+    const cJSON *row;
+    cJSON_ArrayForEach(row, result.get()) {
+        auto *name = cJSON_GetObjectItemCaseSensitive(row, "name");
+        auto *description = cJSON_GetObjectItemCaseSensitive(row, "description");
+        auto *kind = cJSON_GetObjectItemCaseSensitive(row, "match");
+        auto *distance = cJSON_GetObjectItemCaseSensitive(row, "distance");
+        auto *coverage = cJSON_GetObjectItemCaseSensitive(row, "coverage");
+        require(cJSON_IsString(name) && valid_component(name->valuestring) &&
+                cJSON_IsString(description) && cJSON_IsString(kind), "Invalid registry search result");
+        std::string text = description->valuestring;
+        require(text.size() <= 4096 &&
+                std::none_of(text.begin(), text.end(), [](unsigned char ch) { return ch < 32 || ch == 127; }),
+                "Invalid registry search description");
+        auto tier = std::find(kinds.begin(), kinds.end(), kind->valuestring);
+        require(tier != kinds.end(), "Invalid registry search match type");
+        require(!distance || (cJSON_IsNumber(distance) && distance->valuedouble >= 0 &&
+                distance->valuedouble <= 2 && distance->valuedouble == distance->valueint),
+                "Invalid registry search distance");
+        require(!coverage || (cJSON_IsNumber(coverage) && std::isfinite(coverage->valuedouble) &&
+                coverage->valuedouble >= 0 && coverage->valuedouble <= 1), "Invalid registry search coverage");
+        if (!claimed.insert(name->valuestring).second) { continue; }
+        SearchEntry entry{name->valuestring, text};
+        const auto *languages = cJSON_GetObjectItemCaseSensitive(row, "languages");
+        require(ttrek_LanguagesValid(languages), "Invalid registry search languages");
+        Tcl_Obj *label = ttrek_LanguagesLabel(languages);
+        Tcl_IncrRefCount(label);
+        entry.languages = Tcl_GetString(label);
+        Tcl_DecrRefCount(label);
+        entry.tier = tier - kinds.begin();
+        if (entry.tier >= 4) { ++entry.tier; }
+        // Keep the HTTP match vocabulary compatible with older clients.
+        // New servers identify tag hits with an optional field discriminator.
+        auto *field = cJSON_GetObjectItemCaseSensitive(row, "field");
+        if (field) {
+            require(cJSON_IsString(field) && std::string(field->valuestring) == "tags" &&
+                    (entry.tier == 3 || entry.tier == 6), "Invalid registry search field");
+            ++entry.tier;
+        }
+        entry.distance = distance ? distance->valueint : 0;
+        entry.coverage = coverage ? coverage->valuedouble : 0;
+        if (entry.tier == 1 || entry.tier == 2) {
+            require(entry.name.size() >= query.size(), "Invalid registry search name match");
+            entry.unmatched = entry.name.size() - query.size();
+        }
+        entry.source = source;
+        found.push_back(std::move(entry));
+    }
+}
+
+bool earlier_website_owns(const SearchEntry &entry) {
+    // A package on an earlier website shadows later copies even if it did not match there.
+    for (size_t i = 0; i < entry.source; ++i) {
+        Tcl_DString data;
+        Tcl_DStringInit(&data);
+        int status = read_source(sources[i], entry.name, &data);
+        std::string error = Tcl_DStringValue(&data);
+        Tcl_DStringFree(&data);
+        if (status == TTREK_REGISTRY_NOT_FOUND) { continue; }
+        require(status == TCL_OK, error);
+        return true;
+    }
+    return false;
 }
 
 std::string missing_package(const std::string &name) {
@@ -147,7 +265,8 @@ extern "C" int ttrek_RegistryAddSource(Tcl_Interp *interp, const char *source) t
 extern "C" Tcl_Size ttrek_RegistryOption(void *, Tcl_Interp *interp, Tcl_Size objc,
                                          Tcl_Obj *const *objv, void *) {
     if (objc == 0) {
-        Tcl_SetObjResult(interp, Tcl_NewStringObj("-registry requires a directory or API URL", -1));
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(websites_only ? "ttrek search -registry requires an HTTP(S) registry API URL" :
+            "-registry requires a directory or API URL", -1));
         return -1;
     }
     int status = ttrek_RegistryAddSource(interp, Tcl_GetString(objv[0]));
@@ -165,38 +284,7 @@ extern "C" int ttrek_RegistryHasSources(void) { return !sources.empty(); }
 extern "C" int ttrek_RegistryIsLocal(void) {
     return !sources.empty() && std::none_of(sources.begin(), sources.end(), [](const Source &s) { return s.http; });
 }
-extern "C" int ttrek_RegistrySourceCount(void) { return static_cast<int>(sources.size()); }
-extern "C" const char *ttrek_RegistryLocalDirectory(int index) {
-    return sources.at(index).http ? nullptr : sources.at(index).location.c_str();
-}
-extern "C" const char *ttrek_RegistryHTTPUrl(int index) {
-    return sources.at(index).http ? sources.at(index).location.c_str() : nullptr;
-}
-
-extern "C" int ttrek_RegistrySearchIsOwner(Tcl_Interp *interp, int source, const char *name, int *owns) try {
-    *owns = 1;
-    // Search responses contain matches only. A nonmatching package in an earlier
-    // registry must still hide the same package in a later registry.
-    for (int i = 0; i < source; ++i) {
-        if (!sources[i].http) {
-            if (!fs::exists(sources[i].location / fs::path(name))) { continue; }
-        } else {
-            Tcl_DString data;
-            Tcl_DStringInit(&data);
-            int status = read_source(sources[i], name, &data);
-            std::string error = Tcl_DStringValue(&data);
-            Tcl_DStringFree(&data);
-            if (status == TTREK_REGISTRY_NOT_FOUND) { continue; }
-            require(status == TCL_OK, error);
-        }
-        *owns = 0;
-        break;
-    }
-    return TCL_OK;
-} catch (const std::exception &error) {
-    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
-    return TCL_ERROR;
-}
+extern "C" void ttrek_RegistryUseWebsitesForSearch(void) { websites_only = true; }
 
 extern "C" const char *ttrek_RegistryDefaultDirectory(void) {
     const char *home = std::getenv("HOME");
@@ -205,6 +293,14 @@ extern "C" const char *ttrek_RegistryDefaultDirectory(void) {
 }
 
 extern "C" int ttrek_RegistryUseDefault(Tcl_Interp *interp) try {
+    if (websites_only) {
+        const auto public_url = std::string(REGISTRY_URL);
+        if (sources.empty() || (include_public && std::none_of(sources.begin(), sources.end(),
+                [&](const Source &s) { return s.location == public_url; }))) {
+            add_source(public_url);
+        }
+        return TCL_OK;
+    }
     const bool append_public = include_public && std::none_of(sources.begin(), sources.end(),
         [](const Source &source) { return source.public_registry; });
     if (!sources.empty() && !append_public) { return TCL_OK; }
@@ -288,9 +384,7 @@ extern "C" int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result)
     do {
         auto end = suffix.find('/', start);
         auto part = suffix.substr(start, end == std::string::npos ? end : end - start);
-        require(!part.empty() && part != "." && part != ".." && part.find_first_not_of(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-") == std::string::npos,
-                "Invalid registry path component: " + part);
+        require(valid_component(part), "Invalid registry path component: " + part);
         ++count;
         if (end == std::string::npos) { break; }
         start = end + 1;
@@ -324,5 +418,33 @@ extern "C" int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result)
 } catch (const std::exception &error) {
     Tcl_DStringSetLength(result, 0);
     Tcl_DStringAppend(result, error.what(), -1);
+    return TCL_ERROR;
+}
+
+extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_Obj *matches) try {
+    std::string normalized = search_text(query);
+    require(normalized.size() <= 255 && normalized.find_first_not_of(
+        "abcdefghijklmnopqrstuvwxyz0123456789._+- ") == std::string::npos,
+        "Search query must contain 1 to 255 ASCII letters, digits, spaces, '.', '_', '+' or '-'");
+    auto first = normalized.find_first_not_of(' ');
+    require(first != std::string::npos, "Search query must not be empty");
+    normalized = normalized.substr(first, normalized.find_last_not_of(' ') - first + 1);
+    require(normalized != "." && normalized != "..", "Invalid search query");
+    if (ttrek_RegistrySelectForRead(interp) != TCL_OK) { return TCL_ERROR; }
+    std::vector<SearchEntry> found;
+    std::set<std::string> claimed;
+    for (size_t source = 0; source < sources.size(); ++source) {
+        collect_remote_matches(sources[source].location, source, normalized, found, claimed);
+    }
+    std::sort(found.begin(), found.end(), search_order);
+    for (const auto &entry : found) {
+        if (earlier_website_owns(entry)) { continue; }
+        Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1),
+                            Tcl_NewStringObj(entry.languages.c_str(), -1)};
+        if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(3, fields)) != TCL_OK) { return TCL_ERROR; }
+    }
+    return TCL_OK;
+} catch (const std::exception &error) {
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
     return TCL_ERROR;
 }

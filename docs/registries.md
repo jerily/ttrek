@@ -79,12 +79,13 @@ versions to dependencies, and `GET BASE/PACKAGE/VERSION/OS/ARCH` returns the ins
 recipe. Authentication is not implemented. URLs cannot contain credentials,
 queries or fragments. Redirects require configuring the final API URL. Explicit
 registry lists send no telemetry. Source archive downloads continue to use recipe
-URLs. Search supports ordered local and HTTP sources. HTTP search uses
+URLs. For search, each explicit `-registry` must be an HTTP(S) API base URL.
+Search skips saved directory entries and queries websites in order using
 `GET BASE/search?q=QUERY`, returning an array of objects containing `name`,
 `description` and `match` (exact, prefix, substring, description, fuzzy or
 description-fuzzy), with optional numeric `distance` and `coverage` fields.
-Without a local public registry, search uses the ttrek.sh endpoint automatically.
-`clone` uses the same registry selection to fetch a package's source archive.
+When no HTTP(S) sources are selected, search uses the ttrek.sh endpoint.
+`clone` uses the configured registries to fetch a package's source archive.
 
 ## Sync the local registry
 

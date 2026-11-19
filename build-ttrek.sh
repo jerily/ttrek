@@ -45,9 +45,6 @@ CURL_VERSION=8.23.0
 TCL_VERSION=9.1.0
 LIBGIT2_VERSION=1.9.7
 LIBARCHIVE_VERSION=3.8.11
-SATDEPSOLVER_VERSION=0.6.0
-TTRIE_VERSION=0.1.1
-TTRIGRAMS_VERSION=0.1.0
 
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 BUILD_DIR=$(cd "$BUILD_DIR" && pwd)
@@ -130,61 +127,30 @@ if [[ ${TTREK_SKIP_DEPS:-0} != 1 ]]; then
         -DENABLE_PCREPOSIX=OFF -DENABLE_PCRE2POSIX=OFF -DENABLE_CNG=OFF -DENABLE_OPENSSL=ON
 fi
 
-if [[ -z ${SATDEPSOLVER_SOURCE_DIR:-} ]]; then
-    fetch_source "satdepsolver-$SATDEPSOLVER_VERSION" "https://github.com/jerily/satdepsolver-cpp/archive/refs/tags/v$SATDEPSOLVER_VERSION.tar.gz"
-    SATDEPSOLVER_SOURCE_DIR="$SOURCE_DIR/satdepsolver-$SATDEPSOLVER_VERSION"
-fi
-
-SATDEPSOLVER_SOURCE_DIR=$(cd "$SATDEPSOLVER_SOURCE_DIR" && pwd)
-# Local-checkout and pinned-source builds must not reuse each other's CMake cache.
-SOLVER_SOURCE_KEY=$(printf '%s' "$SATDEPSOLVER_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
-SOLVER_BUILD_DIR="$BUILD_DIR/dependencies/satdepsolver-$SOLVER_SOURCE_KEY"
-
-cmake_configure -S "$SATDEPSOLVER_SOURCE_DIR" -B "$SOLVER_BUILD_DIR" \
-    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DSATDEPSOLVER_BUILD_TESTS=ON
-"$CMAKE" --build "$SOLVER_BUILD_DIR" --parallel "$JOBS"
-"$CTEST" --test-dir "$SOLVER_BUILD_DIR" --output-on-failure
-"$CMAKE" --install "$SOLVER_BUILD_DIR"
-
-if [[ -z ${TTRIE_SOURCE_DIR:-} ]]; then
-    fetch_source "ttrie-$TTRIE_VERSION" "https://github.com/jerily/ttrie/releases/download/v$TTRIE_VERSION/ttrie-$TTRIE_VERSION.tar.gz"
-    TTRIE_SOURCE_DIR="$SOURCE_DIR/ttrie-$TTRIE_VERSION"
-fi
-TTRIE_SOURCE_DIR=$(cd "$TTRIE_SOURCE_DIR" && pwd)
-TRIE_SOURCE_KEY=$(printf '%s' "$TTRIE_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
-TRIE_BUILD_DIR="$BUILD_DIR/dependencies/ttrie-$TRIE_SOURCE_KEY"
-cmake_configure -S "$TTRIE_SOURCE_DIR" -B "$TRIE_BUILD_DIR" \
-    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIE_BUILD_TCL=OFF -DBUILD_TESTING=ON
-"$CMAKE" --build "$TRIE_BUILD_DIR" --parallel "$JOBS"
-"$CTEST" --test-dir "$TRIE_BUILD_DIR" --output-on-failure
-"$CMAKE" --install "$TRIE_BUILD_DIR"
-
-if [[ -z ${TTRIGRAMS_SOURCE_DIR:-} ]]; then
-    fetch_source "ttrigrams-$TTRIGRAMS_VERSION" "https://github.com/jerily/ttrigrams/releases/download/v$TTRIGRAMS_VERSION/ttrigrams-$TTRIGRAMS_VERSION.tar.gz"
-    TTRIGRAMS_SOURCE_DIR="$SOURCE_DIR/ttrigrams-$TTRIGRAMS_VERSION"
-fi
-TTRIGRAMS_SOURCE_DIR=$(cd "$TTRIGRAMS_SOURCE_DIR" && pwd)
-TRIGRAM_SOURCE_KEY=$(printf '%s' "$TTRIGRAMS_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
-TRIGRAM_BUILD_DIR="$BUILD_DIR/dependencies/ttrigrams-$TRIGRAM_SOURCE_KEY"
-cmake_configure -S "$TTRIGRAMS_SOURCE_DIR" -B "$TRIGRAM_BUILD_DIR" \
-    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DTTRIGRAMS_BUILD_TCL=OFF -DBUILD_TESTING=ON
-"$CMAKE" --build "$TRIGRAM_BUILD_DIR" --parallel "$JOBS"
-"$CTEST" --test-dir "$TRIGRAM_BUILD_DIR" --output-on-failure
-"$CMAKE" --install "$TRIGRAM_BUILD_DIR"
-
 # The release image caches this layer separately from CLI sources and tests.
 if [[ ${TTREK_DEPS_ONLY:-0} == 1 ]]; then
     exit 0
 fi
 
+# Git checkouts can initialize the pinned submodule. Release tarballs include it.
+SATDEPSOLVER_SOURCE_DIR=${SATDEPSOLVER_SOURCE_DIR:-"$SCRIPT_DIR/vendor/satdepsolver-cpp"}
+if [[ ! -f "$SATDEPSOLVER_SOURCE_DIR/CMakeLists.txt" &&
+      $SATDEPSOLVER_SOURCE_DIR == "$SCRIPT_DIR/vendor/satdepsolver-cpp" && -e "$SCRIPT_DIR/.git" ]]; then
+    git -C "$SCRIPT_DIR" submodule update --init -- vendor/satdepsolver-cpp
+fi
+SATDEPSOLVER_SOURCE_DIR=$(cd "$SATDEPSOLVER_SOURCE_DIR" && pwd)
+SOLVER_SOURCE_KEY=$(printf '%s' "$SATDEPSOLVER_SOURCE_DIR" | cksum | cut -d ' ' -f 1)
+SOLVER_BUILD_DIR="$BUILD_DIR/dependencies/satdepsolver-$SOLVER_SOURCE_KEY"
+cmake_configure -S "$SATDEPSOLVER_SOURCE_DIR" -B "$SOLVER_BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DSATDEPSOLVER_BUILD_TESTS=ON
+"$CMAKE" --build "$SOLVER_BUILD_DIR" --parallel "$JOBS"
+"$CTEST" --test-dir "$SOLVER_BUILD_DIR" --output-on-failure
+
 # Clear old dependency paths (including Tcl 8.6 and lib64 OpenSSL) on reruns.
 cmake_configure -S "$SCRIPT_DIR" -B "$BUILD_DIR" -U '*_LIBRARY' -U OPENSSL_LIBRARIES \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DBUILD_TESTING=ON -DSATDEPSOLVER_SOURCE_DIR= \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DBUILD_TESTING=ON -DUSE_SYSTEM_LIBS=OFF \
     -DPython3_EXECUTABLE="$(command -v "$PYTHON")" \
-    -Dsatdepsolver_DIR="$INSTALL_DIR/lib/cmake/satdepsolver"
+    -DSATDEPSOLVER_SOURCE_DIR="$SATDEPSOLVER_SOURCE_DIR"
 "$CMAKE" --build "$BUILD_DIR" --parallel "$JOBS"
 "$CTEST" --test-dir "$BUILD_DIR" --output-on-failure

@@ -97,6 +97,7 @@ with tempfile.TemporaryDirectory(prefix="ttrek file scripts ' ") as temporary:
     # The real release aliases still call the original bin scripts with the
     # same architecture/environment presets. Stub the scripts to avoid releases.
     aliases = {
+        "prepare-source": ("prepare-source.py", []),
         "prepare-linux-amd64-glibc": ("prepare-linux.sh", ["amd64", "glibc"]),
         "prepare-linux-arm64-glibc": ("prepare-linux.sh", ["arm64", "glibc"]),
         "prepare-linux-amd64-musl": ("prepare-linux.sh", ["amd64", "musl"]),
