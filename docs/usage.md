@@ -148,34 +148,27 @@ registry directory. This uses local metadata; it does not fetch during resolutio
 
 ## Search recipes
 
-Search uses the synced public registry when available and the ttrek.sh search
-endpoint otherwise. Run `ttrek sync` to enable offline search:
+Search queries the registry website, including when you have a synced checkout.
+The default is `https://ttrek.sh/registry`. To search a different website, use
+its registry API base URL:
 
 ```sh
 ttrek search tcl
-ttrek search web
 ttrek search 'web server'
-ttrek search -registry /path/to/ttrek-registry tcll
+ttrek search -registry https://registry.example.org/api tcll
 ```
 
-Prints `name<TAB>description`. Ranking is exact name, name prefix, name substring,
-literal description, name typo, then description typo. Ties prefer fewer edits,
-greater query-trigram coverage, less unmatched name text, then alphabetical name.
-`web` finds `twebserver`; short queries allow one edit, longer queries two.
-Matching ignores ASCII case. Queries accept 1–255 ASCII letters, digits, spaces,
-`.`, `_`, `+` or `-`, excluding empty queries, `.` and `..`.
+Search works outside a project. Each explicit `-registry` must be an HTTP(S)
+URL supporting `GET BASE/search?q=QUERY`. A directory argument produces an error.
+Explicit websites take precedence over the nearest project's saved list.
+Directory entries in that saved list are skipped. If there
+are no HTTP(S) entries, search uses ttrek.sh. `-add-pubreg` appends the
+public website to the selected websites.
 
-Search uses `-registry`, the nearest project's saved registry, or an existing
-existing `~/.local/ttrek-registry`, then the website, in that order. It works outside a project and indexes
-names and descriptions from every `version/ttrek.json`, once per package in the
-results. Missing descriptions are allowed; description matches display the
-matching text, otherwise the first nonempty description in alphabetical order.
-Both local indexes are built only when `search` runs. HTTP registries supply
-matches through `GET BASE/search?q=QUERY`. Results are ranked together, with
-earlier registries taking precedence for duplicate packages. No telemetry,
-update checks or project writes occur.
-Description suggestions require a shared trigram and pass a Levenshtein substring
-check; queries below three characters match descriptions literally.
+Queries accept 1–255 ASCII letters, digits, spaces, `.`, `_`, `+` or `-`,
+excluding empty queries, `.` and `..`. Each result shows a package name,
+optional language labels, and its description. Results from multiple websites
+are ranked together, with earlier websites taking precedence for duplicates.
 
 ## More commands
 

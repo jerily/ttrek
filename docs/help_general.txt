@@ -5,9 +5,11 @@ search sources in order. Directories contain package/version/ttrek.json and
 adjacent .diff patches. The first source containing a package supplies all its
 versions and recipes; only an absent package advances to another source.
 Source downloads still use recipe URLs. Options also work after init, install,
-update, pretend, gen-script, clone or search. init saves the ordered list in ttrek-lock.json;
-other commands use it for that invocation. Explicit options replace saved or
-default sources. Relative saved paths use the project directory.
+update, pretend, gen-script, clone or search. init saves the ordered list in
+ttrek-lock.json. Explicit options on other commands override the saved or default
+sources for one invocation. Relative saved paths use the project directory.
+For search, -registry requires an HTTP(S) registry API URL. Search skips saved
+directories and queries ttrek.sh when there is no configured website.
 -add-pubreg appends the public default after the explicit or saved sources,
 regardless of option placement: the synced ~/.local/ttrek-registry when available,
 otherwise https://ttrek.sh/registry. init saves this as a portable public entry.

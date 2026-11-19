@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.7.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.8.0 LANGUAGES C CXX)
 
+option(USE_SYSTEM_LIBS "Link against system development libraries" OFF)
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
 
 if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
@@ -15,8 +16,6 @@ set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
-set(ZLIB_USE_STATIC_LIBS "ON")
-set(BUILD_SHARED_LIBS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -68,21 +67,14 @@ else()
     message(STATUS "cppcheck: is not enabled")
 endif()
 
-#add_library(foo STATIC IMPORTED)
-#
-## Set the properties of the imported library target
-#set_target_properties(foo PROPERTIES
-#    IMPORTED_LOCATION ${TCL_LIBRARY} # The full path to the library file
-#    INTERFACE_INCLUDE_DIRECTORIES "${TCL_INCLUDE_PATH}" # The include directories for the library
-#    #IMPORTED_LINK_INTERFACE_LIBRARIES "tcl" # The link libraries for the library
-#    IMPORTED_NO_SONAME TRUE # Avoid linking to the library and include it in the executable
-#)
-set(SATDEPSOLVER_SOURCE_DIR "" CACHE PATH "Optional satdepsolver source checkout")
-if(SATDEPSOLVER_SOURCE_DIR)
-    add_subdirectory("${SATDEPSOLVER_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/satdepsolver")
-else()
-    find_package(satdepsolver 0.6 CONFIG REQUIRED)
+set(SATDEPSOLVER_SOURCE_DIR "" CACHE PATH "Override the vendored satdepsolver source directory")
+if(NOT SATDEPSOLVER_SOURCE_DIR)
+    set(SATDEPSOLVER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/satdepsolver-cpp")
 endif()
+if(NOT EXISTS "${SATDEPSOLVER_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Missing satdepsolver sources. Use the complete release tarball or run git submodule update --init.")
+endif()
+add_subdirectory("${SATDEPSOLVER_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/satdepsolver" EXCLUDE_FROM_ALL)
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install_common_dynamic.sh.h
@@ -205,24 +197,38 @@ add_executable(${TARGET}
         src/ttrek_scripts.h
 )
 
-message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-find_library(OPENSSL_SSL_LIBRARY NAMES libssl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
-find_library(OPENSSL_CRYPTO_LIBRARY NAMES libcrypto.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH)
-set(OPENSSL_LIBRARIES "${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}")
-find_library(CURL_LIBRARY NAMES libcurl.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(CJSON_LIBRARY NAMES libcjson.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(ZLIB_LIBRARY NAMES libz.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(TCL_LIBRARY NAMES libtcl9.1.a libtcl9.0.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(GIT2_LIBRARY NAMES libgit2.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-find_library(ARCHIVE_LIBRARY NAMES libarchive.a PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
-
-message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
-target_link_libraries(${TARGET} PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY} ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
-find_package(ttrie 0.1 CONFIG REQUIRED)
-find_package(ttrigrams 0.1 CONFIG REQUIRED)
-target_link_libraries(${TARGET} PRIVATE ttrie::core ttrigrams::core)
-if (NOT APPLE)
+add_library(ttrek_dependencies INTERFACE)
+target_link_libraries(ttrek_dependencies INTERFACE satdepsolver::satdepsolver)
+if(USE_SYSTEM_LIBS)
+    find_package(OpenSSL REQUIRED)
+    find_package(CURL REQUIRED)
+    find_package(ZLIB REQUIRED)
+    find_package(LibArchive REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GIT2 REQUIRED IMPORTED_TARGET libgit2)
+    pkg_check_modules(CJSON REQUIRED IMPORTED_TARGET libcjson)
+    pkg_search_module(TCL REQUIRED IMPORTED_TARGET tcl>=9.0 tcl9.0 tcl9.1)
+    target_link_libraries(ttrek_dependencies INTERFACE PkgConfig::TCL PkgConfig::CJSON
+        PkgConfig::GIT2 LibArchive::LibArchive CURL::libcurl OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB)
+else()
+    set(static_libdir "${CMAKE_INSTALL_PREFIX}/lib")
+    find_library(TTREK_TCL_LIBRARY NAMES libtcl9.1.a libtcl9.0.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_CJSON_LIBRARY NAMES libcjson.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_GIT2_LIBRARY NAMES libgit2.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_ARCHIVE_LIBRARY NAMES libarchive.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_CURL_LIBRARY NAMES libcurl.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_SSL_LIBRARY NAMES libssl.a PATHS "${static_libdir}" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_CRYPTO_LIBRARY NAMES libcrypto.a PATHS "${static_libdir}" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH REQUIRED)
+    find_library(TTREK_ZLIB_LIBRARY NAMES libz.a PATHS "${static_libdir}" NO_DEFAULT_PATH REQUIRED)
+    target_include_directories(ttrek_dependencies INTERFACE "${CMAKE_INSTALL_PREFIX}/include")
+    target_link_libraries(ttrek_dependencies INTERFACE ${TTREK_TCL_LIBRARY} ${TTREK_CJSON_LIBRARY}
+        ${TTREK_GIT2_LIBRARY} ${TTREK_ARCHIVE_LIBRARY} ${TTREK_CURL_LIBRARY} ${TTREK_SSL_LIBRARY}
+        ${TTREK_CRYPTO_LIBRARY} ${TTREK_ZLIB_LIBRARY})
+endif()
+target_link_libraries(ttrek_dependencies INTERFACE ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
+target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(${TARGET} PRIVATE ttrek_dependencies)
+if (NOT APPLE AND NOT USE_SYSTEM_LIBS)
     if(${CMAKE_BUILD_TYPE} MATCHES "Release*")
         include(CheckSymbolExists)
         check_symbol_exists(__GLIBC__ "features.h" TTREK_USE_GLIBC)
@@ -236,17 +242,12 @@ if (NOT APPLE)
     endif()
 endif()
 
-install(TARGETS ${TARGET}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${TARGET}${PROJECT_VERSION}
-)
+install(TARGETS ${TARGET} RUNTIME DESTINATION bin)
 
 include(CTest)
 if(BUILD_TESTING)
     add_executable(test_solver src/sat-solver/tests/solve.cc src/semver/semver.c)
-    target_include_directories(test_solver PRIVATE "${CMAKE_INSTALL_PREFIX}/include")
-    target_link_libraries(test_solver PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
+    target_link_libraries(test_solver PRIVATE ttrek_dependencies)
     target_compile_options(test_solver PRIVATE -UNDEBUG)
     target_compile_definitions(test_solver PRIVATE SOLVER_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/src/sat-solver/tests/fixtures/registry.json")
     add_test(NAME package_solver COMMAND test_solver)
@@ -280,10 +281,8 @@ if(BUILD_TESTING)
     # Debug diagnostics must also leave generated stdout scripts intact.
     target_compile_definitions(ttrek_fixture PRIVATE DEBUG)
     target_compile_definitions(ttrek_fixture PRIVATE TTREK_TEST_RELEASES)
-    target_include_directories(ttrek_fixture PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_INSTALL_PREFIX}/include")
-    target_link_libraries(ttrek_fixture PRIVATE satdepsolver::satdepsolver ${TCL_LIBRARY} ${CJSON_LIBRARY}
-        ${GIT2_LIBRARY} ${ARCHIVE_LIBRARY} ${CURL_LIBRARY} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARY} ${EXTRA_LIBS} ${CMAKE_DL_LIBS})
-    target_link_libraries(ttrek_fixture PRIVATE ttrie::core ttrigrams::core)
+    target_include_directories(ttrek_fixture PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
+    target_link_libraries(ttrek_fixture PRIVATE ttrek_dependencies)
     add_test(NAME version COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/version.py
         $<TARGET_FILE:ttrek> $<TARGET_FILE:ttrek_fixture> $<CONFIG>)
     add_test(NAME telemetry COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/telemetry.py
@@ -293,8 +292,6 @@ if(BUILD_TESTING)
         add_test(NAME https COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/https.py
             $<TARGET_FILE:ttrek> "${TTREK_TEST_OPENSSL}" $<TARGET_FILE:ttrek_fixture>)
     endif()
-    add_test(NAME search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search.py
-        $<TARGET_FILE:ttrek>)
     add_test(NAME languages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/languages.py
         $<TARGET_FILE:ttrek>)
     add_test(NAME search_http COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/search_http.py
