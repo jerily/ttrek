@@ -21,33 +21,26 @@ revision and its recorded solver commit from Git. The archive includes the
 solver headers, license, and tests. GitHub's automatic tag downloads omit the
 submodule contents. The compiled executable includes the solver at build time.
 
-Ubuntu 26.04 provides the Tcl 9 development package for amd64 and arm64.
-With the build dependencies from `debian/control` installed, build on each
-target architecture from the extracted source, with no network required:
+For the Ubuntu PPA, set the package version and target series in
+`debian/changelog`. With the solver submodule initialized and `dpkg-dev`
+installed, prepare an unsigned source upload from the repository root:
 
 ```sh
-mkdir -p build/debian
-cd build/debian
-cp ../../dist/ttrek-1.8.0.tar.gz ttrek_1.8.0.orig.tar.gz
-tar xf ttrek_1.8.0.orig.tar.gz
-cd ttrek-1.8.0
-dpkg-buildpackage -us -uc
+./bin/prepare-ubuntu-package.sh
 ```
 
-Debhelper stages the system-linked binary at `/usr/bin/ttrek`. Install the
-resulting architecture-specific package with `apt install ./ttrek_1.8.0-1~ppa1_amd64.deb`
-(or the arm64 equivalent) from the output directory. The static release binaries
-use the separate build below.
+The command combines the matching upstream tag with this checkout's
+`debian/` directory. It prints the path to the new `_source.changes` file
+under `build/ppa-v<upstream-version>/`. For a packaging-only update such as
+`1.8.0-1~ppa2`, use the same upstream tag and add a new changelog entry.
+Sign the printed changes file with `debsign`, then upload it with
+`dput ppa:jerily/ttrek <path-to-source.changes>`.
 
-For the first Ubuntu 26.04 upload to `ppa:jerily/ttrek`, the package version
-and target series are set in `debian/changelog`. From the extracted source
-directory, build and sign the source package with your Launchpad-registered
-OpenPGP key. Upload it when ready:
-
-```sh
-debuild -S -sa
-dput ppa:jerily/ttrek '../ttrek_1.8.0-1~ppa1_source.changes'
-```
+To build a local binary package on Ubuntu 26.04 amd64 or arm64, install the
+build dependencies in `debian/control` and run `dpkg-buildpackage -b -us -uc`
+inside the generated `ttrek-<upstream-version>/` directory. The Ubuntu package
+installs a launcher at `/usr/bin/ttrek` that clears `LD_LIBRARY_PATH` before
+starting the system-linked executable in `/usr/libexec/ttrek/`.
 
 ## Linux release binaries
 

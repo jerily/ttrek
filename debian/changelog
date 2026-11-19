@@ -1,3 +1,9 @@
+ttrek (1.8.0-1~ppa2) resolute; urgency=medium
+
+  * Start ttrek with system libraries even inside an active project environment.
+
+ -- Neofytos Dimitriou <neo@jerily.cy>  Thu, 19 Nov 2026 07:54:27 -0500
+
 ttrek (1.8.0-1~ppa1) resolute; urgency=medium
 
   * Package ttrek 1.8.0 for Ubuntu 26.04 LTS.
