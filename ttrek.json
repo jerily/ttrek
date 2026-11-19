@@ -1,6 +1,6 @@
 {
   "name": "ttrek",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "scripts": {
     "prepare-linux-amd64-glibc": {
       "file": "bin/prepare-linux.sh",
