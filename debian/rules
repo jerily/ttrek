@@ -6,3 +6,8 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 override_dh_auto_configure:
 	dh_auto_configure -- -DUSE_SYSTEM_LIBS=ON -DBUILD_TESTING=OFF
+
+execute_after_dh_auto_install:
+	install -d debian/ttrek/usr/libexec/ttrek
+	mv debian/ttrek/usr/bin/ttrek debian/ttrek/usr/libexec/ttrek/ttrek
+	install -m 0755 debian/ttrek-launcher debian/ttrek/usr/bin/ttrek
