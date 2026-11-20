@@ -2,7 +2,7 @@ Source: ttrek
 Section: devel
 Priority: optional
 Maintainer: Neofytos Dimitriou <neo@jerily.cy>
-Build-Depends: debhelper-compat (= 13), cmake (>= 3.22.1), g++, pkgconf, python3,
+Build-Depends: debhelper-compat (= 13), cmake (>= 3.22.1), pkgconf, python3,
  libssl-dev, libcurl4-openssl-dev, zlib1g-dev, libcjson-dev, libgit2-dev,
  libarchive-dev, tcl9.0-dev, libtommath-dev
 Standards-Version: 4.7.0

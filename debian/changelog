@@ -1,3 +1,9 @@
+ttrek (1.9.0-1) unstable; urgency=medium
+
+  * Initial release in Debian. (Closes: #1154549)
+
+ -- Neofytos Dimitriou <neo@jerily.cy>  Fri, 20 Nov 2026 02:52:42 -0500
+
 ttrek (1.9.0-1~ppa1) resolute; urgency=medium
 
   * Batch package lookups and build plans by registry.
