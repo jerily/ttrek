@@ -1,3 +1,9 @@
+ttrek (1.9.0-1~ppa1) resolute; urgency=medium
+
+  * Batch package lookups and build plans by registry.
+
+ -- Neofytos Dimitriou <neo@jerily.cy>  Thu, 19 Nov 2026 22:34:30 -0500
+
 ttrek (1.8.0-1~ppa2) resolute; urgency=medium
 
   * Start ttrek with system libraries even inside an active project environment.

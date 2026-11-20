@@ -6,6 +6,24 @@ These instructions are for release maintainers. To install ttrek as a user,
 see [Install ttrek](install.md). Run the commands below from the repository root;
 relative paths refer to that directory.
 
+## Version bump checklist
+
+For each new CLI version, update the following files. Paths are relative to the
+repository named in each row.
+
+| Repository | What to update | Files |
+| --- | --- | --- |
+| `ttrek` | Set the CLI and manifest versions. Add a Debian changelog entry for the new upstream version. | `CMakeLists.txt`, `ttrek.json`, `debian/changelog` |
+| `ttrek` | Update the release tag and source archive name in the examples. | `docs/releases.md` |
+| `ttrek.sh` | Set the release version and matching S3 prefix in production and local configuration. | `devops/config.prod.ini`, `etc/config.ini`, `etc/config.local.ini.example`, `etc/config.local.ini` (Git-ignored, if present) |
+| `ttrek.sh` | Update the CLI version used to build Lambda, the runtime release defaults, and the local S3 seed path and version check. | `devops/build-lambda.sh`, `tcl/config.tcl`, `etc/tdevops.tcl` |
+| `ttrek.sh` | Update release and deployment examples. | `docs/releases.md`, `docs/deployment.md` |
+| `ttrek.sh` | Update the expected version, release paths, and version key in the sample checksum fixture. | `tests/all.tcl`, `tests/config.test`, `tests/fixtures/release-checksums.json`, `tests/lambda-config.test`, `tests/local-stack.tcl` |
+
+The release upload script records the binary SHA-256 hashes in
+`ttrek.sh/etc/releases.json` after the selected uploads succeed. Preserve
+existing checksum records when adding a release.
+
 ## Source release and Debian packages
 
 From a checkout of the release revision, initialize the solver and prepare the
@@ -13,10 +31,10 @@ source archive. Substitute the release tag you are packaging:
 
 ```sh
 git submodule update --init
-./bin/prepare-source.py v1.8.0
+./bin/prepare-source.py v1.9.0
 ```
 
-Attach `dist/ttrek-1.8.0.tar.gz` to the release. The script reads the parent
+Attach `dist/ttrek-1.9.0.tar.gz` to the release. The script reads the parent
 revision and its recorded solver commit from Git. The archive includes the
 solver headers, license, and tests. GitHub's automatic tag downloads omit the
 submodule contents. The compiled executable includes the solver at build time.
