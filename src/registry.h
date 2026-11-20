@@ -36,8 +36,15 @@ const char *ttrek_RegistryDefaultDirectory(void);
 int ttrek_RegistryUseDefault(Tcl_Interp *interp);
 // Internal transport result: only an absent package allows trying another source.
 #define TTREK_REGISTRY_NOT_FOUND 404
+#define TTREK_REGISTRY_TOO_LARGE 413
 int ttrek_RegistryGetConfigured(const char *url, Tcl_DString *result);
 int ttrek_RegistryReadLocal(const char *directory, const char *url, Tcl_DString *result);
+int ttrek_RegistryProbeHTTP(const char *url, Tcl_DString *result);
+int ttrek_RegistryPostHTTP(const char *url, Tcl_DString *result, cJSON *body);
+int ttrek_RegistryPublicBatchRequest(const char *url, Tcl_DString *result, cJSON *body);
+int ttrek_RegistryPlanRead(const char *url, Tcl_DString *result);
+int ttrek_RegistryUsesBatchTelemetry(void);
+#define TTREK_REGISTRY_BATCH_LIMIT 64
 int ttrek_RegistryReadHTTP(const char *url, Tcl_DString *result);
 int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_Obj *matches);
 int ttrek_LanguagesValid(const cJSON *languages);

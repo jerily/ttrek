@@ -5,14 +5,18 @@
 // The registry fixture uses the same version -> dependencies shape as ttrek.sh.
 static std::unique_ptr<cJSON, decltype(&cJSON_Delete)> registry(nullptr, cJSON_Delete);
 
-extern "C" int ttrek_RegistryGet(const char *url, Tcl_DString *data, cJSON *) {
-    auto name = std::string(url).substr(std::string(url).find_last_of('/') + 1);
-    auto *package = cJSON_GetObjectItemCaseSensitive(registry.get(), name.c_str());
-    if (!package) { return TCL_ERROR; }
-    auto *json = cJSON_PrintUnformatted(package);
-    Tcl_DStringAppend(data, json, -1);
-    cJSON_free(json);
-    return TCL_OK;
+std::string ttrek_MissingPackage(const std::string &name) { return "Missing package: " + name; }
+
+std::map<std::string, std::string> ttrek_RegistryPackageBatch(const std::set<std::string> &names) {
+    std::map<std::string, std::string> result;
+    for (const auto &name : names) {
+        auto *package = cJSON_GetObjectItemCaseSensitive(registry.get(), name.c_str());
+        if (!package) { continue; }
+        auto *json = cJSON_PrintUnformatted(package);
+        result[name] = json;
+        cJSON_free(json);
+    }
+    return result;
 }
 
 static std::vector<std::string> solve(PackageDatabase &db, const std::vector<VersionSetId> &requirements,

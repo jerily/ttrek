@@ -29,12 +29,22 @@ static void registry_error(Tcl_DString *result, const char *message) {
     }
 }
 
+static int public_request(const char *url, Tcl_DString *dsPtr, cJSON *postData, int probe);
+
+int ttrek_RegistryPublicBatchRequest(const char *url, Tcl_DString *result, cJSON *body) {
+    return public_request(url, result, body, body == NULL);
+}
+
 int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
     if (postData && !ttrek_TelemetryEnabled()) { return TCL_OK; }
     if (ttrek_RegistryHasSources()) {
         // Explicit registries never receive telemetry or share credentials.
         return postData ? TCL_OK : ttrek_RegistryGetConfigured(url, dsPtr);
     }
+    return public_request(url, dsPtr, postData, 0);
+}
+
+static int public_request(const char *url, Tcl_DString *dsPtr, cJSON *postData, int probe) {
     int rc = TCL_OK;
 
     Tcl_Obj *machineId = ttrek_TelemetryGetMachineId();
@@ -84,6 +94,16 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *dsPtr, cJSON *postData) {
     curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, chunk);
 
     CURLcode ret = curl_easy_perform(curl_handle);
+    long status = 0;
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &status);
+    if (probe && (status == 404 || status == 405 || status == 501)) {
+        rc = TTREK_REGISTRY_NOT_FOUND;
+        goto done;
+    }
+    if (postData && dsPtr && status == 413) {
+        rc = TTREK_REGISTRY_TOO_LARGE;
+        goto done;
+    }
     if (ret == CURLE_OK) {
 //        fprintf(stderr, "%lu bytes retrieved\n", Tcl_DStringLength(dsPtr));
     } else {

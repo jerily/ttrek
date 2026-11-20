@@ -32,6 +32,17 @@ int command(Tcl_Interp *interp, int (*proc)(Tcl_Interp *, Tcl_Size, Tcl_Obj *con
     return status;
 }
 
+PackageVersions fetch_package_versions(const std::string &name) {
+    Tcl_DString data;
+    Tcl_DStringInit(&data);
+    const auto url = std::string(REGISTRY_URL) + "/" + name;
+    int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
+    std::string body = Tcl_DStringValue(&data);
+    Tcl_DStringFree(&data);
+    require(status == TCL_OK, body.empty() ? "Could not read registry metadata for " + name : body);
+    return parse_package_versions(name, body);
+}
+
 Json recipe(const std::string &name, const std::string &version) {
     struct utsname platform;
     require(uname(&platform) == 0, "Cannot determine the source platform");

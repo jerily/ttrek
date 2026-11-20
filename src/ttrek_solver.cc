@@ -15,6 +15,7 @@
 #include "PackageDatabase.h"
 #include "ttrek_solver.h"
 #include "installer.h"
+#include "registryBatch.h"
 #include "ttrek_telemetry.h"
 #include "ttrek_useflags.h"
 #include "recipeDependencies.h"
@@ -236,6 +237,10 @@ ttrek_Solve(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], PackageDat
     std::vector<VersionSetId> constraints_vector;
     for (const auto &constraint: constraints) {
         constraints_vector.push_back(db.alloc_requirement_from_str(constraint.first, constraint.second));
+    }
+
+    for (const auto &requirement : solver_requirements) {
+        if (requirement.first.rfind("use:", 0) != 0) { db.pending_names.insert(requirement.first); }
     }
 
     // Solve the problem
@@ -602,6 +607,27 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             return TCL_ERROR;
         }
 
+        struct utsname sysinfo;
+        if (uname(&sysinfo)) {
+            fprintf(stderr, "error: could not get system information\n");
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
+            return TCL_ERROR;
+        }
+
+        try {
+            std::vector<RegistryPlanItem> items;
+            for (const auto &spec : execution_plan) {
+                items.push_back({spec.package_name, spec.package_version,
+                    !state_ptr->option_pretend && spec.install_type != ALREADY_INSTALLED});
+            }
+            ttrek_RegistryPlanBatch(items, sysinfo.sysname, sysinfo.machine);
+        } catch (const std::exception &error) {
+            Tcl_DecrRefCount(use_flags_list_ptr);
+            Tcl_DeleteHashTable(&global_use_flags_ht);
+            Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
+            return TCL_ERROR;
+        }
         for (auto &spec : execution_plan) {
             std::unique_ptr<cJSON, decltype(&cJSON_Delete)> languages(
                 ttrek_RegistryLanguages(spec.package_name.c_str(), spec.package_version.c_str()), cJSON_Delete);
@@ -631,14 +657,6 @@ ttrek_InstallOrUpdate(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], 
             Tcl_DecrRefCount(use_flags_list_ptr);
             Tcl_DeleteHashTable(&global_use_flags_ht);
             return TCL_OK;
-        }
-
-        struct utsname sysinfo;
-        if (uname(&sysinfo)) {
-            fprintf(stderr, "error: could not get system information\n");
-            Tcl_DecrRefCount(use_flags_list_ptr);
-            Tcl_DeleteHashTable(&global_use_flags_ht);
-            return TCL_ERROR;
         }
 
         // Fetch every recipe that will be built and check the entire plan before

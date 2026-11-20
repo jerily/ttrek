@@ -87,6 +87,34 @@ description-fuzzy), with optional numeric `distance` and `coverage` fields.
 When no HTTP(S) sources are selected, search uses the ttrek.sh endpoint.
 `clone` uses the configured registries to fetch a package's source archive.
 
+## Batch API
+
+A registry can advertise batch protocol version 1 by returning `{"batch":1}`
+from `GET BASE/batch/capabilities`. The client checks each HTTP source once per
+command when it needs grouped reads. Sources without this advertisement continue
+to use the individual GET endpoints. A single command can use both protocols and
+local directories in the configured order.
+
+- `POST BASE/batch/packages` accepts `{"mode":"versions","names":["app","lib"]}`.
+  The response contains a key for every requested name, with the same version map
+  as the individual GET, or JSON `false` when absent. With `"mode":"exists"`
+  each value is a boolean. Multi-website search uses this mode to check ownership.
+- `POST BASE/batch/plan` accepts a platform and exact items, for example
+  `{"os":"Linux","arch":"x86_64","items":[{"name":"app","version":"1.0.0","field":"recipe"}]}`.
+  Each response key is `name@version`. Its value is the existing platform recipe,
+  a language array for `"field":"languages"`, or `false` for a missing item.
+  A missing required recipe fails preflight in the owning registry. Language
+  labels are optional. Preview requests only language labels.
+- Each request accepts up to 64 items. The solver groups currently known names
+  and requests additional dependencies as it discovers them. Only misses advance
+  to the next source. Plan requests contain only that registry’s packages.
+  HTTP 413 asks the client to split the rejected group and retry it.
+
+When the implicit public registry advertises this protocol and telemetry is enabled,
+the CLI sends attempted install outcomes to `POST /telemetry/collect/batch`,
+in groups of up to 64, including partial results on ordinary failure. Configured
+registries, including explicitly selected public sources, receive no install telemetry.
+
 ## Sync the local registry
 
 ```sh

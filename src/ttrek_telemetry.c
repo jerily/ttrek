@@ -23,6 +23,7 @@
 #endif
 
 static Tcl_Obj *machineIdObj = NULL;
+static cJSON *install_events = NULL;
 static int isEnvironmentRegistered = 0;
 static char *machineIdBaseFile = "machine-id";
 
@@ -297,7 +298,19 @@ done:
     return;
 }
 
+static void flush_install_events(void) {
+    if (!install_events) { return; }
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddItemToObject(body, "events", install_events);
+    install_events = NULL;
+    char url[256];
+    snprintf(url, sizeof(url), "%s/batch", TELEMETRY_COLLECT_URL);
+    ttrek_RegistryGet(url, NULL, body);
+    cJSON_Delete(body);
+}
+
 void ttrek_TelemetryFree(void) {
+    flush_install_events();
     if (machineIdObj != NULL) {
         DBG2(fprintf(stderr, "free ..."));
         Tcl_DecrRefCount(machineIdObj);
@@ -454,6 +467,15 @@ void ttrek_TelemetryPackageInstallEvent(const char *package_name,
     cJSON_AddItemToObject(root, "os", cJSON_CreateString(os));
 
     cJSON_AddItemToObject(root, "arch", cJSON_CreateString(arch));
+
+    if (ttrek_RegistryUsesBatchTelemetry()) {
+        if (!install_events) { install_events = cJSON_CreateArray(); }
+        cJSON_AddStringToObject(root, "name", package_name);
+        cJSON_AddStringToObject(root, "version", package_version);
+        cJSON_AddItemToArray(install_events, root);
+        if (cJSON_GetArraySize(install_events) == TTREK_REGISTRY_BATCH_LIMIT) { flush_install_events(); }
+        return;
+    }
 
     char install_event_url[256];
     snprintf(install_event_url, sizeof(install_event_url), "%s/%s/%s",

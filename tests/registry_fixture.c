@@ -32,3 +32,7 @@ int ttrek_RegistryGet(const char *url, Tcl_DString *result, cJSON *post_data) {
     cJSON_Delete(fixture);
     return status;
 }
+
+int ttrek_RegistryPublicBatchRequest(const char *url, Tcl_DString *result, cJSON *body) {
+    return TTREK_REGISTRY_NOT_FOUND; /* The file fixture implements the individual GET API. */
+}

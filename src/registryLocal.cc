@@ -296,7 +296,7 @@ extern "C" cJSON *ttrek_RegistryLanguages(const char *name, const char *version)
     const auto url = std::string(REGISTRY_URL) + "/" + name + "/" + version + "/languages";
     Tcl_DString data;
     Tcl_DStringInit(&data);
-    int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
+    int status = ttrek_RegistryPlanRead(url.c_str(), &data);
     cJSON *languages = status == TCL_OK ? cJSON_ParseWithLengthOpts(
         Tcl_DStringValue(&data), Tcl_DStringLength(&data) + 1, nullptr, 1) : nullptr;
     Tcl_DStringFree(&data);

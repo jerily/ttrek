@@ -12,6 +12,7 @@
 #include <vector>
 #include <curl/curl.h>
 #include "registry.h"
+#include "registryBatch.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -23,6 +24,8 @@ struct Source {
 };
 std::vector<Source> sources;
 std::map<std::string, size_t> owners;
+std::map<std::string, bool> batch_support;
+std::map<std::string, std::string> plan_payloads;
 bool implicit_source = false;
 bool websites_only = false;
 int include_public = 0;
@@ -119,6 +122,7 @@ void add_source(const std::string &argument, const fs::path &project = {}) {
     sources.push_back({location, http ? location : argument, http});
     implicit_source = false;
     owners.clear();
+    plan_payloads.clear();
 }
 
 int read_source(const Source &source, const std::string &suffix, Tcl_DString *result) {
@@ -227,19 +231,113 @@ void collect_remote_matches(const std::string &base, size_t source, const std::s
     }
 }
 
-bool earlier_website_owns(const SearchEntry &entry) {
-    // A package on an earlier website shadows later copies even if it did not match there.
-    for (size_t i = 0; i < entry.source; ++i) {
-        Tcl_DString data;
-        Tcl_DStringInit(&data);
-        int status = read_source(sources[i], entry.name, &data);
-        std::string error = Tcl_DStringValue(&data);
-        Tcl_DStringFree(&data);
-        if (status == TTREK_REGISTRY_NOT_FOUND) { continue; }
-        require(status == TCL_OK, error);
-        return true;
+using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+
+struct Response {
+    Tcl_DString data;
+    Response() { Tcl_DStringInit(&data); }
+    ~Response() { Tcl_DStringFree(&data); }
+    std::string text() { return std::string(Tcl_DStringValue(&data), Tcl_DStringLength(&data)); }
+    Json json() {
+        return Json(cJSON_ParseWithLengthOpts(Tcl_DStringValue(&data), Tcl_DStringLength(&data) + 1, nullptr, 1),
+                    cJSON_Delete);
     }
-    return false;
+};
+
+std::string encode(const cJSON *item) {
+    std::unique_ptr<char, decltype(&cJSON_free)> raw(cJSON_PrintUnformatted(item), cJSON_free);
+    require(raw != nullptr, "Cannot serialize registry result");
+    return raw.get();
+}
+
+bool supports_batch(const Source &source) {
+    if (!source.http) { return false; }
+    auto known = batch_support.find(source.location);
+    if (known != batch_support.end()) { return known->second; }
+    Response reply;
+    const auto url = source.location + "/batch/capabilities";
+    const auto status = sources.empty() ? ttrek_RegistryPublicBatchRequest(url.c_str(), &reply.data, nullptr)
+                                        : ttrek_RegistryProbeHTTP(url.c_str(), &reply.data);
+    require(status == TCL_OK || status == TTREK_REGISTRY_NOT_FOUND,
+            "Could not check batch capabilities at " + source.location + ": " + reply.text());
+    // Capability discovery never establishes ownership. Older registries may
+    // use catch-all handlers; only a positive version advertisement opts in.
+    auto document = status == TCL_OK ? reply.json() : Json(nullptr, cJSON_Delete);
+    auto *version = cJSON_GetObjectItemCaseSensitive(document.get(), "batch");
+    return batch_support[source.location] = cJSON_IsNumber(version) && version->valuedouble == 1;
+}
+
+struct BatchTooLarge {};
+
+// Keep normal requests full-sized. On a size rejection, retry only the
+// rejected range. Completed requests can already have recorded downloads.
+template <typename Request>
+void for_batches(size_t count, Request request) {
+    size_t start = 0, limit = TTREK_REGISTRY_BATCH_LIMIT;
+    while (start < count) {
+        const auto end = std::min(count, start + limit);
+        try {
+            request(start, end);
+            start = end;
+        } catch (const BatchTooLarge &) {
+            require(end - start > 1, "Registry cannot serve a single batch item within its size limit");
+            limit = (end - start) / 2;
+        }
+    }
+}
+
+Json post_batch(const Source &source, const char *path, cJSON *request, size_t expected) {
+    Response reply;
+    const auto url = source.location + path;
+    const auto status = sources.empty() ? ttrek_RegistryPublicBatchRequest(url.c_str(), &reply.data, request)
+                                        : ttrek_RegistryPostHTTP(url.c_str(), &reply.data, request);
+    if (status == TTREK_REGISTRY_TOO_LARGE) { throw BatchTooLarge{}; }
+    if (status != TCL_OK) {
+        throw std::runtime_error("Registry batch failed at " + source.location + ": " + reply.text());
+    }
+    auto result = reply.json();
+    require(cJSON_IsObject(result.get()) && size_t(cJSON_GetArraySize(result.get())) == expected,
+            "Invalid registry batch response from " + source.location);
+    return result;
+}
+
+using PackageRows = std::map<std::string, std::string>;
+
+PackageRows read_packages(const Source &source, const std::vector<std::string> &names, bool existence) {
+    PackageRows found;
+    if (names.empty()) { return found; }
+    if (!supports_batch(source)) {
+        for (const auto &name : names) {
+            Response reply;
+            int status = sources.empty()
+                ? ttrek_RegistryGet((source.location + "/" + name).c_str(), &reply.data, nullptr)
+                : read_source(source, name, &reply.data);
+            if (status == TTREK_REGISTRY_NOT_FOUND) { continue; }
+            if (status != TCL_OK) {
+                auto message = reply.text();
+                throw std::runtime_error(message.empty() ? "Could not read registry metadata for " + name : message);
+            }
+            auto versions = reply.json();
+            require(cJSON_IsObject(versions.get()), "Invalid registry metadata for " + name + " in " + source.location);
+            found[name] = existence ? "" : reply.text();
+        }
+        return found;
+    }
+    for_batches(names.size(), [&](size_t start, size_t end) {
+        Json request(cJSON_CreateObject(), cJSON_Delete);
+        cJSON_AddStringToObject(request.get(), "mode", existence ? "exists" : "versions");
+        auto *items = cJSON_AddArrayToObject(request.get(), "names");
+        for (size_t i = start; i < end; ++i) { cJSON_AddItemToArray(items, cJSON_CreateString(names[i].c_str())); }
+        auto result = post_batch(source, "/batch/packages", request.get(), end - start);
+        for (size_t i = start; i < end; ++i) {
+            const auto &name = names[i];
+            auto *row = cJSON_GetObjectItemCaseSensitive(result.get(), name.c_str());
+            if (cJSON_IsFalse(row)) { continue; }
+            require(existence ? cJSON_IsTrue(row) : cJSON_IsObject(row), "Invalid registry batch entry for " + name);
+            found[name] = existence ? "" : encode(row);
+        }
+    });
+    return found;
 }
 
 std::string missing_package(const std::string &name) {
@@ -436,9 +534,17 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
     for (size_t source = 0; source < sources.size(); ++source) {
         collect_remote_matches(sources[source].location, source, normalized, found, claimed);
     }
+    std::set<std::string> hidden;
+    for (size_t i = 0; i + 1 < sources.size(); ++i) {
+        std::vector<std::string> names;
+        for (const auto &entry : found) {
+            if (entry.source > i && !hidden.count(entry.name)) { names.push_back(entry.name); }
+        }
+        for (const auto &row : read_packages(sources[i], names, true)) { hidden.insert(row.first); }
+    }
     std::sort(found.begin(), found.end(), search_order);
     for (const auto &entry : found) {
-        if (earlier_website_owns(entry)) { continue; }
+        if (hidden.count(entry.name)) { continue; }
         Tcl_Obj *fields[] = {Tcl_NewStringObj(entry.name.c_str(), -1), Tcl_NewStringObj(entry.description.c_str(), -1),
                             Tcl_NewStringObj(entry.languages.c_str(), -1)};
         if (Tcl_ListObjAppendElement(interp, matches, Tcl_NewListObj(3, fields)) != TCL_OK) { return TCL_ERROR; }
@@ -447,4 +553,95 @@ extern "C" int ttrek_RegistrySearch(Tcl_Interp *interp, const char *query, Tcl_O
 } catch (const std::exception &error) {
     Tcl_SetObjResult(interp, Tcl_NewStringObj(error.what(), -1));
     return TCL_ERROR;
+}
+
+std::string ttrek_MissingPackage(const std::string &name) {
+    return sources.empty() ? "Package \"" + name + "\" was not found in " + REGISTRY_URL : missing_package(name);
+}
+
+PackageRows ttrek_RegistryPackageBatch(const std::set<std::string> &names) {
+    for (const auto &name : names) { require(valid_component(name), "Invalid registry path component: " + name); }
+    std::vector<std::string> remaining(names.begin(), names.end());
+    if (sources.empty()) {
+        auto result = read_packages({REGISTRY_URL, "", true}, remaining, false);
+        // The implicit public GET returns an empty version map for a miss.
+        // Let the solver backtrack if an alternative version has other dependencies.
+        for (const auto &name : remaining) { result.try_emplace(name, "{}"); }
+        return result;
+    }
+    PackageRows result;
+    for (size_t i = 0; i < sources.size() && !remaining.empty(); ++i) {
+        auto rows = read_packages(sources[i], remaining, false);
+        for (const auto &row : rows) { owners[row.first] = i; }
+        result.merge(rows);
+        remaining.erase(std::remove_if(remaining.begin(), remaining.end(),
+            [&](const auto &name) { return result.count(name); }), remaining.end());
+    }
+    return result;
+}
+
+void ttrek_RegistryPlanBatch(const std::vector<RegistryPlanItem> &items, const char *os, const char *arch) {
+    plan_payloads.clear();
+    std::map<size_t, std::vector<RegistryPlanItem>> groups;
+    for (const auto &item : items) {
+        require(valid_component(item.name) && valid_component(item.version), "Invalid package name or version");
+        groups[sources.empty() ? 0 : owners.at(item.name)].push_back(item);
+    }
+    const Source default_source{REGISTRY_URL, "", true};
+    for (const auto &[owner, entries] : groups) {
+        const auto &source = sources.empty() ? default_source : sources[owner];
+        if (!supports_batch(source)) { continue; }
+        for_batches(entries.size(), [&](size_t start, size_t end) {
+            Json request(cJSON_CreateObject(), cJSON_Delete);
+            cJSON_AddStringToObject(request.get(), "os", os);
+            cJSON_AddStringToObject(request.get(), "arch", arch);
+            auto *array = cJSON_AddArrayToObject(request.get(), "items");
+            bool needs_recipe = false;
+            for (size_t i = start; i < end; ++i) {
+                const auto &entry = entries[i];
+                auto *item = cJSON_CreateObject();
+                cJSON_AddItemToArray(array, item);
+                cJSON_AddStringToObject(item, "name", entry.name.c_str());
+                cJSON_AddStringToObject(item, "version", entry.version.c_str());
+                cJSON_AddStringToObject(item, "field", entry.recipe ? "recipe" : "languages");
+                needs_recipe |= entry.recipe;
+            }
+            Json result(nullptr, cJSON_Delete);
+            try {
+                result = post_batch(source, "/batch/plan", request.get(), end - start);
+            } catch (const BatchTooLarge &) {
+                if (needs_recipe || end - start > 1) { throw; }
+            } catch (const std::exception &) {
+                if (needs_recipe) { throw; }
+                // Display-only metadata is optional, also for unavailable registries.
+            }
+            for (size_t i = start; i < end; ++i) {
+                const auto &entry = entries[i];
+                auto key = entry.name + "@" + entry.version;
+                const auto prefix = std::string(REGISTRY_URL) + "/" + entry.name + "/" + entry.version + "/";
+                auto *row = cJSON_GetObjectItemCaseSensitive(result.get(), key.c_str());
+                if (entry.recipe) {
+                    auto *version = cJSON_GetObjectItemCaseSensitive(row, "version");
+                    require(cJSON_IsString(version) && entry.version == version->valuestring,
+                            "Missing or invalid build recipe for " + key + " in " + source.location);
+                    plan_payloads[prefix + os + "/" + arch] = encode(row);
+                    row = cJSON_GetObjectItemCaseSensitive(row, "languages");
+                }
+                plan_payloads[prefix + "languages"] = cJSON_IsArray(row) ? encode(row) : "null";
+            }
+        });
+    }
+}
+
+extern "C" int ttrek_RegistryPlanRead(const char *url, Tcl_DString *result) {
+    auto item = plan_payloads.find(url);
+    if (item == plan_payloads.end()) { return ttrek_RegistryGet(url, result, nullptr); }
+    Tcl_DStringAppend(result, item->second.c_str(), item->second.size());
+    plan_payloads.erase(item);
+    return TCL_OK;
+}
+
+extern "C" int ttrek_RegistryUsesBatchTelemetry(void) {
+    auto support = batch_support.find(REGISTRY_URL);
+    return sources.empty() && support != batch_support.end() && support->second;
 }

@@ -53,6 +53,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
         },
     }
     requests = []
+    batch_sources = set()
+    batches = []
+    response_limit = 64
     first_status = None
     first_body = None
     external_dependencies = {}
@@ -63,7 +66,41 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
 
         def do_POST(self):
             requests.append((self.command, self.path, dict(self.headers)))
-            self.send_error(500, "Unexpected telemetry")
+            source, _, kind = self.path.strip("/").split("/")
+            if source not in batch_sources:
+                self.send_error(500, "Unexpected POST")
+                return
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            batches.append((source, kind, payload))
+            if len(payload.get("names", payload.get("items", []))) > response_limit:
+                self.send_error(413)
+                return
+            if kind == "packages":
+                body = {name: metadata[source].get(name, False) for name in payload["names"]}
+                if payload["mode"] == "exists":
+                    body = {name: bool(value) for name, value in body.items()}
+            elif kind == "plan":
+                body = {}
+                for item in payload["items"]:
+                    name, version = item["name"], item["version"]
+                    versions = metadata[source][name]
+                    assert version in versions
+                    key = name + "@" + version
+                    if item["field"] == "languages":
+                        body[key] = ["C"]
+                    elif name == "missing-recipe":
+                        body[key] = False
+                    else:
+                        body[key] = {"version": version, "install_script": [], "languages": ["C"],
+                                     "dependencies": versions[version], "scripts": {}}
+            else:
+                self.send_error(404)
+                return
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
         def do_GET(self):
             requests.append((self.command, self.path, dict(self.headers)))
@@ -73,7 +110,12 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                 source = "second"  # Built-in public API, reached through a local test proxy.
             status = 200
             body = None
-            if source == "first" and first_status is not None:
+            if source in batch_sources and parts[1:] == ["batch", "capabilities"]:
+                body = {"batch": 1}
+            elif source in batch_sources and name == "search":
+                body = ([{"name": n, "description": "", "match": "description"}
+                         for n in ("public-only", "shared")] if source == "second" else [])
+            elif source == "first" and first_status is not None:
                 status, body = first_status, first_body
             elif name not in metadata.get(source, {}):
                 status = 404
@@ -255,6 +297,53 @@ with tempfile.TemporaryDirectory(prefix="ttrek ordered registries ") as temporar
                        "TTrek-Environment-Id" not in headers for method, _, headers in requests)
             assert "search endpoint" in run("search", "public-only", process_env=public_env, ok=False).stderr
             stamp.write_text("synced")
+
+            # Exercise batched and legacy private registries with the same dependency graph.
+            dependency("app")
+            for enabled in ({"first", "second"}, {"first"}, {"second"}):
+                batch_sources.clear()
+                batch_sources.update(enabled)
+                batches.clear()
+                requests.clear()
+                assert run("gen-script", *options).stdout.startswith("#!")
+                for source in enabled:
+                    plans = [p["items"] for registry, kind, p in batches if registry == source and kind == "plan"]
+                    assert len(plans) == 1, batches
+                    expected = {"app", "shared"} if source == "first" else {"public-only"}
+                    assert {item["name"] for item in plans[0]} == expected
+                    assert all(item["field"] == "recipe" for item in plans[0])
+                for source, kind, payload in batches:
+                    if kind == "packages" and source == "second":
+                        assert not {"app", "shared"}.intersection(payload["names"])
+                if "first" in enabled:
+                    assert any({"shared", "public-only"}.issubset(p["names"]) for registry, kind, p in batches
+                               if registry == "first" and kind == "packages"), batches
+                assert all("TTrek-Environment-Id" not in headers for _, _, headers in requests)
+            batch_sources.update({"first", "second"})
+            batches.clear()
+            run("pretend", *options)
+            assert all(item["field"] == "languages" for _, kind, p in batches if kind == "plan" for item in p["items"])
+            batches.clear()
+            assert run("search", "-registry", first, "-registry", second, "tcl").stdout.startswith("public-only")
+            assert len(batches) == 1 and batches[0][:2] == ("first", "packages")
+            assert batches[0][2]["mode"] == "exists" and set(batches[0][2]["names"]) == {"shared", "public-only"}
+            dependency("missing-recipe")
+            batches.clear()
+            assert "missing-recipe@1.0.0" in run("gen-script", *options, ok=False).stderr
+            assert all(source == "first" for source, _, _ in batches)
+            # Full batches respect the item limit and split a rejected response in place.
+            large = ["bulk-" + str(i) for i in range(65)]
+            metadata["first"].update({n: {"1.0.0": {}} for n in large})
+            spec["dependencies"] = {n: "1.0.0" for n in large}
+            spec_file.write_text(json.dumps(spec))
+            batches.clear()
+            run("pretend", *options)
+            assert [len(p["items"]) for _, kind, p in batches if kind == "plan"] == [64, 1]
+            response_limit = 32
+            batches.clear()
+            run("gen-script", *options)
+            assert [len(p["items"]) for _, kind, p in batches if kind == "plan"] == [64, 32, 32, 1]
+            batch_sources.clear()
 
             # Bad configuration does not become an implicit public fallback.
             for invalid in ([], "bad", [{"url": 42}], [{"url": first, "directory": str(local)}],
