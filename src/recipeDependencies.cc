@@ -47,7 +47,7 @@ extern "C" cJSON *ttrek_FetchRecipe(Tcl_Interp *interp, const char *name, const 
     const std::string url = std::string(REGISTRY_URL) + "/" + name + "/" + version + "/" + os + "/" + arch;
     Tcl_DString data;
     Tcl_DStringInit(&data);
-    int status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
+    int status = ttrek_RegistryPlanRead(url.c_str(), &data);
     cJSON *recipe = status == TCL_OK ? cJSON_Parse(Tcl_DStringValue(&data)) : nullptr;
     if (!cJSON_IsObject(recipe)) {
         Tcl_SetObjResult(interp, status != TCL_OK && Tcl_DStringLength(&data)

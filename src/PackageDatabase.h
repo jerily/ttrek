@@ -27,6 +27,7 @@
 #include "semver/semver.h"
 #include "Range.h"
 #include "registry.h"
+#include "registryBatch.h"
 #include "cjson/cJSON.h"
 
 inline std::vector<std::string_view> split_string(const std::string_view &str, const char *split_str) {
@@ -110,22 +111,11 @@ struct DependencyInfo {
 
 using PackageVersions = std::map<std::string, std::vector<std::pair<std::string, DependencyInfo>>>;
 
-inline PackageVersions fetch_package_versions(const std::string &package_name) {
+inline PackageVersions parse_package_versions(const std::string &package_name, const std::string &metadata) {
     PackageVersions result;
-    if (package_name.empty() || package_name.find_first_not_of(
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-") != std::string::npos) {
-        throw std::runtime_error("Invalid package name: " + package_name);
-    }
-    const auto url = std::string(REGISTRY_URL) + "/" + package_name;
-    Tcl_DString data;
-    Tcl_DStringInit(&data);
-    const auto status = ttrek_RegistryGet(url.c_str(), &data, nullptr);
-    const std::string error = status != TCL_OK ? Tcl_DStringValue(&data) : "";
-    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> root(
-        status == TCL_OK ? cJSON_Parse(Tcl_DStringValue(&data)) : nullptr, cJSON_Delete);
-    Tcl_DStringFree(&data);
-    if (status != TCL_OK || !cJSON_IsObject(root.get())) {
-        throw std::runtime_error(error.empty() ? "Could not read registry metadata for " + package_name : error);
+    std::unique_ptr<cJSON, decltype(&cJSON_Delete)> root(cJSON_Parse(metadata.c_str()), cJSON_Delete);
+    if (!cJSON_IsObject(root.get())) {
+        throw std::runtime_error("Invalid registry metadata for " + package_name);
     }
     for (auto *version = root->child; version; version = version->next) {
         if (!cJSON_IsObject(version)) {
@@ -297,6 +287,10 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
     std::unordered_set<std::string> favored_packages;
     ttrek_strategy_t the_strategy = STRATEGY_LATEST;
 
+    std::set<std::string> pending_names;
+    std::set<std::string> looked_up;
+    std::map<std::string, std::string> metadata;
+
     PackageDatabase() {
         pool = std::make_shared<Pool<Range<Pack>>>();
     }
@@ -345,7 +339,17 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
     std::optional<PackageCandidates> get_candidates(NameId name) override {
         auto package_name = pool->resolve_package_name(name);
         if (candidate_names.count(package_name) == 0 && package_name.rfind("use:", 0) != 0) {
-            for (const auto &[version, deps] : fetch_package_versions(package_name)) {
+            if (!looked_up.count(package_name)) {
+                pending_names.insert(package_name);
+                metadata.merge(ttrek_RegistryPackageBatch(pending_names));
+                looked_up.insert(pending_names.begin(), pending_names.end());
+                pending_names.clear();
+            }
+            if (!metadata.count(package_name)) {
+                // Defer missing-package diagnostics until the solver needs this name.
+                throw std::runtime_error(ttrek_MissingPackage(package_name));
+            }
+            for (const auto &[version, deps] : parse_package_versions(package_name, metadata.at(package_name))) {
                 KnownDependencies dependencies;
                 for (const auto &[dep_name, info] : deps) {
                     if (satisfies_use_flags(info.if_use_flags)) {
@@ -377,7 +381,14 @@ struct PackageDatabase : public DependencyProvider<Range<Pack>> {
     }
 
     DependenciesVariant get_dependencies(SolvableId id) override {
-        return Dependencies::Known{candidate_dependencies.at(id)};
+        const auto &dependencies = candidate_dependencies.at(id);
+        for (const auto &requirement : dependencies.requirements) {
+            for (auto version_set : requirement.version_sets(pool)) {
+                auto name = pool->resolve_package_name(pool->resolve_version_set_package_name(version_set));
+                if (!looked_up.count(name) && name.rfind("use:", 0) != 0) { pending_names.insert(name); }
+            }
+        }
+        return Dependencies::Known{dependencies};
     }
 
     std::optional<std::string> should_cancel_with_value() override { return std::nullopt; }

@@ -10,6 +10,7 @@
 #include "ttrek_solver.h"
 #include "ttrek_useflags.h"
 #include "recipeDependencies.h"
+#include "registryBatch.h"
 
 namespace {
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
@@ -165,18 +166,26 @@ extern "C" int ttrek_GenScriptSubCmd(Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj 
         Tcl_Size count;
         Tcl_Obj **packages;
         Tcl_ListObjGetElements(interp, plan.get(), &count, &packages);
+        std::vector<RegistryPlanItem> items;
         for (Tcl_Size i = 0; i < count; ++i) {
             Tcl_Obj *name_obj, *version_obj;
             Tcl_ListObjIndex(interp, packages[i], 0, &name_obj);
             Tcl_ListObjIndex(interp, packages[i], 1, &version_obj);
             std::string name = Tcl_GetString(name_obj), version = Tcl_GetString(version_obj);
+            items.push_back({name, version, true});
+        }
+        ttrek_RegistryPlanBatch(items, platform.sysname, platform.machine);
+        Tcl_Size index = 0;
+        for (const auto &item : items) {
+            const auto &name = item.name;
+            const auto &version = item.version;
             auto recipe = fetch_spec(interp, name, version, platform);
             check(interp, ttrek_AppendRecipeChecks(interp, checks.get(), name.c_str(), version.c_str(),
                 cJSON_GetObjectItemCaseSensitive(recipe.get(), "externalDependencies"),
                 cJSON_GetObjectItemCaseSensitive(recipe.get(), "install_script"), &flags.table));
             append_patches(script, recipe.get(), name, version);
             append_package(interp, script, name, version, cJSON_GetObjectItemCaseSensitive(recipe.get(), "install_script"),
-                           state, flags, i + 1, count);
+                           state, flags, ++index, count);
         }
         auto *build = cJSON_GetObjectItemCaseSensitive(spec.get(), "build");
         cJSON *project_steps = nullptr;

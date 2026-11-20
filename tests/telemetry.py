@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek-telemetry-") as directory:
     compiler.chmod(0o755)
     requests = []
     available = "1.0.0"
+    batch = False
+    fail_demo = False
+    outcomes = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -39,7 +42,9 @@ with tempfile.TemporaryDirectory(prefix="ttrek-telemetry-") as directory:
         def do_GET(self):
             path = urlsplit(self.path).path
             requests.append(("GET", path, dict(self.headers)))
-            if path == "/registry/demo":
+            if batch and path == "/registry/batch/capabilities":
+                self.respond({"batch": 1})
+            elif path == "/registry/demo":
                 self.respond({available: {}})
             elif path.startswith("/registry/demo/" + available + "/"):
                 self.respond({"version": available, "dependencies": {}, "install_script": []})
@@ -48,9 +53,28 @@ with tempfile.TemporaryDirectory(prefix="ttrek-telemetry-") as directory:
 
         def do_POST(self):
             path = urlsplit(self.path).path
-            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append(("POST", path, dict(self.headers)))
-            self.respond({})
+            if path == "/registry/batch/packages":
+                versions = {
+                    "demo": {available: {"helper": available}},
+                    "helper": {available: {}},
+                    "alternative": {"2.0.0": {"absent": "1.0.0"}, "1.0.0": {}},
+                }
+                self.respond({n: versions.get(n, False) for n in payload["names"]})
+            elif path == "/registry/batch/plan":
+                result = {}
+                for item in payload["items"]:
+                    name = item["name"]
+                    steps = [{"cmd": "make"}] if fail_demo and name == "demo" else []
+                    result[name + "@" + item["version"]] = ({"version": item["version"], "install_script": steps,
+                        "dependencies": {"helper": available} if name == "demo" else {}, "languages": []}
+                        if item["field"] == "recipe" else [])
+                self.respond(result)
+            else:
+                if path == "/telemetry/collect/batch":
+                    outcomes.append([(e["name"], e["outcome"]) for e in payload["events"]])
+                self.respond({})
 
     with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -64,10 +88,10 @@ with tempfile.TemporaryDirectory(prefix="ttrek-telemetry-") as directory:
                    ALL_PROXY=address, NO_PROXY="", no_proxy="", CC=str(compiler), CXX=str(compiler),
                    TTREK_TEST_COMPILER_LOG=str(compiler_log))
 
-        def run(*args, process_env=env):
+        def run(*args, process_env=env, ok=True):
             result = subprocess.run([binary, *args], cwd=project, env=process_env,
                                     capture_output=True, text=True, timeout=30)
-            assert result.returncode == 0, (args, result.stdout, result.stderr)
+            assert (result.returncode == 0) == ok, (args, result.stdout, result.stderr)
             return result
 
         def opted_out():
@@ -121,6 +145,23 @@ with tempfile.TemporaryDirectory(prefix="ttrek-telemetry-") as directory:
             run("install", "-y", "-force", "demo", "-registry", address + "/registry",
                 process_env=dict(env, TTREK_TELEMETRY="1"))
             opted_out()
+            batch = True
+            available = "1.2.0"
+            requests.clear()
+            run("update", "-y")
+            assert any(path == "/registry/batch/plan" for _, path, _ in requests)
+            assert all(path.startswith("/registry/") and "TTrek-Environment-Id" not in headers
+                       for _, path, headers in requests)
+            assert not outcomes and not compiler_log.exists()
+
+            enabled = dict(env, TTREK_TELEMETRY="1")
+            for fail_demo in (False, True):
+                outcomes.clear()
+                run("install", "-force", "-y", "helper", "demo", process_env=enabled, ok=not fail_demo)
+                assert outcomes == [[("helper", "success"), ("demo", "failure" if fail_demo else "success")]], outcomes
+
+            # A public registry miss in one candidate still permits SAT backtracking.
+            assert "alternative@1.0.0" in run("pretend", "alternative").stdout
         finally:
             server.shutdown()
             thread.join()
