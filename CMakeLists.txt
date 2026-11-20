@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(ttrek VERSION 1.8.0 LANGUAGES C CXX)
+project(ttrek VERSION 1.9.0 LANGUAGES C CXX)
 
 option(USE_SYSTEM_LIBS "Link against system development libraries" OFF)
 option(USE_CPPCHECK "Enable source testing with cppcheck at build time" OFF)
